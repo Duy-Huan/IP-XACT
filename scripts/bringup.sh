@@ -13,7 +13,7 @@ fi
 usp build examples/rv64-minimal --generated "$generated" \
     --source-qemu "$upstream_root/qemu" --jobs "${USP_JOBS:-4}"
 usp software build examples/rv64-minimal --os zephyr --generated "$generated" \
-    --source-zephyr "$upstream_root/zephyr" --cross-compile "$CROSS_COMPILE"
+    --source-zephyr "$upstream_root/zephyr" --cross-compile "$CROSS_COMPILE" --jobs "${USP_JOBS:-4}"
 result_dir=$(mktemp -d "$repo/build/acceptance.XXXXXXXX")
 usp test examples/rv64-minimal --generated "$generated" --out "$result_dir/run"
 export USP_GENERATED_DIR="$generated" USP_REQUIRE_BRINGUP=1

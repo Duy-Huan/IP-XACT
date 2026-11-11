@@ -56,6 +56,15 @@ def run_gem5(project, generated, build_dir, result_dir):
     linux_record = json.loads((generated / "linux-build.json").read_text())
     if digest(workload) != linux_record["workload_sha256"]:
         raise ContractError("the shared QEMU/Linux workload was modified")
+    with workload.open("rb") as stream:
+        header = stream.read(20)
+    if (
+        len(header) != 20
+        or header[:6] != b"\x7fELF\x02\x01"
+        or header[7] != 3
+        or header[18:20] != b"\xf3\x00"
+    ):
+        raise ContractError("SE profile requires an explicit Linux-ABI little-endian RV64 ELF")
     result_dir.mkdir(parents=True, exist_ok=False)
     ram_size = next(i.windows[0].size for i in project.ir.instances if i.name == "ram")
     template = Path(__file__).parent / "templates/gem5-se.py.in"
@@ -102,7 +111,10 @@ def run_gem5(project, generated, build_dir, result_dir):
         "exit": exit_info,
         "statistics": stats,
         "wall_time_seconds": time.monotonic() - started,
-        "assumptions": ["TimingSimpleCPU; 1GHz; no caches; SimpleMemory 10ns; one hart"],
+        "assumptions": [
+            "TimingSimpleCPU; 1GHz; no caches; SimpleMemory 10ns; one hart",
+            "CPU may enable extra ISA extensions; shared workload is restricted to RV64IMAC",
+        ],
         "unmodeled_instances": [
             i.name for i in project.ir.instances if i.name not in {"rv64", "ram"}
         ],

@@ -48,3 +48,37 @@ The environment draft API returned INVALID_ARGUMENT when attempting to save the
 install/start fields in this session. Persistence and snapshot publication are
 unconfirmed. This document retains the tested instructions in Git; it does not
 claim they were registered in cloud settings or tested in a fresh cloud task.
+
+## Current native development startup
+
+The earlier minimal script supports the legacy smoke only. For the master-spec
+profiles, use the frozen bringup/model extras, the user-prefix development headers
+and libraries, and the explicit public source cache:
+
+```bash
+cd /workspace/IP-XACT
+uv sync --frozen --extra dev --extra bringup --extra models
+source .venv/bin/activate
+export SOCSIM_TOOLS_DIR=/workspace/.local/socsim-tools
+# Run these installers only if refreshing an absent/incompatible user-prefix toolchain.
+bash scripts/setup_user_tools.sh
+USP_INSTALL_MODELS=1 bash scripts/setup_bringup_tools.sh
+source "$SOCSIM_TOOLS_DIR/env_bringup.sh"
+export USP_UPSTREAM_ROOT=/workspace/.cache/usp-upstream
+USP_FETCH_LINUX=1 USP_FETCH_MODELS=1 bash scripts/fetch_upstreams.sh
+export CROSS_COMPILE="$SOCSIM_TOOLS_DIR/usr/bin/riscv64-unknown-elf-"
+export CROSS_COMPILE_LINUX="$SOCSIM_TOOLS_DIR/usr/bin/riscv64-linux-gnu-"
+bash scripts/bringup.sh
+bash scripts/linux_bringup.sh
+bash scripts/hybrid_bringup.sh
+bash scripts/gem5_bringup.sh
+```
+
+After a prepared environment is restored, only activate `.venv` and
+`env_bringup.sh`, then select the needed commands. Native build directories retain
+valid outputs; installed dependencies do not imply processes are running. QEMU and
+bridge processes start per test and exit/are cleaned up. Use the existing checkout
+on dev, no unsolicited worktrees. Yocto image acquisition remains blocked until
+its required destinations are permitted; no runtime secret is required for those
+public downloads. Draft script/network persistence and fresh cloud snapshot restore
+are still separate from current-instance validation.

@@ -220,3 +220,12 @@ def test_generated_software_contract_and_uart_clock(custom_project, tmp_path):
         in (out / "zephyr/boards/usp/usp_rv64/usp_rv64.dts").read_text()
     )
     assert (out / "yocto/meta-usp/conf/machine/usp-rv64.conf").is_file()
+
+
+def test_custom_toolchain_pin_cannot_silently_fall_back(custom_project):
+    path = custom_project / "toolchain.lock.yaml"
+    data = yaml.safe_load(path.read_text())
+    data["qemu_version"] = "11.0.0"
+    path.write_text(yaml.safe_dump(data))
+    with pytest.raises(ContractError, match="QEMU 10.0.0 exactly"):
+        resolve(load_project(custom_project))

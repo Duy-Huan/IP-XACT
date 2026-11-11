@@ -41,6 +41,7 @@ def main(argv):
     build.add_argument("project", type=Path)
     build.add_argument("--os", choices=["zephyr", "linux"], required=True)
     build.add_argument("--generated", type=Path, required=True)
+    build.add_argument("--jobs", type=int, choices=range(1, 9), default=4)
     build.add_argument("--source-zephyr", type=Path)
     build.add_argument("--source-linux", type=Path)
     build.add_argument("--source-opensbi", type=Path)
@@ -110,7 +111,11 @@ def main(argv):
                 if not args.source_zephyr:
                     raise ContractError("--source-zephyr is required")
                 elf = build_zephyr(
-                    project, args.generated.resolve(), args.source_zephyr, args.cross_compile
+                    project,
+                    args.generated.resolve(),
+                    args.source_zephyr,
+                    args.cross_compile,
+                    args.jobs,
                 )
             else:
                 from .linux import build_linux
@@ -123,6 +128,7 @@ def main(argv):
                     args.source_linux,
                     args.source_opensbi,
                     args.cross_compile,
+                    args.jobs,
                 )
             result = {"status": "BUILT", "elf": str(elf)}
         elif args.command == "models":

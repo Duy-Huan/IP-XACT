@@ -74,6 +74,8 @@ def resolve(project):
         or project.ir.cpu is None
     ):
         raise ContractError("custom pipeline requires the usp-rv64-v1 hardware contract")
+    if project.lock["qemu_version"] != "10.0.0":
+        raise ContractError("custom source profile requires QEMU 10.0.0 exactly")
     models = {}
     for b in project.models["bindings"]:
         if not isinstance(b, dict) or set(b) != {"vlnv", "backend", "implementation"}:
@@ -90,6 +92,8 @@ def resolve(project):
     for instance in project.ir.instances:
         descriptor = descriptors[instance.name]
         expected = descriptor["id"]
+        if instance.name != "scfifo" and descriptor["source"]["commit"] != QEMU_SHA:
+            raise ContractError("catalog source revision is incompatible with the QEMU adapter")
         if instance.vlnv != descriptor["vlnv"]:
             raise ContractError(f"{instance.name}: no exact catalog VLNV match")
         if models.get((instance.vlnv, "qemu")) != expected:

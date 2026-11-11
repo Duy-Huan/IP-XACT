@@ -55,6 +55,7 @@ old evidence is not overwritten. Failed guests/timeouts remain failed results.
 - [Create a SoC](docs/creating-soc.md)
 - [Generated QEMU/Zephyr reference](docs/examples/rv64-minimal.md)
 - [SystemC/OpenTitan RTL bridge](docs/examples/rv64-hybrid.md)
+- [Shared gem5 SE workload](docs/gem5-se.md)
 - [Firmware, Linux, Yocto and RTOS](docs/firmware-and-os.md)
 - [Development, CI and promotion](docs/development.md)
 - [Cloud startup](docs/cloud-environment.md)

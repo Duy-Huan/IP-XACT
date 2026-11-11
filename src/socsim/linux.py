@@ -66,6 +66,13 @@ def build_linux(project, out, linux_source, opensbi_source, cross_compile, jobs=
             out,
             out / ("logs/linux-" + output + "-build.log"),
         )
+    # Declare the generated Linux syscall ABI explicitly; do not rely on gem5's OS fallback.
+    for output in ("init", "workload"):
+        execute(
+            [cross_compile + "elfedit", "--output-osabi", "Linux", str(directory / output)],
+            out,
+            out / ("logs/linux-" + output + "-abi.log"),
+        )
     cpio_list = directory / "initramfs.list"
     cpio_list.write_text(
         "dir /dev 0755 0 0\nnod /dev/console 0600 0 0 c 5 1\n"

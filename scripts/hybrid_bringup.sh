@@ -10,7 +10,7 @@ models=${USP_MODEL_DIR:-$repo/build/fifo-models}
 if [[ ! -e "$generated" ]]; then usp generate examples/rv64-hybrid --out "$generated"; fi
 usp build examples/rv64-hybrid --generated "$generated" --source-qemu "$upstream_root/qemu" --jobs "${USP_JOBS:-4}"
 usp software build examples/rv64-hybrid --os zephyr --generated "$generated" \
-  --source-zephyr "$upstream_root/zephyr" --cross-compile "$CROSS_COMPILE"
+  --source-zephyr "$upstream_root/zephyr" --cross-compile "$CROSS_COMPILE" --jobs "${USP_JOBS:-4}"
 usp models build --out "$models" --native-source "$repo/native/systemc" --source-opentitan "$upstream_root/opentitan"
 export USP_MODEL_DIR="$models" USP_HYBRID_GENERATED_DIR="$generated" USP_REQUIRE_MODELS=1
 python -m pytest tests/test_models.py -v --junitxml=build/hybrid-junit.xml

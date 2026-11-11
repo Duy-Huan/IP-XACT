@@ -34,3 +34,11 @@ a long left stale high bits and correctly caused the new guest test to fail.
 Debian SystemC 3.0.1 publishes stale pkg-config version 3.0.0. The adapter retains
 that observed metadata and verifies the real 3.0.1 headers and link ABI with an
 executable conformance model, rather than silently relabeling a different runtime.
+
+The shared standalone workload initially used the generic ELF System V OSABI,
+which caused gem5's upstream Linux-ABI assumption warning. The generated Linux
+executables now declare the intended Linux OSABI using the Linux GNU elfedit tool;
+the SE adapter checks it and refuses an unknown ABI. QEMU/Linux and gem5 then run
+the same exact ELF without relying on that implicit operating-system fallback.
+Extra CPU-model ISA extensions remain outside the workload's required RV64IMAC
+subset and do not imply full architectural equivalence.
