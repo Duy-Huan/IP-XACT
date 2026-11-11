@@ -1,49 +1,76 @@
 # IP-XACT RISC-V virtual platform
 
-Define hardware metadata with IEEE 1685-2022 IP-XACT, elaborate a deterministic IR,
-and bind it to explicitly supported simulator models. This initial release runs
-original bare-metal firmware on **QEMU 10.0.13 RISC-V `virt`** and records evidence.
+A headless compiler and execution toolchain: IEEE 1685-2022 IP-XACT → typed SoC IR →
+strict model binding → generated QEMU machine and software artifacts → real guest
+execution with evidence. The master-spec objective and development rules are in
+[agent.md](agent.md).
 
-This is the first working vertical slice. Arbitrary SoC machine generation, gem5,
-Chipyard, OpenTitan, SystemC bridges, Zephyr and Yocto execution are planned.
-See [capabilities and roadmap](docs/roadmap.md) for acceptance criteria.
+The implemented reference path generates and compiles an RV64 machine, generates
+an external Zephyr board, builds Zephyr and checks real CLINT timer and UART/PLIC
+interrupts. A separate OpenSBI/Linux path boots an original initramfs. A second
+profile connects guest MMIO/IRQ to real SystemC TLM or an OpenTitan FIFO compiled
+with Verilator. These are constrained, tested profiles, not arbitrary SoC support.
 
-## Quick start
+## Development setup
 
-Requirements: Python 3.11+, `uv`, `qemu-system-riscv64` 10.0.13,
-`riscv64-unknown-elf-gcc`, and `riscv64-unknown-elf-readelf`.
-On Debian trixie the simulator package is `qemu-system-riscv`, not `qemu-system-misc`.
-See [setup skill](skills/setup/SKILL.md) for installation options.
+Python 3.11+; use the pinned dependencies through uv. Native build prerequisites
+and exact source pins are documented in [build reproducibility](docs/build-reproducibility.md).
 
 ```bash
-bash scripts/setup.sh
+uv sync --frozen --extra dev --extra bringup --extra models
 source .venv/bin/activate
-socsim doctor
-socsim validate examples/riscv-virt
-socsim elaborate examples/riscv-virt --out build/soc-ir.json
-socsim plan examples/riscv-virt --backend qemu
-bash scripts/build_firmware.sh
-socsim run examples/riscv-virt --firmware build/firmware/boot.elf --out results/first
-bash scripts/regression.sh
+bash scripts/fetch_upstreams.sh
+export CROSS_COMPILE=riscv64-unknown-elf-
+bash scripts/bringup.sh
 ```
 
-Use a new `--out` directory for every run. Passing requires an actual guest serial
-marker and a zero exit through the SiFive test finisher; timeouts and guest failures
-produce failed reports. The runner currently verifies this smoke workload contract,
-not arbitrary OS success. `socsim backends` reports capability status.
+Set USP_FETCH_LINUX=1 or USP_FETCH_MODELS=1 during explicit dependency acquisition
+for the additional sources. Normal generation and simulation do not download
+workloads. QEMU's first Meson configuration fetches three immutable wrap-git
+subprojects; those acquisition steps are documented with the upstream pins.
 
-## Guides
+## Supported commands
 
+```bash
+usp ipxact validate examples/rv64-minimal
+usp elaborate examples/rv64-minimal --out build/soc-ir.json
+usp generate examples/rv64-minimal --out build/rv64-minimal
+usp models explain examples/rv64-minimal --instance uart
+usp build examples/rv64-minimal --generated build/rv64-minimal --source-qemu .tools/upstream/qemu
+usp software build examples/rv64-minimal --os zephyr --generated build/rv64-minimal \
+  --source-zephyr .tools/upstream/zephyr --cross-compile riscv64-unknown-elf-
+usp test examples/rv64-minimal --generated build/rv64-minimal --out results/zephyr-001
+usp report results/zephyr-001 --format md
+```
+
+`usp` and `socsim` share the CLI. Keep each run in a new output directory. Source,
+generator, registry and artifact identity changes require regeneration/rebuild;
+old evidence is not overwritten. Failed guests/timeouts remain failed results.
+`usp backends` reports scope and availability, not universal engine equivalence.
+
+## Guides and status
+
+- [Verification status and phase exits](docs/verification-status.md)
 - [Architecture and supported IP-XACT subset](docs/architecture.md)
-- [Create a SoC project](docs/creating-soc.md)
-- [Firmware, RTOS and Yocto direction](docs/firmware-and-os.md)
-- [Reference design and real execution](docs/examples/riscv-virt.md)
+- [Create a SoC](docs/creating-soc.md)
+- [Generated QEMU/Zephyr reference](docs/examples/rv64-minimal.md)
+- [SystemC/OpenTitan RTL bridge](docs/examples/rv64-hybrid.md)
+- [Shared gem5 SE workload](docs/gem5-se.md)
+- [Firmware, Linux, Yocto and RTOS](docs/firmware-and-os.md)
 - [Development, CI and promotion](docs/development.md)
-- [Cloud startup](docs/cloud-environment.md) and [validation evidence](docs/validation.md)
-- [Agent rules](agent.md) and [project skills](skills/README.md)
+- [Cloud startup](docs/cloud-environment.md)
+- [Project setup/update skills](skills/README.md)
 
-No internal reference archive, source or Git history is included. Example XML and
-firmware are original synthetic assets. Public Accellera schema files are retained
-under their Apache-2.0 terms; see `src/socsim/schemas/NOTICE.md`, `LICENSE.md` and
-`provenance.json`. No project-wide license for original code is selected yet;
-the owner must choose redistribution terms before publishing a release.
+The legacy `examples/riscv-virt` QEMU 10.0.13 bare-metal smoke remains a separate
+compatibility test. The generated machine uses pinned QEMU 10.0.0 and deliberately
+relocates UART away from virt. The current parser rejects unsupported hierarchy,
+parameters, buses, register fields and views rather than silently discarding them.
+Yocto image completion depends on permitted upstream downloads; consult the phase
+status for observed blockers. Chipyard and generic hardware/security integrations
+remain future work. No calibrated timing or silicon equivalence is claimed.
+
+No internal archive, source or private Git history is included. Examples and
+adapters are original; public Accellera schemas retain their Apache-2.0 notices
+and checksums under src/socsim/schemas. Referenced upstream source licenses remain
+in their external checkouts. Choose project-wide redistribution terms before a
+public binary release; per-file SPDX identifiers apply to the indicated files.

@@ -13,6 +13,7 @@ from pathlib import Path
 from . import __version__
 from .backends import qemu_plan
 from .domain import ContractError
+from .execution import cleanup_on_termination
 from .ipxact import digest
 from .project import Project
 
@@ -34,6 +35,7 @@ def tool_version(binary: str) -> tuple[str, str]:
     return str(Path(path).resolve()), result.stdout.splitlines()[0]
 
 
+@cleanup_on_termination
 def run_qemu(project: Project, firmware: Path, output: Path, timeout: float = 10) -> dict:
     plan = qemu_plan(project, "qemu")
     if not math.isfinite(timeout) or not 0 < timeout <= 300:

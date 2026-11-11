@@ -4,6 +4,8 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 required = [
+    "docs/verification-status.md",
+    "docs/build-reproducibility.md",
     "agent.md",
     "AGENTS.md",
     "README.md",

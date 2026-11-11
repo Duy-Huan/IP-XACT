@@ -12,3 +12,5 @@ results/
 *.pem
 *.key
 .env
+
+.mypy_cache/

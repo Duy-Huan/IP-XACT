@@ -51,3 +51,89 @@ jobs:
           path: build/junit.xml
           if-no-files-found: ignore
           retention-days: 7
+
+  custom-zephyr:
+    runs-on: ubuntu-latest
+    container: debian:trixie-slim
+    timeout-minutes: 30
+    steps:
+      - name: Install source-build prerequisites
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git ca-certificates python3 python3-venv \
+            gcc g++ make pkg-config libglib2.0-dev libpixman-1-dev zlib1g-dev libfdt-dev \
+            device-tree-compiler flex bison bc m4 libsystemc-dev verilator \
+            gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu gcc-riscv64-unknown-elf=14.2.0+19 \
+            binutils-riscv64-unknown-elf=2.44-3+7+b1
+          python3 -m venv /opt/ci-uv
+          /opt/ci-uv/bin/pip install uv==0.13.5
+          echo /opt/ci-uv/bin >> "$GITHUB_PATH"
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Acquire pinned public sources and build exact generated machine/BSP
+        env:
+          CROSS_COMPILE: riscv64-unknown-elf-
+          USP_JOBS: '2'
+          USP_FETCH_LINUX: '1'
+          USP_FETCH_MODELS: '1'
+          CROSS_COMPILE_LINUX: riscv64-linux-gnu-
+        run: |
+          uv python install 3.12.14
+          uv sync --frozen --python 3.12.14 --extra dev --extra bringup
+          bash scripts/fetch_upstreams.sh
+          bash scripts/bringup.sh
+          bash scripts/linux_bringup.sh
+          bash scripts/hybrid_bringup.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: custom-zephyr-junit
+          path: |
+            build/custom-junit.xml
+            build/linux-junit.xml
+            build/hybrid-junit.xml
+          if-no-files-found: ignore
+          retention-days: 7
+
+  gem5-se:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    container: debian:trixie-slim
+    timeout-minutes: 120
+    steps:
+      - name: Install architectural source-build prerequisites
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git ca-certificates python3 python3-venv \
+            gcc g++ make pkg-config libglib2.0-dev libpixman-1-dev zlib1g-dev libfdt-dev \
+            device-tree-compiler flex bison bc m4 gcc-riscv64-linux-gnu \
+            binutils-riscv64-linux-gnu gcc-riscv64-unknown-elf=14.2.0+19 \
+            binutils-riscv64-unknown-elf=2.44-3+7+b1
+          python3 -m venv /opt/ci-uv
+          /opt/ci-uv/bin/pip install uv==0.13.5
+          echo /opt/ci-uv/bin >> "$GITHUB_PATH"
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Build and compare the same actual ELF on QEMU/Linux and gem5 SE
+        env:
+          CROSS_COMPILE: riscv64-unknown-elf-
+          CROSS_COMPILE_LINUX: riscv64-linux-gnu-
+          USP_FETCH_LINUX: '1'
+          USP_FETCH_MODELS: '1'
+          USP_JOBS: '2'
+        run: |
+          uv python install 3.12.14
+          uv sync --frozen --python 3.12.14 --extra dev --extra bringup --extra models
+          bash scripts/fetch_upstreams.sh
+          bash scripts/bringup.sh
+          bash scripts/linux_bringup.sh
+          bash scripts/gem5_bringup.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: gem5-se-junit
+          path: build/gem5-junit.xml
+          if-no-files-found: ignore
+          retention-days: 7

@@ -1,46 +1,29 @@
-# Capability matrix and acceptance roadmap
+# Roadmap aligned to the owner master specification
 
-| Area | Current status | Required next evidence |
+The objective in agent.md takes precedence over the original bare-metal-only
+baseline. Phase completion means executable acceptance, not directories or claims.
+Detailed observed status and evidence are maintained in verification-status.md.
+
+| Phase | Acceptance target | Current boundary |
 |---|---|---|
-| IP-XACT 2022 XSD | Implemented offline | Keep bundle checksums/license intact |
-| Semantic elaboration | Strict flat component/design subset | Registers, fields, buses, parameters, views and hierarchy tests |
-| Canonical IR | Implemented, deterministic | Versioned richer bus/IRQ/clock/reset schema |
-| Model binding | Exact VLNV + builtin QEMU identifiers | Reusable, versioned per-IP capability registry |
-| QEMU | Fixed RV64 virt bare-metal profile | Custom machine and MMIO/IRQ tests |
-| gem5 | Planned; execution rejects selection | Pinned real SE workload; separately validated FS boot |
-| Chipyard | Planned source/generator adapter | Pinned submodules, Chisel/CIRCT, Verilator test |
-| OpenTitan | Planned IP/SoC import | Selected IP CSR, TileLink, reset and lifecycle contracts |
-| SystemC | Planned; no bridge | Versioned TLM transactors and MMIO/readback/IRQ test |
-| Bare-metal | Real UART + finisher smoke | Generated headers/linker and peripheral semantics |
-| Zephyr | Planned primary RTOS | BSP generation, west build and real boot regression |
-| FreeRTOS / µC/OS | Planned | Specific port, product/license, tick/IRQ tests |
-| Yocto/Linux | Planned | Pinned layers, MACHINE, OpenSBI/bootloader/kernel/DTB image and boot |
-| Cross-backend equivalence/security | Unimplemented | Real matched traces, negative security tests; no invented claims |
+| 0 | Audited, pinned QEMU/Zephyr combination and reproducible setup | Source-pinned reference builds and real guest tests |
+| 1 | Safe IP-XACT/XSD, typed deterministic IR and semantic diagnostics | Flat 2022 subset plus strict CPU/boot/IRQ/address-space overlays; generic hierarchy/bus/register features still unsupported |
+| 2 | Strict catalog/lock and generated compiled custom QEMU machine | Seven supported roles; separate explicit eight-role hybrid profile |
+| 3 | Generated Zephyr BSP, real build, UART and IRQ | CLINT timer ISR and UART→PLIC ISR; original guest conformance application |
+| 4 | Linux userspace and Yocto BSP/image | Direct OpenSBI/Linux path and generated layer; Yocto image fetch policy remains a prerequisite |
+| 5 | Pinned gem5 workload/statistics and cross-engine behavior | Explicit SE workload adapter; not a full-system SoC board |
+| 6 | Real SystemC/RTL MMIO/IRQ bridge with time contract | FIFO TLM and pinned OpenTitan RTL; deterministic replay; no DMA/coherence |
+| 7 | Versioned release, support matrix, regression and repeatable evidence | CLI, native CI and development workflow; no industrial/universal support claim |
 
-## Milestones
+Extend the parser deliberately: IP-XACT addressSpaces per initiator, bridge
+translations, registers/fields/access policies, parameter constraints, bus and
+abstraction definitions, views/fileSets, designConfiguration and recursive hierarchy.
+Each extension needs positive/negative fixtures and a compatible executable model.
+Do not infer behavior from XML names or add unsupported metadata as ignored fields.
 
-M0/M1: CLI, official schema bundle, strict metadata subset, IR, fail-closed bindings,
-QEMU reference smoke, CI and development rules. This release addresses that slice.
-It does not satisfy the complete platform objective.
-
-M2: add register and field contracts, bus definitions/interconnections, views and
-fileSets. Resolve parameters with a constrained integer evaluator, not `eval`.
-Introduce one custom MMIO peripheral and native QEMU machine integration. Generate
-headers/linker from validated topology and verify reset/read/write/IRQ in firmware.
-
-M3: pin gem5 source/build flags, implement an SE RISC-V test and real statistics
-capture. Add FS board boot independently; do not use SE to claim MMIO/OS validation.
-Test matched functional device contracts across engines; performance remains
-uncalibrated unless correlated to a defensible reference.
-
-M4: real Verilator peripheral test, then Chipyard generator and OpenTitan IP
-integration. Source provenance is separate from simulator implementation. Require
-protocol, clock, reset, interrupt and lifecycle compatibility per selected IP.
-
-M5: Zephyr first, then specific FreeRTOS/µC/OS ports and Yocto bring-up. Every OS
-must really build and execute its acceptance workload. Do not generate cosmetic
-BSP/layer files and call them bootable.
-
-M6: selective hybrid simulation, first MMIO/readback/IRQ, then DMA and protection.
-Define memory owner, endian/order, abort/error/reset, backpressure and time mapping.
-No universal QEMU↔gem5 lockstep or automatic RTL behavioral translation is promised.
+Beyond the proven profile, add a specific FreeRTOS port and clarify the requested
+µC/OS product/license; then real BSP/tick/context-switch tests. Chipyard requires a
+pinned Chisel/CIRCT/submodule configuration and actual generated RTL verification.
+OpenTitan currently supplies a FIFO primitive only, not a complete secure SoC.
+Hybrid expansion requires reset/error/backpressure/width/ordering tests, then DMA
+and memory permissions. Security and calibrated performance remain separate work.

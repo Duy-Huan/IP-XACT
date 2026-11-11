@@ -67,8 +67,9 @@ def load_project(root: Path) -> Project:
     manifest_path = root / "simulation.yaml"
     if not manifest_path.resolve().is_relative_to(root):
         raise ContractError("manifest escapes project root")
+    raw_manifest = read_yaml(manifest_path)
     manifest = keys(
-        read_yaml(manifest_path),
+        raw_manifest,
         {
             "schema_version",
             "design",
@@ -76,11 +77,17 @@ def load_project(root: Path) -> Project:
             "toolchain",
             "placements",
             "profile",
-        },
+        }
+        | ({"hardware"} if raw_manifest.get("schema_version") == "2" else set()),
         "simulation.yaml",
     )
-    if manifest["schema_version"] != "1":
+    if not isinstance(manifest["schema_version"], str) or manifest["schema_version"] not in {
+        "1",
+        "2",
+    }:
         raise ContractError("unsupported manifest schema_version")
+    if not isinstance(manifest["profile"], str):
+        raise ContractError("profile must be a string")
     design_path = inside(root, manifest["design"])
     if not design_path.is_relative_to(root / "ipxact") or design_path.suffix != ".xml":
         raise ContractError("design must be an XML file under ipxact/")
@@ -112,4 +119,9 @@ def load_project(root: Path) -> Project:
             )
         ),
     )
-    return Project(root, ir, manifest, models, lock)
+    project = Project(root, ir, manifest, models, lock)
+    if manifest["schema_version"] == "2":
+        from .contracts import attach_contract
+
+        return attach_contract(project)
+    return project

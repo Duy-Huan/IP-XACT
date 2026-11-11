@@ -6,21 +6,28 @@ from .project import Project, keys
 CAPABILITIES = {
     "qemu": {
         "status": "implemented",
-        "profile": "qemu-virt-rv64-v1",
         "fidelity": "functional",
-        "scope": "fixed virt board; bare-metal smoke",
+        "scope": "legacy virt smoke and generated RV64 machine; Zephyr and Linux direct boot",
     },
-    "gem5": {"status": "planned", "reason": "No pinned, tested FS/SE adapter yet"},
-    "chipyard": {
-        "status": "planned",
-        "reason": "RTL source/generator ecosystem, not a CPU emulator",
+    "gem5": {
+        "status": "experimental",
+        "scope": "explicit RISC-V SE workload adapter; no FS board claim",
     },
-    "opentitan": {"status": "planned", "reason": "IP/SoC sources require per-IP model contracts"},
+    "chipyard": {"status": "planned", "reason": "No pinned Chisel generation test yet"},
+    "opentitan": {
+        "status": "implemented-subset",
+        "scope": "prim_fifo_sync source integration only; no security IP claim",
+    },
     "systemc": {
-        "status": "planned",
-        "reason": "No verified TLM bridge or synchronization contract",
+        "status": "implemented-subset",
+        "scope": "local FIFO TLM bridge; bounded MMIO/IRQ; no DMA/coherence",
+    },
+    "verilator": {
+        "status": "implemented-subset",
+        "scope": "selected OpenTitan FIFO via SystemC bridge",
     },
 }
+
 
 # Implementations are identifiers in this adapter, never arbitrary import paths or commands.
 MODELS = {"qemu.rv64", "qemu.virt.ram", "qemu.virt.ns16550", "qemu.virt.sifive-test"}

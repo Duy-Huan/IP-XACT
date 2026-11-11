@@ -1,0 +1,43 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Generated from IR SHA256 $ir_hash for OpenSBI + Linux. */
+/dts-v1/;
+/ {
+    #address-cells = <1>; #size-cells = <1>;
+    compatible = "socsim,usp-rv64"; model = "USP generated RV64";
+    chosen {
+        stdout-path = "/uart@$uart_unit";
+        bootargs = "console=ttyS0,115200 earlycon=uart8250,mmio,$uart_base rdinit=/init";
+    };
+    cpus {
+        #address-cells = <1>; #size-cells = <0>; timebase-frequency = <$timebase_hz>;
+        cpu@0 {
+            device_type = "cpu"; reg = <0>; status = "okay"; compatible = "riscv";
+            riscv,isa = "rv64imac_zicsr_zifencei"; mmu-type = "riscv,sv39";
+            hlic: interrupt-controller {
+                compatible = "riscv,cpu-intc"; #interrupt-cells = <1>;
+                #address-cells = <0>; interrupt-controller;
+            };
+        };
+    };
+    memory@$ram_unit { device_type = "memory"; reg = <$ram_base $ram_size>; };
+    uart@$uart_unit {
+        compatible = "ns16550a"; reg = <$uart_base $uart_size>;
+        clock-frequency = <$uart_clock_hz>; reg-shift = <0>; reg-io-width = <1>;
+        interrupt-parent = <&plic>; interrupts = <$uart_irq>;
+    };
+    poweroff { compatible = "syscon-poweroff"; regmap = <&test>; offset = <0>; value = <0x5555>; };
+    test: test@$finisher_unit { compatible = "sifive,test1", "syscon"; reg = <$finisher_base $finisher_size>; };
+    soc {
+        compatible = "simple-bus"; #address-cells = <1>; #size-cells = <1>; ranges;
+        plic: interrupt-controller@$plic_unit {
+            compatible = "sifive,plic-1.0.0", "riscv,plic0";
+            reg = <$plic_base $plic_size>; riscv,ndev = <31>;
+            interrupt-controller; #interrupt-cells = <1>; #address-cells = <0>;
+            interrupts-extended = <&hlic 11 &hlic 9>;
+        };
+        clint@$clint_unit {
+            compatible = "riscv,clint0"; reg = <$clint_base $clint_size>;
+            interrupts-extended = <&hlic 3 &hlic 7>;
+        };
+    };
+};

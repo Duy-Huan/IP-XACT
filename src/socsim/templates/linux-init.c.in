@@ -1,0 +1,28 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Minimal original PID 1: run the identical SE workload, wait and power off. */
+static long call(long n, long x0, long x1, long x2, long x3, long x4) {
+    register long a0 __asm__("a0") = x0;
+    register long a1 __asm__("a1") = x1;
+    register long a2 __asm__("a2") = x2;
+    register long a3 __asm__("a3") = x3;
+    register long a4 __asm__("a4") = x4;
+    register long a7 __asm__("a7") = n;
+    __asm__ volatile("ecall" : "+r"(a0) : "r"(a1), "r"(a2), "r"(a3), "r"(a4), "r"(a7) : "memory");
+    return a0;
+}
+void _start(void) {
+    int status = -1;
+    long child = call(220, 17, 0, 0, 0, 0);
+    if (!child) {
+        const char *argv[] = {"/workload", (void *)0};
+        call(221, (long)argv[0], (long)argv, 0, 0, 0);
+        call(93, 1, 0, 0, 0, 0);
+    }
+    if (child > 0 && call(260, child, (long)&status, 0, 0, 0) == child && status == 0) {
+        call(64, 1, (long)"USP_LINUX_USERSPACE_OK\n", 23, 0, 0);
+    } else {
+        call(64, 1, (long)"USP_LINUX_USERSPACE_FAIL\n", 25, 0, 0);
+    }
+    call(142, 0xfee1dead, 0x28121969, 0x4321fedc, 0, 0);
+    for (;;) {}
+}

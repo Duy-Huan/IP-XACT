@@ -66,3 +66,40 @@ Wall time is measured; simulated cycles/time are unavailable for this profile.
 Run bundles can contain private project inputs. Keep them local; the provided CI
 executes only synthetic fixtures and uploads only its JUnit results. No telemetry,
 remote simulator service or automatic dependency upgrades occur during simulation.
+
+## v0.2 generated-machine path
+
+The earlier sections describe the retained v0.1 metadata/virt path. Manifest
+schema_version=2 adds hardware.yaml with typed CPU, reset/entry, IRQ routes and an
+explicit CPU address space. The supported custom profiles are usp-rv64-v1 and
+usp-rv64-hybrid-v1. They require exact role/VLNV/model contracts and fixed validated
+window sizes but permit supported relocation. The UART is relocated to 0x11000000.
+
+pipeline.py generates C machine source, Zephyr board/DTS/application, software
+contract, C address header and memory layout from validated inputs. It integrates
+QEMU APIs verified against source SHA, compiles the machine into usp-rv64, and builds
+Zephyr through west. UART clock/baudbase come from the same explicit model contract;
+the new custom profile does not inherit the legacy virt clock mismatch.
+
+schemas/ir-v2.json exports the typed IR structure, hardware-v1.json describes the
+strict overlay, and model-catalog-v1.json identifies exact source/contract versions.
+The importer still rejects unsupported standard XML semantics. The current IR has
+one initiator-visible address space; no general translations or hierarchy are claimed.
+
+linux.py builds a static original init/workload, tiny Linux and OpenSBI fw_payload,
+and generates/loads a Linux DTS. Linux needs a shared-capable Linux GNU linker for
+vDSO; the bare-metal linker is rejected by a preflight compile/link probe. The boot
+contract is generated ROM → OpenSBI M mode → Linux S mode → initramfs PID 1. This
+is separate from building a Yocto root filesystem and separate from secure boot.
+
+gem5.py is an explicitly scoped SE adapter for the identical Linux-ABI workload,
+not a binding for this complete hardware topology. It leaves MMIO/IRQ devices
+unmodeled and records fixed uncalibrated CPU/memory assumptions. QEMU retains full
+CPU/RAM ownership in the hybrid profile; hybrid.py manages a local SystemC model,
+with an optional real OpenTitan FIFO RTL implementation compiled by Verilator.
+The transaction/time contract is documented in the hybrid example guide.
+
+Generation manifests bind compiler module, template, catalog, input and output
+hashes. Build records bind binary/ELF identities to that manifest. Old outputs must
+be regenerated when any input identity changes. All run artifacts remain ignored
+and may contain private inputs; hosted CI only executes original synthetic fixtures.

@@ -1,0 +1,107 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1"
+    },
+    "cpu": {
+      "type": "object",
+      "properties": {
+        "isa": {
+          "type": "string"
+        },
+        "privilege": {
+          "type": "string"
+        },
+        "mmu": {
+          "type": "string"
+        },
+        "reset_vector": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "entry": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "timebase_hz": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        }
+      },
+      "required": [
+        "isa",
+        "privilege",
+        "mmu",
+        "reset_vector",
+        "entry",
+        "timebase_hz"
+      ],
+      "additionalProperties": false
+    },
+    "interrupts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 18446744073709551615
+          },
+          "trigger": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "target",
+          "line",
+          "trigger"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "address_space": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "initiator": {
+          "type": "string"
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "name",
+        "initiator",
+        "targets"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema_version",
+    "cpu",
+    "interrupts",
+    "address_space"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

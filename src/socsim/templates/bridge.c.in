@@ -1,0 +1,70 @@
+/* Original USP bridge; SPDX-License-Identifier: GPL-2.0-or-later */
+#include "hw/irq.h"
+#include <sys/socket.h>
+#include <sys/un.h>
+static int usp_bridge_fd = -1;
+static uint32_t usp_bridge_seq;
+static qemu_irq usp_bridge_irq;
+static uint32_t usp_bridge_call(uint32_t op, uint32_t offset, uint32_t value)
+{
+    uint32_t request[5], response[5];
+    size_t pos;
+    if (usp_bridge_fd < 0) {
+        const char *path = getenv("USP_BRIDGE_SOCKET");
+        struct sockaddr_un addr = { .sun_family = AF_UNIX };
+        struct timeval timeout = { .tv_sec = 2 };
+        if (!path || strlen(path) >= sizeof(addr.sun_path)) {
+            error_report("USP bridge requires a valid local Unix socket path"); exit(1);
+        }
+        strcpy(addr.sun_path, path);
+        usp_bridge_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+        if (usp_bridge_fd < 0 || connect(usp_bridge_fd, (struct sockaddr *)&addr, sizeof(addr))) {
+            error_report("USP bridge connection failed"); exit(1);
+        }
+        setsockopt(usp_bridge_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+        setsockopt(usp_bridge_fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+    }
+    request[0] = cpu_to_le32(0x31505355);
+    request[1] = cpu_to_le32(++usp_bridge_seq);
+    request[2] = cpu_to_le32(op);
+    request[3] = cpu_to_le32(offset);
+    request[4] = cpu_to_le32(value);
+    for (pos = 0; pos < sizeof(request); ) {
+        ssize_t n = send(usp_bridge_fd, (char *)request + pos, sizeof(request) - pos, MSG_NOSIGNAL);
+        if (n < 0 && errno == EINTR) { continue; }
+        if (n <= 0) { error_report("USP bridge send failed"); exit(1); }
+        pos += n;
+    }
+    for (pos = 0; pos < sizeof(response); ) {
+        ssize_t n = recv(usp_bridge_fd, (char *)response + pos, sizeof(response) - pos, 0);
+        if (n < 0 && errno == EINTR) { continue; }
+        if (n <= 0) { error_report("USP bridge receive failed"); exit(1); }
+        pos += n;
+    }
+    if (le32_to_cpu(response[0]) != 0x31505355 || response[1] != request[1] || response[2]) {
+        error_report("USP bridge transaction rejected"); exit(1);
+    }
+    qemu_set_irq(usp_bridge_irq, le32_to_cpu(response[4]) != 0);
+    return le32_to_cpu(response[3]);
+}
+static uint64_t usp_fifo_read(void *opaque, hwaddr addr, unsigned size)
+{
+    return usp_bridge_call(0, addr, 0);
+}
+static void usp_fifo_write(void *opaque, hwaddr addr, uint64_t value, unsigned size)
+{
+    usp_bridge_call(1, addr, value);
+}
+static const MemoryRegionOps usp_fifo_ops = {
+    .read = usp_fifo_read, .write = usp_fifo_write, .endianness = DEVICE_LITTLE_ENDIAN,
+    .valid = { .min_access_size = 4, .max_access_size = 4, .unaligned = false },
+    .impl = { .min_access_size = 4, .max_access_size = 4 },
+};
+static void usp_fifo_init(MemoryRegion *memory, DeviceState *plic)
+{
+    MemoryRegion *region = g_new0(MemoryRegion, 1);
+    usp_bridge_irq = qdev_get_gpio_in(plic, $fifo_irq);
+    memory_region_init_io(region, NULL, &usp_fifo_ops, NULL, "usp.scfifo", $scfifo_size);
+    memory_region_add_subregion(memory, $scfifo_base, region);
+    usp_bridge_call(2, 0, 0);
+}

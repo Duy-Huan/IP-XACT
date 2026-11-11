@@ -1,0 +1,14 @@
+schema_version: '2'
+design: ipxact/design.xml
+models: models.yaml
+toolchain: toolchain.lock.yaml
+profile: usp-rv64-v1
+placements:
+  rv64: 0
+  ram: 2147483648
+  uart: 285212672
+  finisher: 1048576
+  rom: 4096
+  clint: 33554432
+  plic: 201326592
+hardware: hardware.yaml

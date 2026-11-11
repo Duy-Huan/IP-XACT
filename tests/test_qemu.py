@@ -95,3 +95,50 @@ def test_invalid_firmware_rejected(project_dir, tmp_path):
 def test_invalid_timeout_rejected(project_dir, tmp_path, timeout):
     with pytest.raises(ContractError, match="timeout"):
         run_qemu(load_project(project_dir), tmp_path / "missing", tmp_path / "evidence", timeout)
+
+
+@pytest.mark.integration
+def test_cli_sigterm_reaps_owned_guest(project_dir, tmp_path, firmware):
+    import signal
+    import sys
+    import time
+
+    output = tmp_path / "cancelled"
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "socsim.cli",
+            "run",
+            str(project_dir),
+            "--firmware",
+            str(firmware / "hang.elf"),
+            "--out",
+            str(output),
+            "--timeout",
+            "120",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        deadline = time.monotonic() + 5
+        child = None
+        while time.monotonic() < deadline:
+            assert process.poll() is None
+            if (output / "command.json").exists():
+                children = subprocess.run(
+                    ["ps", "--ppid", str(process.pid), "-o", "pid="], capture_output=True, text=True
+                ).stdout.split()
+                if children:
+                    child = int(children[0])
+                    break
+            time.sleep(0.01)
+        assert child is not None
+        process.send_signal(signal.SIGTERM)
+        assert process.wait(timeout=5) == 143
+        assert not Path(f"/proc/{child}").exists()
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait()

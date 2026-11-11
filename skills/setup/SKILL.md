@@ -35,3 +35,19 @@ during setup. Do not build planned engines or OS trees without a selected target
 
 After restore, activate `.venv` and source tools env.sh if needed. No persistent
 service is required. Report exact tests run and any external capability still absent.
+
+## Master-spec native profiles
+
+Read docs/build-reproducibility.md and the selected example. For the custom path
+use uv sync --frozen --extra dev --extra bringup (add --extra models for SCons).
+Explicit source acquisition is scripts/fetch_upstreams.sh; enable USP_FETCH_LINUX
+and USP_FETCH_MODELS only for selected components. Build/validate through bringup.sh,
+linux_bringup.sh or hybrid_bringup.sh. The first QEMU configuration resolves its
+pinned Meson source wraps; normal generation/run never downloads workloads.
+
+On a rootless Debian host, setup_bringup_tools.sh adds development packages to the
+user prefix; source env_bringup.sh. Linux requires the Linux GNU toolchain, not the
+bare-metal linker. SystemC/Verilator versions and public source pins are checked.
+BitBake user namespaces may require execution outside the command sandbox; never
+change host security settings or disable its sanity checks. Preserve explicit
+blocked status when downloads are denied, and finish independent validation.
