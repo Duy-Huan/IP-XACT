@@ -39,6 +39,7 @@ not arbitrary OS success. `socsim backends` reports capability status.
 - [Firmware, RTOS and Yocto direction](docs/firmware-and-os.md)
 - [Reference design and real execution](docs/examples/riscv-virt.md)
 - [Development, CI and promotion](docs/development.md)
+- [Cloud startup](docs/cloud-environment.md) and [validation evidence](docs/validation.md)
 - [Agent rules](agent.md) and [project skills](skills/README.md)
 
 No internal reference archive, source or Git history is included. Example XML and
