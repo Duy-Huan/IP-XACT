@@ -1,4 +1,6 @@
-# Initial implementation validation
+# Historic v0.1 implementation validation
+
+For current master-spec phase evidence, read [verification-status.md](verification-status.md).
 
 Validated on 2026-11-11 in the current Debian 13 amd64 cloud workspace. This is
 local execution evidence, not a hosted GitHub Actions run or a fresh-task restore.

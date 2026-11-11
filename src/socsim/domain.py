@@ -23,11 +23,39 @@ class Instance:
 
 
 @dataclass(frozen=True)
+class CpuContract:
+    isa: str
+    privilege: str
+    mmu: str
+    reset_vector: int
+    entry: int
+    timebase_hz: int
+
+
+@dataclass(frozen=True)
+class InterruptRoute:
+    source: str
+    target: str
+    line: int
+    trigger: str
+
+
+@dataclass(frozen=True)
+class AddressSpace:
+    name: str
+    initiator: str
+    targets: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class SoCIR:
     schema_version: str
     vlnv: str
     instances: tuple[Instance, ...]
     sources: tuple[tuple[str, str], ...]
+    cpu: CpuContract | None = None
+    interrupts: tuple[InterruptRoute, ...] = ()
+    address_spaces: tuple[AddressSpace, ...] = ()
 
     def to_dict(self) -> dict:
         return asdict(self)

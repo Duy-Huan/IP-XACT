@@ -4,22 +4,25 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "socsim-platform"
-version = "0.1.0"
+version = "0.2.0"
 description = "IP-XACT driven RISC-V virtual platform compiler"
 requires-python = ">=3.11"
-dependencies = ["lxml==6.0.2", "PyYAML==6.0.3"]
+dependencies = ["lxml==6.0.2", "PyYAML==6.0.3", "jsonschema==4.25.1"]
 
 [project.optional-dependencies]
-dev = ["pytest==9.0.2", "ruff==0.14.10"]
+dev = ["pytest==9.0.2", "ruff==0.14.10", "mypy==1.18.2", "types-PyYAML==6.0.12.20261111", "jsonschema==4.25.1"]
+models = ["scons==4.8.1"]
+bringup = ["cmake==3.31.6", "ninja==1.11.1.4", "west==1.4.0", "meson==1.7.0", "pyelftools==0.32", "pykwalify==1.8.0", "packaging==26.3"]
 
 [project.scripts]
 socsim = "socsim.cli:main"
+usp = "socsim.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-socsim = ["schemas/*.json", "schemas/*.md", "schemas/1685-2022/*.xsd"]
+socsim = ["templates/*.in", "schemas/*.json", "schemas/*.md", "schemas/1685-2022/*.xsd"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,0 +1,30 @@
+# Original USP configuration for the pinned gem5 API. No workload downloads.
+import json
+import sys
+from pathlib import Path
+import m5
+from m5.objects import (System, SrcClockDomain, VoltageDomain, AddrRange,
+                        RiscvTimingSimpleCPU, SystemXBar, SimpleMemory,
+                        SEWorkload, Process, Root)
+
+system = System()
+system.clk_domain = SrcClockDomain(clock='1GHz', voltage_domain=VoltageDomain())
+system.mem_mode = 'timing'
+system.mem_ranges = [AddrRange($ram_size)]
+system.cpu = RiscvTimingSimpleCPU()
+system.bus = SystemXBar()
+system.cpu.icache_port = system.bus.cpu_side_ports
+system.cpu.dcache_port = system.bus.cpu_side_ports
+system.cpu.createInterruptController()
+system.memory = SimpleMemory(range=system.mem_ranges[0], latency='10ns')
+system.memory.port = system.bus.mem_side_ports
+system.system_port = system.bus.cpu_side_ports
+system.workload = SEWorkload.init_compatible(sys.argv[1])
+system.cpu.workload = Process(cmd=[sys.argv[1]])
+system.cpu.createThreads()
+root = Root(full_system=False, system=system)
+m5.instantiate()
+event = m5.simulate(1000000000)
+m5.stats.dump()
+Path(sys.argv[2]).write_text(json.dumps({'cause': event.getCause(), 'code': event.getCode(),
+                                       'ticks': int(m5.curTick())}, sort_keys=True) + '\n')

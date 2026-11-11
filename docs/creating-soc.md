@@ -31,3 +31,19 @@ and addresses are manually maintained for its fixed board and cross-checked by
 the profile. Generated BSP/header/linker output is a later milestone. Record inputs,
 build commands, tool identity and firmware hashes; keep company models and run
 bundles out of public commits and CI.
+
+## Custom-machine and hybrid examples
+
+Use examples/rv64-minimal for the generated-machine path, rather than modifying
+legacy virt. Its schema-version-2 manifest names hardware.yaml. The strict CPU
+contract supplies required ISA/privilege/MMU/reset/entry/timebase; five explicit IRQ
+routes connect CLINT, PLIC, UART and the hart. The model catalog resolves exact
+VLNV/implementation/contract identities and pins QEMU source. The hybrid example
+adds the FIFO and a separate PLIC source, selected explicitly at execution.
+
+`usp generate` writes machine.c, soc.h, memory.ld, software-contract.json, model
+lock and generated Zephyr artifacts. The non-hybrid profile also emits a Linux DTS
+and provisional Yocto layer metadata. A generated file is not proof its consumer
+built successfully: inspect the relevant software/model/run reports. Only the
+selected documented profiles are accepted; this release does not synthesize an
+arbitrary company SoC from registers or RTL.

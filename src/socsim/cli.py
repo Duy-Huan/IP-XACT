@@ -4,6 +4,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 from . import __version__
 from .backends import CAPABILITIES, qemu_plan
@@ -13,11 +14,25 @@ from .runner import run_qemu, tool_version
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(prog="socsim")
+    argv = list(sys.argv[1:] if argv is None else argv)
+    json_errors = "--json" in argv
+    argv = [argument for argument in argv if argument != "--json"]
+    if argv[:2] == ["ipxact", "validate"]:
+        argv = argv[1:]
+    if argv and (
+        argv[0] in {"generate", "build", "software", "test", "report", "models", "gem5"}
+        or (argv[0] == "run" and "--generated" in argv)
+    ):
+        from .lifecycle_cli import main as lifecycle_main
+
+        return lifecycle_main(argv)
+    parser = argparse.ArgumentParser(prog="usp (socsim compatibility)")
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("backends", help="show implemented and planned capabilities")
     commands.add_parser("doctor", help="inspect runtime tools without installing")
+    for extra in ("generate", "build", "software", "test", "report", "models", "gem5"):
+        commands.add_parser(extra, help="custom QEMU/Zephyr lifecycle; use --help")
     for name in ("validate", "elaborate", "plan", "run"):
         sub = commands.add_parser(name)
         sub.add_argument("project", type=Path)
@@ -30,6 +45,7 @@ def main(argv=None) -> int:
             sub.add_argument("--out", type=Path, required=True)
             sub.add_argument("--timeout", type=float, default=10)
     args = parser.parse_args(argv)
+    result: dict[str, Any]
     try:
         if args.command == "backends":
             result = CAPABILITIES
@@ -65,7 +81,18 @@ def main(argv=None) -> int:
                         json.dump(result, stream, indent=2, sort_keys=True)
                         stream.write("\n")
             elif args.command == "plan":
-                result = qemu_plan(project, args.backend)
+                if project.manifest["profile"] in {"usp-rv64-v1", "usp-rv64-hybrid-v1"}:
+                    from .pipeline import resolve
+
+                    if args.backend != "qemu":
+                        raise ContractError("UNSUPPORTED custom backend")
+                    result = {
+                        "backend": "qemu",
+                        "machine": "usp-rv64",
+                        "bindings": resolve(project),
+                    }
+                else:
+                    result = qemu_plan(project, args.backend)
             else:
                 qemu_plan(project, args.backend)
                 result = run_qemu(project, args.firmware, args.out, args.timeout)
@@ -74,7 +101,10 @@ def main(argv=None) -> int:
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0
     except (ContractError, OSError) as exc:
-        print(f"socsim: {exc}", file=sys.stderr)
+        if json_errors:
+            print(json.dumps({"status": "ERROR", "code": "E_CONTRACT", "message": str(exc)}))
+        else:
+            print(f"socsim: {exc}", file=sys.stderr)
         return 2
 
 

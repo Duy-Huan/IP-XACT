@@ -35,3 +35,18 @@ For updates, use `skills/update/SKILL.md`. Change dependencies and tool profiles
 dev, run regression, document incompatibilities, and promote reviewed candidates.
 For release, synchronize version/changelog and create an immutable annotated tag
 from verified main. No automatic deployment or package upload is configured.
+
+## Current acceptance gates
+
+The regression script now also runs mypy. The custom-zephyr hosted job rebuilds
+the generated QEMU/Zephyr profile and the Linux and hybrid examples from pinned
+public sources. It runs synthetic fixtures only and uploads JUnit, not arbitrary
+run bundles. Include that check in main protection in addition to the quick jobs.
+Hosted completion must be observed separately from local execution.
+
+For local promotion export USP_GENERATED_DIR to the built rv64-minimal directory;
+promote.sh requires the custom boot/IRQ test rather than allowing it to skip.
+To require the other implemented integrations, also set USP_REQUIRE_LINUX=1,
+USP_MODEL_DIR, USP_HYBRID_GENERATED_DIR and USP_REQUIRE_MODELS=1. The source paths
+and native model build prerequisites are in the example/reproducibility guides.
+Missing required artifacts must fail the selected gate.

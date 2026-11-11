@@ -1,0 +1,177 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string"
+    },
+    "vlnv": {
+      "type": "string"
+    },
+    "instances": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "vlnv": {
+            "type": "string"
+          },
+          "windows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "base": {
+                  "type": "integer"
+                },
+                "size": {
+                  "type": "integer"
+                },
+                "width": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "name",
+                "base",
+                "size",
+                "width"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "name",
+          "vlnv",
+          "windows"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "prefixItems": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "minItems": 2,
+        "maxItems": 2
+      }
+    },
+    "cpu": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "isa": {
+              "type": "string"
+            },
+            "privilege": {
+              "type": "string"
+            },
+            "mmu": {
+              "type": "string"
+            },
+            "reset_vector": {
+              "type": "integer"
+            },
+            "entry": {
+              "type": "integer"
+            },
+            "timebase_hz": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "isa",
+            "privilege",
+            "mmu",
+            "reset_vector",
+            "entry",
+            "timebase_hz"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "interrupts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer"
+          },
+          "trigger": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "target",
+          "line",
+          "trigger"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "address_spaces": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "initiator": {
+            "type": "string"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "initiator",
+          "targets"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "vlnv",
+    "instances",
+    "sources",
+    "cpu",
+    "interrupts",
+    "address_spaces"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

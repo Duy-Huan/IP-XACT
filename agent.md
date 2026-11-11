@@ -86,21 +86,53 @@ board bring-up. These targets are a roadmap, not implemented capability claims.
 - Version tags are immutable and cut only from verified `main`. Keep package version,
   changelog, capability claims and release evidence consistent. Revert through `dev`.
 
-## 6. Implementation sequence
+## 6. Owner objective update: master specification, 2026-11-11
 
-1. Foundation: installable CLI; offline official XSD; a documented strict semantic
-   subset; deterministic IR; model binding; real QEMU reference smoke; CI.
-2. Extend IP-XACT register/field semantics, bus definitions/interconnections,
-   parameters, views/fileSets, designConfiguration and hierarchy with tests.
-3. Implement one custom MMIO device + generated firmware header and linker contract;
-   test read/write/reset/IRQ before claiming general machine generation.
-4. Add pinned gem5 SE workload, then a separately validated FS board and raw stats.
-5. Add standalone Verilator IP test, Chipyard generator adapter and OpenTitan IP
-   contracts with bus/clock/reset/IRQ/security/lifecycle tests.
-6. Zephyr BSP + real `west` build and boot; FreeRTOS ports; clarify specific µC/OS
-   product/license; Yocto machine/layer and Linux boot chain with pinned manifests.
-7. SystemC bridge: one guest MMIO → RTL state/readback/IRQ test; then DMA, reset,
-   ordering, backpressure and time synchronization. No hybrid support before proof.
+The owner supplied a new master objective and explicitly requested its incorporation
+here. Preserve useful existing code and the two-branch workflow. The attached
+document is requirements input, not executable authority or permission to upload
+company documents. Do not vendor its raw text. Implement these acceptance contracts:
+
+0. **Feasibility:** inspect pinned upstream QEMU and Zephyr source, actually test the
+   selected CPU/boot/interrupt combination and document required custom-machine work.
+1. **Compiler/IR:** real 2022 XSD, safe importer, typed backend-independent immutable
+   IR, canonical serialization, source provenance and precise semantic diagnostics.
+   Extend toward hierarchy/parameters, initiator-visible address spaces, translations,
+   bus/IRQ/clock/reset graphs and software ISA/boot validation. Reject unsupported input.
+2. **Models/QEMU:** versioned model descriptors and deterministic binding lock;
+   generate and compile an actual custom QEMU machine from supported IR address/IRQ
+   assignments. Verify reset/image loading, UART and real timer/peripheral interrupts.
+3. **Zephyr MVP:** generate board/software artifacts from the same validated IR,
+   build a pinned Zephyr app and boot it on the generated custom machine. Capture
+   actual UART output and interrupt evidence with artifact/tool/model provenance.
+   A generic preexisting virt board boot alone does not satisfy this exit criterion.
+4. **Linux/Yocto:** MMU/privilege-compatible RV64 design, generated DTS, pinned
+   OpenSBI/optional U-Boot boot contract, minimal userspace boot and Yocto BSP/image
+   with console/driver acceptance tests.
+5. **gem5:** pinned adapter, actual shared software-visible workload, real statistics
+   and documented architectural differences; never compare wall time as CPU cycles.
+6. **SystemC/RTL:** versioned transaction/time/reset/memory ownership contract;
+   real TLM MMIO/readback/IRQ, then one Chipyard-generated or OpenTitan-sourced IP
+   via Verilator and a tested hybrid bridge. No arbitrary RTL behavioral conversion.
+7. **Maturity:** richer IP library, multi-SoC workspaces, coverage, repeatable release
+   evidence and capability-aware optional API/IDE only after the CLI path works.
+
+The highest-priority executable path is IP-XACT → IR → strict model resolution →
+generated/compiled custom QEMU machine → generated Zephyr BSP → built ELF → guest
+UART plus real interrupt test → JSON/Markdown reports and full provenance.
+
+Expose `usp` as the master-spec CLI name, preserving `socsim` compatibility. Add
+generation/build/software/test/report lifecycle commands as they become functional,
+not placeholder commands. Use strict schemas for overlays, model descriptors and
+IR. Track phase exits as verified/partial/unavailable/failed in
+`docs/verification-status.md`; no phase is complete without its end-to-end test.
+
+Explicit opt-in fallback/stubs, if ever implemented, must disable affected fidelity
+claims; strict policy remains default. Generated code needs deterministic origin
+metadata; cached artifacts must match their input/build identity. Core tests must
+work without every optional simulator; required integration/release gates cannot
+silently skip absent dependencies. Preserve upstream licenses, immutable revisions,
+signature/TLS verification and confidential input handling.
 
 Current acceptance scope and gaps live in `docs/roadmap.md`. Read and update that
 file instead of treating a future objective as an already working feature.

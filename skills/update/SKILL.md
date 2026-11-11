@@ -31,3 +31,17 @@ No automatic updates, pushes, releases, or company data uploads.
 Rollback selects a prior immutable commit/profile; never rewrite published tags.
 Report current-machine validation separately from hosted CI and environment
 snapshot publication. Keep proprietary IP, keys and firmware outside public Git.
+
+## Generated artifact identity and source-backed evidence
+
+The current custom path hashes compiler modules, templates, catalog, inputs and
+outputs. Regenerate into a fresh directory after any such identity changes and
+rebuild affected native artifacts. Never rewrite manifest checksums manually to
+silence a mismatch. Valid native compilation outputs can be reused by an explicit
+rebuild when their actual generated source/configuration inputs remain unchanged.
+
+Require the real custom Zephyr timer/PLIC test before promotion. Linux userspace,
+shared gem5 SE workload and TLM/RTL bridge each have independent acceptance scopes.
+Report SE as SE, transport time as annotated, and unsupported generic hierarchy or
+security semantics as unsupported. Keep external source licenses and clean tracked
+upstream state. Raw attached company objectives must not be copied into public Git.

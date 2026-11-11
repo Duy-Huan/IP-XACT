@@ -1,0 +1,138 @@
+{
+  "schema_version": "1",
+  "models": [
+    {
+      "role": "clint",
+      "id": "qemu.clint",
+      "vlnv": "socsim.example:reference:clint:1.0",
+      "version": "1",
+      "backend": "qemu",
+      "profile": "usp-rv64-v1",
+      "source": {
+        "url": "https://github.com/qemu/qemu",
+        "commit": "7c949c53e936aa3a658d84ab53bae5cadaa5d59c",
+        "path": "hw/intc/riscv_aclint.c",
+        "license": "GPL-2.0-or-later"
+      },
+      "contract_id": "usp.clint.v1",
+      "conformance_test": "test_real_custom_zephyr_boot_timer_and_uart_irq"
+    },
+    {
+      "role": "finisher",
+      "id": "qemu.virt.sifive-test",
+      "vlnv": "socsim.example:reference:finisher:1.0",
+      "version": "1",
+      "backend": "qemu",
+      "profile": "usp-rv64-v1",
+      "source": {
+        "url": "https://github.com/qemu/qemu",
+        "commit": "7c949c53e936aa3a658d84ab53bae5cadaa5d59c",
+        "path": "hw/misc/sifive_test.c",
+        "license": "GPL-2.0-or-later"
+      },
+      "contract_id": "usp.finisher.v1",
+      "conformance_test": "test_real_custom_zephyr_boot_timer_and_uart_irq"
+    },
+    {
+      "role": "plic",
+      "id": "qemu.plic",
+      "vlnv": "socsim.example:reference:plic:1.0",
+      "version": "1",
+      "backend": "qemu",
+      "profile": "usp-rv64-v1",
+      "source": {
+        "url": "https://github.com/qemu/qemu",
+        "commit": "7c949c53e936aa3a658d84ab53bae5cadaa5d59c",
+        "path": "hw/intc/sifive_plic.c",
+        "license": "GPL-2.0-or-later"
+      },
+      "contract_id": "usp.plic.v1",
+      "conformance_test": "test_real_custom_zephyr_boot_timer_and_uart_irq"
+    },
+    {
+      "role": "ram",
+      "id": "qemu.virt.ram",
+      "vlnv": "socsim.example:reference:ram:1.0",
+      "version": "1",
+      "backend": "qemu",
+      "profile": "usp-rv64-v1",
+      "source": {
+        "url": "https://github.com/qemu/qemu",
+        "commit": "7c949c53e936aa3a658d84ab53bae5cadaa5d59c",
+        "path": "system/memory.c",
+        "license": "GPL-2.0-or-later"
+      },
+      "contract_id": "usp.ram.v1",
+      "conformance_test": "test_real_custom_zephyr_boot_timer_and_uart_irq"
+    },
+    {
+      "role": "rom",
+      "id": "qemu.rom",
+      "vlnv": "socsim.example:reference:rom:1.0",
+      "version": "1",
+      "backend": "qemu",
+      "profile": "usp-rv64-v1",
+      "source": {
+        "url": "https://github.com/qemu/qemu",
+        "commit": "7c949c53e936aa3a658d84ab53bae5cadaa5d59c",
+        "path": "system/memory.c",
+        "license": "GPL-2.0-or-later"
+      },
+      "contract_id": "usp.rom.v1",
+      "conformance_test": "test_real_custom_zephyr_boot_timer_and_uart_irq"
+    },
+    {
+      "role": "rv64",
+      "id": "qemu.rv64",
+      "vlnv": "socsim.example:reference:rv64:1.0",
+      "version": "1",
+      "backend": "qemu",
+      "profile": "usp-rv64-v1",
+      "source": {
+        "url": "https://github.com/qemu/qemu",
+        "commit": "7c949c53e936aa3a658d84ab53bae5cadaa5d59c",
+        "path": "target/riscv/cpu.c",
+        "license": "GPL-2.0-or-later"
+      },
+      "contract_id": "usp.rv64.v1",
+      "conformance_test": "test_real_custom_zephyr_boot_timer_and_uart_irq"
+    },
+    {
+      "role": "uart",
+      "id": "qemu.virt.ns16550",
+      "vlnv": "socsim.example:reference:uart:1.0",
+      "version": "1",
+      "backend": "qemu",
+      "profile": "usp-rv64-v1",
+      "source": {
+        "url": "https://github.com/qemu/qemu",
+        "commit": "7c949c53e936aa3a658d84ab53bae5cadaa5d59c",
+        "path": "hw/char/serial-mm.c",
+        "license": "GPL-2.0-or-later"
+      },
+      "contract_id": "usp.uart.v1",
+      "conformance_test": "test_real_custom_zephyr_boot_timer_and_uart_irq",
+      "clock_hz": 3686400,
+      "register_stride": 1
+    },
+    {
+      "role": "scfifo",
+      "id": "usp.systemc.fifo",
+      "vlnv": "socsim.example:reference:scfifo:1.0",
+      "version": "1",
+      "backend": "qemu",
+      "profile": "usp-rv64-hybrid-v1",
+      "source": {
+        "url": "project-owned",
+        "commit": "adapter-v1",
+        "path": "native/systemc/fifo_server.cpp",
+        "license": "Apache-2.0",
+        "rtl_url": "https://github.com/lowRISC/opentitan",
+        "rtl_commit": "ed044fc9760bdf9fc075d0015ba1db07fa075355",
+        "rtl_path": "hw/ip/prim/rtl/prim_fifo_sync.sv"
+      },
+      "contract_id": "usp.scfifo.v1",
+      "conformance_test": "hybrid-mmio-irq"
+    }
+  ]
+}

@@ -41,3 +41,38 @@ and chosen userspace/driver workload. QEMU functional success does not establish
 gem5 FS, Chipyard RTL or OpenTitan platform equivalence. No current Zephyr, RTOS or
 Yocto build/boot is claimed by this release. Secure boot signing, lifecycle and
 anti-rollback require independent negative tests with synthetic development keys.
+
+## v0.2 verified software path and remaining OS boundary
+
+The earlier planned-only sections describe v0.1 history. The current custom profile
+has a real generated external Zephyr 4.2.0 board, a west build and real timer/UART
+interrupt checks. See the rv64-minimal guide for actual CLI commands and markers.
+
+The direct Linux path pins Linux 6.12 and OpenSBI 1.6, uses a RISC-V Linux GNU
+compiler/linker, and packages an original static initramfs. It is intentionally
+small: PID 1 runs the same arithmetic/write/exit ELF used by gem5 SE, verifies its
+status, prints USP_LINUX_USERSPACE_OK, then requests poweroff. The earlier direct
+PID-1-only smoke was already observed passing; current shared-workload acceptance
+is independently recorded in each new report.
+
+```bash
+export USP_FETCH_LINUX=1
+bash scripts/fetch_upstreams.sh
+export CROSS_COMPILE_LINUX=riscv64-linux-gnu-
+bash scripts/linux_bringup.sh
+```
+
+The generated Yocto meta-usp layer targets scarthgap/Poky 5.0.9, supplies its own
+usp-rv64 machine and generated DTS, a pinned kernel recipe, minimal image and
+original console smoke service. It does not inherit qemu virt device topology.
+Layer parsing has been exercised with the target machine, but image build/boot is
+blocked by upstream download policy. It must not be described as a verified Yocto
+image. At least downloads.yoctoproject.org and download.savannah.gnu.org need access;
+additional sources must be diagnosed as BitBake progresses. No checksum, TLS or
+namespace/sanity checks are disabled to make a build pass.
+
+BitBake parsing required execution outside the command sandbox (user namespaces)
+and process umask 022. The normal source command is not compatible with shell
+nounset, so source oe-init-build-env without set -u. Debian 13 is not a validated
+Poky 5.0 host; retain that warning or use a supported build host for production.
+No FreeRTOS, µC/OS or secure-boot acceptance is claimed yet.

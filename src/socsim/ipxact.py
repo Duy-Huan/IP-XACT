@@ -178,9 +178,11 @@ def elaborate(project: Path, placements: dict, design_path: Path) -> SoCIR:
         raise ContractError("design has no component instances")
     if set(placements) != seen:
         raise ContractError("placements must explicitly name exactly all design instances")
-    windows = sorted((w.base, w.base + w.size, i.name) for i in instances for w in i.windows)
+    address_windows = sorted(
+        (w.base, w.base + w.size, i.name) for i in instances for w in i.windows
+    )
     previous_end = 0
-    for start, end, name in windows:
+    for start, end, name in address_windows:
         if end > 2**64:
             raise ContractError(f"{name}: address overflow")
         if start < previous_end:
