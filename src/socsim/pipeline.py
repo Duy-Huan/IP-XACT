@@ -11,6 +11,7 @@ from pathlib import Path
 from string import Template
 
 from .domain import ContractError
+from .execution import cleanup_on_termination
 from .ipxact import digest
 from .runner import write_json
 
@@ -18,6 +19,7 @@ QEMU_SHA = "7c949c53e936aa3a658d84ab53bae5cadaa5d59c"
 ZEPHYR_SHA = "413b789deb391d3a37d06b463288a5fe765ee57e"
 
 
+@cleanup_on_termination
 def execute(argv, cwd, log, timeout=600, env=None):
     """Record argv and bounded process output; keep the real return code."""
     log.parent.mkdir(parents=True, exist_ok=True)
@@ -441,6 +443,7 @@ def build_zephyr(project, out, source, cross_compile, jobs=4):
     return elf
 
 
+@cleanup_on_termination
 def run_custom(project, out, result_dir, timeout=20, osname="zephyr", bridge_socket=None):
     """Require boot, CLINT timer ISR and UART through PLIC, then guest success exit."""
     import math

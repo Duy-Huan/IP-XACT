@@ -26,8 +26,9 @@ QEMU/Linux and gem5 SE with the same hash; the acceptance scopes remain distinct
 SystemC and RTL hybrid runs additionally require USP_TLM_RTL_IRQ_OK and independently
 verify trace write/readback/IRQ state transitions. Repeated RTL traces matched.
 
-Observed full local gate: **84 tests passed, zero failed/skipped**, including the
-shared QEMU/Linux and gem5 ELF test and both TLM/RTL modes. Raw gem5 observations
+Observed full local gate: **85 tests passed, zero failed/skipped**, including the
+shared QEMU/Linux and gem5 ELF test, both TLM/RTL modes, and real CLI SIGTERM
+cleanup of its owned guest process. Raw gem5 observations
 include simInsts=3012 and simTicks=80400000 under explicitly uncalibrated assumptions;
 these are simulator outputs, not estimates or silicon measurements. The required
 native/source tests remain independent of hosted CI availability.

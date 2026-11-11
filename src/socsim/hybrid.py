@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 from .domain import ContractError
+from .execution import cleanup_on_termination
 from .ipxact import digest
 from .pipeline import execute, run_custom, verify_source
 from .runner import tool_version, write_json
@@ -101,6 +102,7 @@ def build_models(out, native_source, opentitan_source):
     return record
 
 
+@cleanup_on_termination
 def run_hybrid(project, generated, models, result_dir, mode="tlm", timeout=20):
     if project.manifest["profile"] != "usp-rv64-hybrid-v1" or mode not in {"tlm", "rtl"}:
         raise ContractError(

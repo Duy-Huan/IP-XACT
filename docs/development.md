@@ -46,7 +46,12 @@ Hosted completion must be observed separately from local execution.
 
 For local promotion export USP_GENERATED_DIR to the built rv64-minimal directory;
 promote.sh requires the custom boot/IRQ test rather than allowing it to skip.
-To require the other implemented integrations, also set USP_REQUIRE_LINUX=1,
-USP_MODEL_DIR, USP_HYBRID_GENERATED_DIR and USP_REQUIRE_MODELS=1. The source paths
+Promotion also requires USP_MODEL_DIR, USP_HYBRID_GENERATED_DIR and
+USP_GEM5_BUILD_DIR. Linux, model and gem5 gates are mandatory for promotion;
+individual developer suites may still skip optional source builds. The source paths
 and native model build prerequisites are in the example/reproducibility guides.
 Missing required artifacts must fail the selected gate.
+
+The expensive gem5 source-build job is available through workflow_dispatch; it is
+not silently reported as executed by the quick push/PR jobs. Local promotion still
+requires its actual shared-workload integration test with a verified build.

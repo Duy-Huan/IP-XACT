@@ -18,3 +18,6 @@ metadata; optional gem5 SE workload adapter and local SystemC/OpenTitan RTL FIFO
 bridge with deterministic trace evidence. Added source-build helpers, static typing
 and native CI coverage. Capability and unresolved-scope details are recorded in
 docs/verification-status.md; no universal or industrial-completeness claim is made.
+
+Native process owners handle SIGTERM with scoped cleanup and restore the previous
+handler. A real CLI cancellation test verifies exit 143 and that its guest is reaped.
