@@ -1,0 +1,32 @@
+{
+  "source": "https://github.com/edaa-org/IPXACT-Schema",
+  "commit": "3c683290483598378435ff93d38c5354fb9e5514",
+  "upstream": "https://www.accellera.org/XMLSchema/IPXACT/1685-2022/",
+  "files": {
+    "abstractionDefinition.xsd": "601edcbdf6e1de68f15bb81b3ffdc3e9e0ee5c23d77809ee84c53607b5516c6b",
+    "abstractor.xsd": "694bc4973523ea92aea9170c241ceab852e1d5e0cb974984f05e86a9d85bbd3d",
+    "autoConfigure.xsd": "b999e62337abc45f5fcaa12cc58d762f5e4db325dfe01cfab0dd304caf1da434",
+    "busDefinition.xsd": "21c795878a7a17587d2c9df85c9bbdd372a5dce3bc6fc4f75b66758db8f4eef7",
+    "busInterface.xsd": "1e14fed648ea20adf99cb8a6679041e24323134fb5e0edb117b84384d69a7476",
+    "catalog.xsd": "7283ead00da6d3d50fd254752ef0fa0ed9ecb16ea7b51f08f46dbacf60b2b83b",
+    "commonStructures.xsd": "c615460f26cfeb0fbf64e4c1e363927dcb07db30096b780b03c68fd9c3a45bdc",
+    "component.xsd": "0faba902e8cbc4030089ae680387e28f306c9978dde6722b9d9e77b7b1b2b527",
+    "configurable.xsd": "c8c8498c9154e01e0a2fd6abbf69d3dc8d8544879b2f27c9e04822cdbb6d92fd",
+    "constraints.xsd": "91f4688ce4c1e08d7dcea90a233adbce65956771ce756a35cc0ae24586bf0b02",
+    "design.xsd": "c6f171fa8ebf438baf8303c5d406852e636e04c3decc3a23d3c64c221b561a7d",
+    "designConfig.xsd": "fe73f4592b03b413f70ec5e81c9f184a5fecc9699f6d63d2237a12fbed00dc17",
+    "file.xsd": "42ece11aeaa96f7f7fa5a0a63ada0c5cfabd3af35ca887fd7763e0cf7700ec52",
+    "fileType.xsd": "f3e706301e4e6c7f701ae10a4c4530ebe3b452b8dffd0196c51176aa8ffd9228",
+    "generator.xsd": "7ef8bc7ee05423c82c0c6d3332a448465b06483c62bd9b6013a806997e9f5107",
+    "identifier.xsd": "dfb1b14de110e3b418e7ddc5a50df53c177f3d67559d45cbd286b1668457d10e",
+    "index.xsd": "91903dd06e18a2219bb2edb5c41c23851eb88c4b1d9d86bbbc31051f4f2529c4",
+    "memoryMap.xsd": "882fc1672ac5acfdd2e32790678f177fa9f362a9f3340f9dd4d7b529b1203c7d",
+    "model.xsd": "b12d169b467ced63af0330632c4c51e8b898212b533bf09389d3deb013ebb37c",
+    "port.xsd": "f3c62c7a910e860613c8bf36055c259bf4217fa8963e8b4baec49324970cf083",
+    "signalDrivers.xsd": "11c7db0495643b341142f0619cd24aaccad60acb57f97de59410a40fb13dbcac",
+    "simpleTypes.xsd": "4876af3209c2e776e89745fdfb815b47f23946ecb38314feda5775ca6d18e902",
+    "subInstances.xsd": "8b9d8358fe61fcc2ece278e18062a21a3ba628dfa3d9bc92e5d0f0dc642eface",
+    "typeDefinitions.xsd": "ff0709ce0dca45a1f511e5c3220c7cd5114e4a5ce73340d2d8c89ae5087fc55f",
+    "xml.xsd": "9c99ffe4dcb50600da34aa88eb096fd849003856beab31f6367890100d221ca4"
+  }
+}

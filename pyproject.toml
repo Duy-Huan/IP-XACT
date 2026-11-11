@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools==80.9.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "socsim-platform"
+version = "0.1.0"
+description = "IP-XACT driven RISC-V virtual platform compiler"
+requires-python = ">=3.11"
+dependencies = ["lxml==6.0.2", "PyYAML==6.0.3"]
+
+[project.optional-dependencies]
+dev = ["pytest==9.0.2", "ruff==0.14.10"]
+
+[project.scripts]
+socsim = "socsim.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+socsim = ["schemas/*.json", "schemas/*.md", "schemas/1685-2022/*.xsd"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["integration: requires QEMU and a RISC-V toolchain"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

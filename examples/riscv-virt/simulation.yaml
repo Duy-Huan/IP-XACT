@@ -1,0 +1,11 @@
+schema_version: '1'
+design: ipxact/design.xml
+models: models.yaml
+toolchain: toolchain.lock.yaml
+profile: qemu-virt-rv64-v1
+# These are explicit instance placements, not generic IP-XACT bus elaboration.
+placements:
+  rv64: 0
+  ram: 0x80000000
+  uart: 0x10000000
+  finisher: 0x100000
