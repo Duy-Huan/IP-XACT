@@ -15,7 +15,7 @@ CAPABILITIES = {
     },
     "gem5": {
         "status": "experimental",
-        "scope": "RISC-V SE and separate Garnet mesh experiments; no live hybrid/FS board claim",
+        "scope": "RISC-V SE; unified Zephyr full-system SystemC GCD/GPIO bridge; separate Garnet",
     },
     "chipyard": {
         "status": "implemented-subset",
@@ -27,7 +27,7 @@ CAPABILITIES = {
     },
     "systemc": {
         "status": "implemented-subset",
-        "scope": "local FIFO TLM bridge; bounded MMIO/IRQ; no DMA/coherence",
+        "scope": "FIFO and shared GCD/GPIO TLM/RTL bridge on QEMU/gem5; no DMA/coherence",
     },
     "verilator": {
         "status": "implemented-subset",

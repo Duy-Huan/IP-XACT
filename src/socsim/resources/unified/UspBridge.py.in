@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: Apache-2.0
+from m5.objects.Device import PioDevice
+from m5.params import *
+
+class UspBridge(PioDevice):
+    type = 'UspBridge'
+    cxx_class = 'gem5::UspBridge'
+    cxx_header = 'usp_bridge.hh'
+    socket_path = Param.String('Owned local SystemC socket')
+    platform = Param.Platform('Platform providing actual PLIC interrupt delivery')
+    gcd_base = Param.Addr('Chipyard GCD address from IR')
+    gpio_base = Param.Addr('OpenTitan GPIO address from IR')
+    finish_base = Param.Addr('Finisher address from IR')
+    gcd_irq = Param.Unsigned('Chipyard GCD PLIC source from IR')
+    gpio_irq = Param.Unsigned('OpenTitan GPIO PLIC source from IR')
+    pio_latency = Param.Latency('100ns', 'Uncalibrated transaction latency')

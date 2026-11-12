@@ -1,0 +1,4 @@
+Import('*')
+env.Append(CPPPATH=[Dir('.')])
+SimObject('UspBridge.py', sim_objects=['UspBridge'])
+Source('usp_bridge.cc')

@@ -89,3 +89,9 @@ traces, rejects a short cycle limit and verifies physical/evidence identities.
 See rtl-testchips.md and scripts/rtl_testchip_flow.sh for preparation. The manual
 rtl-testchips workflow requires a provisioned soc-eda runner; its presence in Git
 does not establish a hosted result.
+
+Unified virtual-SoC promotion also requires USP_UNIFIED_GEM5_BUILD and sets
+USP_REQUIRE_UNIFIED=1. Tests run the same Zephyr ELF and actual SystemC GCD/GPIO
+models on QEMU and gem5 full-system for rv64-ips, AI_SOC and AIZ_SOC bring-up maps.
+They compare real IP command/data sequences and reject a short gem5 simulation
+limit. See unified-soc.md for the supported extension build and ownership contract.

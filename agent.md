@@ -161,3 +161,15 @@ mapped-netlist acceptance distinct from the larger requested architectures. Loca
 promotion requires both test-chip native/physical/mapped builds and their actual
 acceptance tests; see docs/rtl-testchips.md for the exact supported contract and
 remaining electrical/signoff limitations.
+
+## 8. Owner clarification: unified virtual SoC, 2026-11-12
+
+The required emulator architecture is one IP-XACT-defined SoC with actual
+Chipyard/OpenTitan IPs bound through SystemC/TLM to the selected CPU engine,
+QEMU or gem5. The selected engine owns CPU/RAM and receives real peripheral IRQs;
+both IP families coexist in the same running guest system. Independent model,
+Garnet, CPU-workload or RTL/GDS runs do not satisfy this integration criterion.
+Prioritize a shared hardware/software contract, exact model binding and the same
+firmware ELF exercising actual MMIO and interrupts on each supported engine.
+Do not imply QEMU and gem5 both execute the same hart concurrently. Additional IPs
+need explicit bus/register/reset/IRQ adapters and real integrated guest tests.

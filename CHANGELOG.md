@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+Added a unified virtual-SoC adapter: the same IP-XACT IR, Zephyr ELF and actual
+SystemC/Verilator Chipyard GCD/OpenTitan GPIO models now execute on QEMU or gem5
+full-system. Added out-of-tree gem5 MMIO/PLIC bridge, real reset ROM, explicit
+engine binding plans, IP command/data comparison, evidence verification and
+three mapped-profile native promotion gates. Timing remains transaction-driven
+and uncalibrated; full Rocket/Earlgrey, DMA/coherence and live Garnet remain open.
+
 Added separate nine-component AI_SOC/AIZ_SOC functional RTL test-chip profiles.
 Actual Ibex CPUs execute compiled RV32 firmware against OpenTitan UART/GPIO/timer,
 Chipyard GCD, real ROM/SRAM and original OBI/TL-UL fabric. Added complete-top Slang

@@ -33,7 +33,7 @@ workload; reuse valid outputs. Relocated Python library paths are passed only to
 the build/run subprocesses. Building normally generates ignored files under the
 pinned upstream build directory but must leave tracked upstream source clean.
 
-Future full-system gem5 support needs an independently verified board, firmware,
-IRQ/MMIO devices and software boot contract. SE success cannot establish those.
-Current actual completion is recorded in verification-status.md, independently of
-the availability of this adapter code or a build still in progress.
+The separate unified-soc.md adapter now supplies a verified Zephyr full-system
+board with actual Chipyard/OpenTitan RTL through SystemC, shared IR/ELF and real
+MMIO/PLIC interrupts. Its acceptance is independent of this SE result. Full-system
+Linux and CPU/RTL timing correlation remain unverified.
