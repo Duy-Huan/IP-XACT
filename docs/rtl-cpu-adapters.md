@@ -56,6 +56,10 @@ usp rtlcpu verify results/rtl-gem5-001/baremetal
 
 Choose fresh output directories. The out-of-tree gem5 extension preserves the
 existing SE executable under a build lock, restoring it even on failure.
+Generated SimObjects bind their C++ headers to their actual extension directory.
+The extension removes only its own globally added include paths, preserving base
+compilation signatures. SCons still verifies source/header dependencies; extension
+objects and generated parameters compile normally without rebuilding unrelated IP.
 scripts/rtl_cpu_bringup.sh acquires the two pinned public CPU repositories, builds
 the masters and runs the native acceptance matrix. It expects the existing
 generated rv64-ips and AI_SOC/AIZ_SOC bring-up machines and source-IP models.

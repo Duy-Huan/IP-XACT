@@ -40,6 +40,24 @@ def native_identity():
     }
 
 
+def copy_extension(resources, names, extension):
+    """Bind generated SimObject headers without global EXTRAS include flags."""
+    headers = {"UspBridge.py": "usp_bridge.hh", "UspRtlMaster.py": "usp_rtl_master.hh"}
+    for name in names:
+        target = extension / name.removesuffix(".in")
+        if target.name in headers:
+            header = headers[target.name]
+            text = (resources / name).read_text()
+            original = "cxx_header = " + repr(header)
+            if text.count(original) != 1:
+                raise ContractError("unsupported gem5 extension header declaration")
+            target.write_text(
+                text.replace(original, "cxx_header = " + repr(str(extension / header)))
+            )
+        else:
+            shutil.copy2(resources / name, target)
+
+
 @cleanup_on_termination
 def build_bridge(source, out, jobs=2):
     source = verify_source(source, GEM5_SHA)
@@ -51,8 +69,7 @@ def build_bridge(source, out, jobs=2):
     native = native_identity()
     extension = out / "extension"
     extension.mkdir()
-    for name in native:
-        shutil.copy2(RESOURCES / name, extension / name.removesuffix(".in"))
+    copy_extension(RESOURCES, native, extension)
     binary = source / "build/RISCV/gem5.opt"
     # EXTRAS is an upstream-supported out-of-tree extension. Reuse object files,
     # but preserve the existing independently verified SE binary at its old path.

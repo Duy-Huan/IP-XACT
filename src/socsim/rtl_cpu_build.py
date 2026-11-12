@@ -23,7 +23,7 @@ from .pipeline import execute, verify_source
 from .project import inside, read_yaml
 from .runner import tool_version, write_json
 from .unified import RESOURCES as PERIPHERALS
-from .unified import native_identity
+from .unified import copy_extension, native_identity
 
 RESOURCES = Path(__file__).parent / "resources/rtl_cpu"
 CHIPYARD = "69eba860a352343e4ac6b6df0f3638a79a86ec78"
@@ -275,10 +275,8 @@ def build_engine(source, out, jobs=2):
     configuration = configure_external_systemc(source, "RISCV", out)
     extension = out / "extension"
     extension.mkdir()
-    for n in native_identity():
-        shutil.copy2(PERIPHERALS / n, extension / n.removesuffix(".in"))
-    for n in MASTER_FILES:
-        shutil.copy2(RESOURCES / n, extension / n.removesuffix(".in"))
+    copy_extension(PERIPHERALS, native_identity(), extension)
+    copy_extension(RESOURCES, MASTER_FILES, extension)
     with (extension / "SConscript").open("a") as f:
         f.write(
             "\nSimObject('UspRtlMaster.py', sim_objects=['UspRtlMaster'])\n"
