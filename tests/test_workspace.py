@@ -42,7 +42,7 @@ def test_workspace_rejects_invalid_contract(config, case):
 def test_missing_builds_fail_every_target_without_skip(config, tmp_path):
     result = run_workspace(config, tmp_path / "run")
     assert result["status"] == "FAILED"
-    assert len(result["targets"]) == 7
+    assert len(result["targets"]) == 8
     assert all(r["status"] == "ERROR" for r in result["targets"])
     assert verify_bundle(tmp_path / "run")["full_master_complete"] is False
     with pytest.raises(FileExistsError):
@@ -56,7 +56,7 @@ def test_real_multi_soc_acceptance_and_evidence_integrity(tmp_path):
     out = tmp_path / "acceptance"
     result = run_workspace(ROOT / "workspace.yaml", out)
     assert result["status"] == "PASSED"
-    assert len(result["targets"]) == 7
+    assert len(result["targets"]) == 8
     assert verify_bundle(out)["status"] == "PASSED"
     serial = out / "zephyr/stdout.log"
     original = serial.read_bytes()

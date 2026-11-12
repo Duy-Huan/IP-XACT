@@ -33,7 +33,7 @@ Overlaps and unsigned 64-bit overflow are rejected; aliases are not implemented.
 
 Everything outside the accepted child/attribute sets is rejected, including
 general parameter types/expressions, registers/fields, busInterfaces, views, fileSets,
-designConfiguration, hierarchy and vendor extensions. This is **not complete
+general hierarchy/bus translations and vendor extensions. This is **not complete
 IEEE 1685 semantic compliance**. XSD validity is necessary but insufficient.
 `socsim validate` checks this metadata subset; `socsim plan` additionally checks
 the selected backend and profile. XML DTD/entities, YAML duplicate keys and source
@@ -86,6 +86,13 @@ schemas/ir-v2.json exports the typed IR structure, hardware-v1.json describes th
 strict overlay, and model-catalog-v1.json identifies exact source/contract versions.
 The importer still rejects unsupported standard XML semantics. The current IR has
 one initiator-visible address space; no general translations or hierarchy are claimed.
+
+The structural hierarchy extension resolves model views through exact design and
+designConfiguration references, preserving full leaf paths in hierarchy_path.
+Explicit instance_aliases select safe logical names for backend contracts;
+placements still name full source paths. See the rv64-hierarchy guide for the
+bounded structural subset and actual boot acceptance. This does not infer wiring,
+parent translations or parameter propagation.
 
 linux.py builds a static original init/workload, tiny Linux and OpenSBI fw_payload,
 and generates/loads a Linux DTS. Linux needs a shared-capable Linux GNU linker for

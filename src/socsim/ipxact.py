@@ -71,7 +71,7 @@ def identity(node: etree._Element) -> str:
 
 # Every accepted child/attribute is listed; no ignored functional semantics.
 CHILDREN = {
-    "component": {"vendor", "library", "name", "version", "memoryMaps", "parameters"},
+    "component": {"vendor", "library", "name", "version", "memoryMaps", "parameters", "model"},
     "design": {"vendor", "library", "name", "version", "componentInstances"},
     "componentInstances": {"componentInstance"},
     "componentInstance": {"instanceName", "componentRef"},
@@ -82,6 +82,21 @@ CHILDREN = {
     "parameter": {"name", "value"},
     "componentRef": {"configurableElementValues"},
     "configurableElementValues": {"configurableElementValue"},
+    "model": {"views", "instantiations"},
+    "views": {"view"},
+    "view": {"name", "designInstantiationRef", "designConfigurationInstantiationRef"},
+    "instantiations": {"designInstantiation", "designConfigurationInstantiation"},
+    "designInstantiation": {"name", "designRef"},
+    "designConfigurationInstantiation": {"name", "designConfigurationRef"},
+    "designConfiguration": {
+        "vendor",
+        "library",
+        "name",
+        "version",
+        "designRef",
+        "viewConfiguration",
+    },
+    "viewConfiguration": {"instanceName", "view"},
 }
 LEAVES = {
     "vendor",
@@ -97,6 +112,10 @@ LEAVES = {
     "addressUnitBits",
     "value",
     "configurableElementValue",
+    "designRef",
+    "designConfigurationRef",
+    "designInstantiationRef",
+    "designConfigurationInstantiationRef",
 }
 
 
@@ -108,8 +127,12 @@ def check_subset(root: etree._Element, source: str) -> None:
         if etree.QName(node).namespace != NS or tag not in CHILDREN.keys() | LEAVES:
             raise ContractError(f"{source}:{node.sourceline}: UNSUPPORTED element {tag}")
         allowed_attributes = (
-            {"vendor", "library", "name", "version"} if tag == "componentRef" else set()
+            {"vendor", "library", "name", "version"}
+            if tag in {"componentRef", "designRef", "designConfigurationRef"}
+            else set()
         )
+        if tag == "view" and node.getparent().tag == PREFIX + "viewConfiguration":
+            allowed_attributes = {"viewRef"}
         if tag == "parameter":
             allowed_attributes = {"parameterId", "type", "sign", "resolve", "minimum", "maximum"}
         if tag == "configurableElementValue":
@@ -162,7 +185,9 @@ def component_windows(root: etree._Element, parameters=None) -> tuple[Window, ..
     return tuple(sorted(windows, key=lambda w: (w.base, w.name)))
 
 
-def elaborate(project: Path, placements: dict, design_path: Path) -> SoCIR:
+def elaborate(project: Path, placements: dict, design_path: Path, aliases=None) -> SoCIR:
+    from .hierarchy import leaves
+
     catalog = {}
     sources = []
     for path in sorted((project / "ipxact").rglob("*.xml")):
@@ -176,31 +201,39 @@ def elaborate(project: Path, placements: dict, design_path: Path) -> SoCIR:
         catalog[vlnv] = root
         sources.append((path.relative_to(project).as_posix(), digest(path)))
     design = read_xml(design_path)
-    if design.tag != PREFIX + "design":
-        raise ContractError("selected input is not a design")
+    if design.tag not in {PREFIX + "design", PREFIX + "designConfiguration"}:
+        raise ContractError("selected input is not a design/configuration")
+    aliases = {} if aliases is None else aliases
+    if not isinstance(aliases, dict) or not all(
+        isinstance(k, str) and isinstance(v, str) for k, v in aliases.items()
+    ):
+        raise ContractError("instance_aliases must map source paths to logical names")
     instances = []
     seen = set()
-    for item in design.findall(f"{PREFIX}componentInstances/{PREFIX}componentInstance"):
-        name = text(item, "instanceName")
-        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name) or name in seen:
-            raise ContractError(f"duplicate/unsafe instance name {name}")
+    source_names = set()
+    for path, component, ref in leaves(design, catalog):
+        source_name = ".".join(path)
+        source_names.add(source_name)
+        name = aliases.get(source_name, source_name)
+        if (
+            source_name in aliases and not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name)
+        ) or name in seen:
+            raise ContractError(f"duplicate/unsafe instance alias {name}")
         seen.add(name)
-        ref = item.find(PREFIX + "componentRef")
-        vlnv = ":".join(ref.get(k, "") for k in ("vendor", "library", "name", "version"))
-        component = catalog.get(vlnv)
-        if component is None or component.tag != PREFIX + "component":
-            raise ContractError(f"{name}: unresolved component VLNV {vlnv}")
-        offset = integer(placements.get(name, 0), f"placement {name}")
+        vlnv = identity(component)
+        offset = integer(placements.get(source_name, 0), f"placement {source_name}")
         parameters = resolve_parameters(component, ref)
         windows = tuple(
             Window(w.name, offset + w.base, w.size, w.width)
             for w in component_windows(component, parameters)
         )
-        instances.append(Instance(name, vlnv, windows, tuple(sorted(parameters.items()))))
+        instances.append(Instance(name, vlnv, windows, tuple(sorted(parameters.items())), path))
     if not instances:
         raise ContractError("design has no component instances")
-    if set(placements) != seen:
+    if set(placements) != source_names:
         raise ContractError("placements must explicitly name exactly all design instances")
+    if not set(aliases).issubset(source_names):
+        raise ContractError("instance_aliases contains unknown source paths")
     address_windows = sorted(
         (w.base, w.base + w.size, i.name) for i in instances for w in i.windows
     )

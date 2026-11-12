@@ -7,7 +7,7 @@ not a claim that every future standard/backend feature is implemented.
 | Phase | Status | Actual evidence / remaining boundary |
 |---|---|---|
 | 0 feasibility | Verified selected profile | Exact public QEMU/Zephyr source audit, real generated machine, guest timer/UART/PLIC |
-| 1 compiler/IR | Verified MVP subset; broader requirements partial | Official 2022 XSD; typed flat IR, bounded component parameters/instance overrides and CPU/IRQ contracts; general hierarchy, translations, buses, views and register semantics remain unsupported |
+| 1 compiler/IR | Verified supported subset; broader requirements partial | Official 2022 XSD; bounded structural hierarchy/configured views, component parameters and CPU/IRQ contracts; general translations/buses/register semantics remain unsupported |
 | 2 models/QEMU | Verified selected profiles | Versioned exact catalog/lock; compiled C machine; ROM/ELF reset and relocated UART; separate FIFO and nine-role source IP profiles |
 | 3 Zephyr MVP and FreeRTOS extension | Verified selected profiles | Generated Zephyr board/DTS with real timer/PLIC ISR; FreeRTOS static BSP with tick preemption, saved registers and UART/PLIC notification |
 | 4 Linux/Yocto | Direct Linux verified; Yocto image blocked | OpenSBI + Linux boot to original userspace; generated meta-usp parsed successfully (924 recipes, MACHINE=usp-rv64); upstream dependency fetch rejected by proxy |
@@ -26,7 +26,7 @@ QEMU/Linux and gem5 SE with the same hash; the acceptance scopes remain distinct
 SystemC and RTL hybrid runs additionally require USP_TLM_RTL_IRQ_OK and independently
 verify trace write/readback/IRQ state transitions. Repeated RTL traces matched.
 
-Observed full local gate on 2026-11-12: **164 tests passed, zero failed/skipped**, including the
+Observed full local gate on 2026-11-12: **173 tests passed, zero failed/skipped**, including the
 shared QEMU/Linux and gem5 ELF test, both TLM/RTL modes, and real CLI SIGTERM
 cleanup of its owned guest process. Raw gem5 observations
 include simInsts=3012 and simTicks=80400000 under explicitly uncalibrated assumptions;
@@ -40,15 +40,23 @@ The rv64-minimal UART's SPAN*UNIT window requires an actual override from 128 to
 machines and affected firmware were regenerated/rebuilt explicitly; native Zephyr,
 FreeRTOS, Linux, gem5 and hybrid/workspace gates passed. The 32 new parameter tests
 include invalid input, cycles and instance isolation. General parameter types,
-full expression semantics, hierarchy and translations are still incomplete.
+full expression semantics and translations are still incomplete.
 
-The checked-in workspace.yaml now executes seven actual targets across three SoC
-profiles: Zephyr, FreeRTOS, Linux, gem5 SE, FIFO TLM, FIFO RTL and source IP RTL.
-All seven passed in one workspace acceptance run. Aggregate evidence hashes every
+The checked-in workspace.yaml executes eight targets across four SoC projects:
+hierarchy Zephyr, base Zephyr, FreeRTOS, Linux, gem5 SE, FIFO TLM/RTL and source IP.
+All eight passed in one workspace acceptance run. Aggregate evidence hashes every
 retained target artifact; modified raw logs and false full-completion claims are
 rejected. Missing builds are ERROR rather than skipped. Local promotion requires
 the full matrix. See milestone-checklist.md for the item-level open/verified ledger;
 selected-workspace success does not close the remaining master requirements.
+
+Structural hierarchy resolves model views through designInstantiation and
+designConfigurationInstantiation, with explicit configured-view selection,
+context-sensitive cycle checks and full leaf paths retained in immutable IR.
+The rv64-hierarchy example passes XSD, deterministic/negative import tests and
+actual custom QEMU/Zephyr UART/timer/PLIC boot. A two-wrapper/configuration fixture
+also elaborates correctly. Wrapper parameter propagation, physical ports, wiring
+and general hierarchical address translations remain unsupported.
 
 The nine-role source IP profile additionally generates the actual selected
 Chipyard 1.13.0 GCD classes using Chisel 6.5.0/Scala 2.13.12/CIRCT 1.62.0, then
@@ -98,8 +106,11 @@ invalidate old generation manifests until explicit regeneration/rebuild.
 
 ## External blockers and unverified claims
 
-Yocto's required downloads from downloads.yoctoproject.org and
-download.savannah.gnu.org still received proxy CONNECT 403 on 2026-11-12.
+Yocto's downloads.yoctoproject.org and download.savannah.gnu.org, and GitHub's
+api.github.com, all received proxy CONNECT 403 on 2026-11-12. Hosted CI/protection
+API checks are blocked through that route. A draft adding api.github.com was saved
+with both existing Yocto domains preserved. Review/Save/Publish remains necessary;
+the draft does not apply runtime policy.
 The earlier configuration-service error is resolved: a restricted-network draft
 adding both domains was saved and read back, preserving package-manager presets.
 The running instance still reports revision 1 with no custom domains; draft save
@@ -117,5 +128,5 @@ This does not claim publication or validation after a fresh environment restore.
 
 Hosted GitHub Actions completion and main protection are distinct from local tests.
 Full Chipyard/Rocket SoC generation, complete OpenTitan/security integration, µC/OS,
-generic IP-XACT hierarchy/translation and full-system gem5 are not implemented.
+general IP-XACT wiring/translation and full-system gem5 are not implemented.
 No silicon/security guarantee or calibrated performance equivalence is implied.

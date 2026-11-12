@@ -127,6 +127,7 @@ def compiler_hashes():
         "domain.py",
         "ipxact.py",
         "parameters.py",
+        "hierarchy.py",
         "project.py",
         "contracts.py",
         "pipeline.py",

@@ -21,6 +21,7 @@ class Instance:
     vlnv: str
     windows: tuple[Window, ...]
     parameters: tuple[tuple[str, int], ...] = ()
+    hierarchy_path: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

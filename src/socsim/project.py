@@ -78,7 +78,8 @@ def load_project(root: Path) -> Project:
             "placements",
             "profile",
         }
-        | ({"hardware"} if raw_manifest.get("schema_version") == "2" else set()),
+        | ({"hardware"} if raw_manifest.get("schema_version") == "2" else set())
+        | ({"instance_aliases"} if "instance_aliases" in raw_manifest else set()),
         "simulation.yaml",
     )
     if not isinstance(manifest["schema_version"], str) or manifest["schema_version"] not in {
@@ -101,7 +102,7 @@ def load_project(root: Path) -> Project:
         raise ContractError("unsupported models/toolchain schema version")
     if not isinstance(models["bindings"], list) or not isinstance(lock["qemu_version"], str):
         raise ContractError("invalid bindings/toolchain types")
-    ir = elaborate(root, manifest["placements"], design_path)
+    ir = elaborate(root, manifest["placements"], design_path, manifest.get("instance_aliases"))
     # The IR includes every configuration input by content, never absolute host paths.
     from dataclasses import replace
 

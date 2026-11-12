@@ -59,6 +59,7 @@ old evidence is not overwritten. Failed guests/timeouts remain failed results.
 - [Milestone checklist and multi-SoC acceptance](docs/milestone-checklist.md)
 - [Architecture and supported IP-XACT subset](docs/architecture.md)
 - [Component parameters and safe integer expressions](docs/parameters.md)
+- [Configured structural hierarchy](docs/examples/rv64-hierarchy.md)
 - [Create a SoC](docs/creating-soc.md)
 - [Generated QEMU/Zephyr reference](docs/examples/rv64-minimal.md)
 - [SystemC/OpenTitan RTL bridge](docs/examples/rv64-hybrid.md)
@@ -73,8 +74,8 @@ old evidence is not overwritten. Failed guests/timeouts remain failed results.
 The legacy `examples/riscv-virt` QEMU 10.0.13 bare-metal smoke remains a separate
 compatibility test. The generated machine uses pinned QEMU 10.0.0 and deliberately
 relocates UART away from virt. The parser supports bounded component integer
-parameters and rejects unsupported hierarchy, general parameter types, buses,
-register fields and views rather than silently discarding them.
+parameters and structural hierarchy. Unsupported parameter types, buses,
+register fields and nonstructural views are rejected.
 Yocto image completion depends on permitted upstream downloads; consult the phase
 status for observed blockers. Full Chipyard/Earlgrey SoCs and generic hardware/security integrations
 remain future work. No calibrated timing or silicon equivalence is claimed.

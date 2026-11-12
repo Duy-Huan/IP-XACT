@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+Added bounded recursive structural IP-XACT hierarchy and designConfiguration view
+selection. Source paths remain in IR while explicit aliases preserve logical
+backend identities. Added a hierarchical SoC with real generated-machine Zephyr
+boot/IRQ acceptance, bringing the supported workspace to eight targets.
+
 Added bounded unsigned component parameter elaboration, dependency resolution,
 per-instance overrides and minimum/maximum checks. Expressions are interpreted
 through a strict bounded operator whitelist. Resolved values are retained in IR;
