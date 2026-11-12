@@ -8,11 +8,11 @@ not a claim that every future standard/backend feature is implemented.
 |---|---|---|
 | 0 feasibility | Verified selected profile | Exact public QEMU/Zephyr source audit, real generated machine, guest timer/UART/PLIC |
 | 1 compiler/IR | Verified MVP subset; broader requirements partial | Official 2022 XSD; typed flat IR and strict CPU/boot/IRQ/address-space contracts; generic hierarchy, translations, buses, views, parameters and register semantics remain unsupported |
-| 2 models/QEMU | Verified selected profiles | Versioned exact model catalog/lock; generated and compiled C machine; ROM/ELF reset and relocated UART; separate explicit hybrid profile |
+| 2 models/QEMU | Verified selected profiles | Versioned exact catalog/lock; compiled C machine; ROM/ELF reset and relocated UART; separate FIFO and nine-role source IP profiles |
 | 3 Zephyr MVP and FreeRTOS extension | Verified selected profiles | Generated Zephyr board/DTS with real timer/PLIC ISR; FreeRTOS static BSP with tick preemption, saved registers and UART/PLIC notification |
 | 4 Linux/Yocto | Direct Linux verified; Yocto image blocked | OpenSBI + Linux boot to original userspace; generated meta-usp parsed successfully (924 recipes, MACHINE=usp-rv64); upstream dependency fetch rejected by proxy |
 | 5 gem5 | Verified SE workload subset | Same exact RV64 ELF executed under QEMU/Linux and gem5; guest exit zero and real raw stats; full-system board remains unsupported |
-| 6 SystemC/RTL/hybrid | Verified limited peripheral | Real guest MMIO/readback/PLIC IRQ in TLM and OpenTitan FIFO RTL modes; deterministic replay; no DMA/coherence/general time correlation |
+| 6 SystemC/RTL/hybrid | Verified selected IPs | FIFO TLM/RTL, actual Chipyard GCD Chisel generation, complete OpenTitan GPIO/TL-UL peripheral, guest PLIC IRQ and deterministic replay; no full Rocket/Earlgrey/DMA/coherence claim |
 | 7 maturity | Partial foundation | Version, rules, native CI, reports and support docs; no universal industrial release or IDE claim |
 
 The actual initial MVP sequence is IP-XACT → typed IR → exact binding → generated
@@ -26,12 +26,34 @@ QEMU/Linux and gem5 SE with the same hash; the acceptance scopes remain distinct
 SystemC and RTL hybrid runs additionally require USP_TLM_RTL_IRQ_OK and independently
 verify trace write/readback/IRQ state transitions. Repeated RTL traces matched.
 
-Observed full local gate on 2026-11-12: **107 tests passed, zero failed/skipped**, including the
+Observed full local gate on 2026-11-12: **125 tests passed, zero failed/skipped**, including the
 shared QEMU/Linux and gem5 ELF test, both TLM/RTL modes, and real CLI SIGTERM
 cleanup of its owned guest process. Raw gem5 observations
 include simInsts=3012 and simTicks=80400000 under explicitly uncalibrated assumptions;
 these are simulator outputs, not estimates or silicon measurements. The required
 native/source tests remain independent of hosted CI availability.
+
+The nine-role source IP profile additionally generates the actual selected
+Chipyard 1.13.0 GCD classes using Chisel 6.5.0/Scala 2.13.12/CIRCT 1.62.0, then
+Verilates that output alongside the actual OpenTitan GPIO/TL-UL register peripheral
+at silver-v5. An original explicit GCD MMIO/completion-IRQ shim and GPIO pin
+loopback connect both to QEMU's PLIC. Guest vector results 6/6/255/1 and real GPIO
+edge/W1C/readback passed; repeated transaction traces matched byte for byte.
+Host conformance passed busy/illegal accesses, reset, malformed protocol, TL-UL
+response backpressure and command-integrity failure with the actual alert output.
+Source-model artifact tampering and real timeout/owned-process cleanup are tested.
+
+The isolated generator uses SBT 1.10.7 because upstream SBT 1.8.2 failed on this
+host's Java 21. The original Chipyard checkout/classes remain unchanged. A fresh
+empty Scala/Maven cache resolved all 63 locked compilation artifacts, generated
+RTL and built the native model successfully. Public Chipyard/OpenTitan checkouts
+were reused; this was not a full Chipyard submodule/Rocket or Earlgrey build.
+
+A separately installed wheel generated this source IP hardware profile, rebuilt
+its actual Chisel/OpenTitan native models and passed the guest GCD/GPIO IRQ test.
+That check reused the verified QEMU binary and Zephyr ELF, rather than claiming a
+second complete SoC source build. All packaged generator/native resources worked
+outside the editable Python installation.
 
 FreeRTOS Kernel 11.2.0 now uses the unmodified source-pinned GCC RISC-V port and
 an original generated software BSP. Actual guest acceptance observed 30 ticks,
@@ -77,6 +99,6 @@ startup uses the already validated native tools without a persistent service.
 This does not claim publication or validation after a fresh environment restore.
 
 Hosted GitHub Actions completion and main protection are distinct from local tests.
-Chipyard generation, complete OpenTitan/security integration, µC/OS,
+Full Chipyard/Rocket SoC generation, complete OpenTitan/security integration, µC/OS,
 generic IP-XACT hierarchy/translation and full-system gem5 are not implemented.
 No silicon/security guarantee or calibrated performance equivalence is implied.

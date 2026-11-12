@@ -52,3 +52,11 @@ the clean kernel commit, preserve its MIT notice and rerun real preemption/IRQ,
 assertion-failure and tick-disabled acceptance before promotion. The selected
 GCC RISC-V port does not save FPU/vector state; do not expand ISA/context claims
 without an appropriate port and executable regression.
+
+Source IP updates additionally require the original GCD file hash, clean Chipyard
+commit, unchanged selected classes, explicit generator versions and Maven content
+inventory. Changing to a full Chipyard configuration/submodule graph is a new
+profile, not a silent expansion of the selected-class adapter. OpenTitan GPIO
+updates must retain TL-UL integrity checks and real backpressure/error/reset/IRQ
+tests. Rebuild affected artifacts after identity changes; never edit stored hashes
+to bypass a stale build. Preserve BSD/Apache notices in model/run bundles.

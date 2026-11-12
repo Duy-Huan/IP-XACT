@@ -21,6 +21,9 @@ fetch zephyr https://github.com/zephyrproject-rtos/zephyr.git v4.2.0 413b789deb3
 if [[ "${USP_FETCH_FREERTOS:-0}" == 1 ]]; then
     fetch freertos https://github.com/FreeRTOS/FreeRTOS-Kernel.git V11.2.0 0adc196d4bd52a2d91102b525b0aafc1e14a2386
 fi
+if [[ "${USP_FETCH_CHIPYARD:-0}" == 1 ]]; then
+    fetch chipyard https://github.com/ucb-bar/chipyard.git 1.13.0 69eba860a352343e4ac6b6df0f3638a79a86ec78
+fi
 if [[ "${USP_FETCH_LINUX:-0}" == 1 ]]; then
     fetch linux https://github.com/torvalds/linux.git v6.12 adc218676eef25575469234709c2d87185ca223a
     fetch opensbi https://github.com/riscv-software-src/opensbi.git v1.6 bd613dd92113f683052acfb23d9dc8ba60029e0a

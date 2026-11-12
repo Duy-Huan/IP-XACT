@@ -71,6 +71,14 @@ def main(argv):
     gem5_run.add_argument("--generated", type=Path, required=True)
     gem5_run.add_argument("--build-dir", type=Path, required=True)
     gem5_run.add_argument("--out", type=Path, required=True)
+    ips = commands.add_parser("ipblocks").add_subparsers(dest="action", required=True)
+    ips_build = ips.add_parser("build")
+    ips_build.add_argument("--source-chipyard", type=Path, required=True)
+    ips_build.add_argument("--source-opentitan", type=Path, required=True)
+    ips_build.add_argument("--tools", type=Path, required=True)
+    ips_build.add_argument("--scala-cache", type=Path, required=True)
+    ips_build.add_argument("--out", type=Path, required=True)
+    ips_build.add_argument("--jobs", type=int, choices=range(1, 5), default=2)
     report = commands.add_parser("report")
     report.add_argument("run_dir", type=Path)
     report.add_argument("--format", choices=["json", "md"], default="json")
@@ -93,6 +101,19 @@ def main(argv):
 
             binary = build_gem5(args.out.resolve(), args.source_gem5, args.jobs)
             print(json.dumps({"status": "BUILT", "binary": str(binary)}))
+            return 0
+        if args.command == "ipblocks":
+            from .ipblocks import build_ipblocks
+
+            result = build_ipblocks(
+                args.out.resolve(),
+                args.source_chipyard.resolve(),
+                args.source_opentitan.resolve(),
+                args.tools.resolve(),
+                args.scala_cache.resolve(),
+                args.jobs,
+            )
+            print(json.dumps(result, indent=2, sort_keys=True))
             return 0
         project = load_project(args.project)
         if args.command == "gem5":
@@ -166,18 +187,31 @@ def main(argv):
             if args.command == "test" and args.suite:
                 args.os = args.suite.removesuffix("-boot")
             if args.bridge_models:
-                from .hybrid import run_hybrid
-
                 if args.os != "zephyr":
                     raise ContractError("hybrid v1 acceptance supports Zephyr only")
-                result = run_hybrid(
-                    project,
-                    args.generated.resolve(),
-                    args.bridge_models.resolve(),
-                    args.out.resolve(),
-                    args.bridge_mode,
-                    args.timeout,
-                )
+                if project.manifest["profile"] == "usp-rv64-ips-v1":
+                    from .ipblocks import run_ipblocks
+
+                    if args.bridge_mode != "rtl":
+                        raise ContractError("source IP profile requires explicit --bridge-mode rtl")
+                    result = run_ipblocks(
+                        project,
+                        args.generated.resolve(),
+                        args.bridge_models.resolve(),
+                        args.out.resolve(),
+                        args.timeout,
+                    )
+                else:
+                    from .hybrid import run_hybrid
+
+                    result = run_hybrid(
+                        project,
+                        args.generated.resolve(),
+                        args.bridge_models.resolve(),
+                        args.out.resolve(),
+                        args.bridge_mode,
+                        args.timeout,
+                    )
             elif args.os == "freertos":
                 from .freertos import run_freertos
 
@@ -185,7 +219,7 @@ def main(argv):
                     project, args.generated.resolve(), args.out.resolve(), args.timeout
                 )
             else:
-                if project.manifest["profile"] == "usp-rv64-hybrid-v1":
+                if project.manifest["profile"] in {"usp-rv64-hybrid-v1", "usp-rv64-ips-v1"}:
                     raise ContractError("hybrid profile requires explicit --bridge-models")
                 result = run_custom(
                     project, args.generated.resolve(), args.out.resolve(), args.timeout, args.os

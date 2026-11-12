@@ -13,10 +13,13 @@ CAPABILITIES = {
         "status": "experimental",
         "scope": "explicit RISC-V SE workload adapter; no FS board claim",
     },
-    "chipyard": {"status": "planned", "reason": "No pinned Chisel generation test yet"},
+    "chipyard": {
+        "status": "implemented-subset",
+        "scope": "source-pinned GCD Chisel generation and RTL IRQ bridge; no Rocket/full-SoC build",
+    },
     "opentitan": {
         "status": "implemented-subset",
-        "scope": "prim_fifo_sync source integration only; no security IP claim",
+        "scope": "FIFO and actual GPIO/TL-UL peripheral; no Earlgrey/security signoff",
     },
     "systemc": {
         "status": "implemented-subset",

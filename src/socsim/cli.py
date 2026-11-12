@@ -20,7 +20,7 @@ def main(argv=None) -> int:
     if argv[:2] == ["ipxact", "validate"]:
         argv = argv[1:]
     if argv and (
-        argv[0] in {"generate", "build", "software", "test", "report", "models", "gem5"}
+        argv[0] in {"generate", "build", "software", "test", "report", "models", "gem5", "ipblocks"}
         or (argv[0] == "run" and "--generated" in argv)
     ):
         from .lifecycle_cli import main as lifecycle_main
@@ -31,7 +31,7 @@ def main(argv=None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("backends", help="show implemented and planned capabilities")
     commands.add_parser("doctor", help="inspect runtime tools without installing")
-    for extra in ("generate", "build", "software", "test", "report", "models", "gem5"):
+    for extra in ("generate", "build", "software", "test", "report", "models", "gem5", "ipblocks"):
         commands.add_parser(extra, help="custom QEMU/Zephyr lifecycle; use --help")
     for name in ("validate", "elaborate", "plan", "run"):
         sub = commands.add_parser(name)
@@ -81,7 +81,11 @@ def main(argv=None) -> int:
                         json.dump(result, stream, indent=2, sort_keys=True)
                         stream.write("\n")
             elif args.command == "plan":
-                if project.manifest["profile"] in {"usp-rv64-v1", "usp-rv64-hybrid-v1"}:
+                if project.manifest["profile"] in {
+                    "usp-rv64-v1",
+                    "usp-rv64-hybrid-v1",
+                    "usp-rv64-ips-v1",
+                }:
                     from .pipeline import resolve
 
                     if args.backend != "qemu":

@@ -66,3 +66,11 @@ It uses the existing GNU unknown-elf GCC 14.2.0 toolchain and unmodified upstrea
 RISC-V port. The software BSP has an independent resource/adapter identity and
 binds its ELF to the validated hardware generation manifest. See freertos.md for
 the real preemption/IRQ and negative guest acceptance contract.
+
+The source IP profile pins Chipyard 1.13.0, selects its actual GCD classes without
+algorithm edits and uses an isolated SBT 1.10.7 / Scala 2.13.12 / Chisel 6.5.0 /
+CIRCT 1.62.0 generator. Original SBT 1.8.2 is incompatible with this host's Java 21;
+the separate adapter choice is explicit. Sixty-three compilation artifacts and
+the launcher/native firtool are content-locked. OpenTitan's GPIO uses its actual
+TL-UL, register, parity and interrupt modules at the existing silver-v5 pin. Read
+the rv64-ips guide for exact source ownership, licenses, scope and timing contract.

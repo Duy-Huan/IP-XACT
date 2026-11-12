@@ -72,7 +72,7 @@ def verify_source(path, sha):
 
 def resolve(project):
     if (
-        project.manifest["profile"] not in {"usp-rv64-v1", "usp-rv64-hybrid-v1"}
+        project.manifest["profile"] not in {"usp-rv64-v1", "usp-rv64-hybrid-v1", "usp-rv64-ips-v1"}
         or project.ir.cpu is None
     ):
         raise ContractError("custom pipeline requires the usp-rv64-v1 hardware contract")
@@ -94,7 +94,10 @@ def resolve(project):
     for instance in project.ir.instances:
         descriptor = descriptors[instance.name]
         expected = descriptor["id"]
-        if instance.name != "scfifo" and descriptor["source"]["commit"] != QEMU_SHA:
+        if (
+            instance.name not in {"scfifo", "cygcd", "otgpio"}
+            and descriptor["source"]["commit"] != QEMU_SHA
+        ):
             raise ContractError("catalog source revision is incompatible with the QEMU adapter")
         if instance.vlnv != descriptor["vlnv"]:
             raise ContractError(f"{instance.name}: no exact catalog VLNV match")
@@ -108,10 +111,11 @@ def resolve(project):
                 "model_version": descriptor["version"],
                 "contract_id": descriptor["contract_id"],
                 "source": descriptor["source"],
-                "upstream_commit": QEMU_SHA,
+                "upstream_commit": descriptor["source"]["commit"],
                 "fidelity": "functional",
                 "capabilities": ["execute"] if instance.name == "rv64" else ["mmio"],
-                "interrupts": instance.name in {"uart", "clint", "plic"},
+                "interrupts": instance.name
+                in {"uart", "clint", "plic", "cygcd", "otgpio", "scfifo"},
             }
         )
     return result
@@ -126,6 +130,7 @@ def compiler_hashes():
         "contracts.py",
         "pipeline.py",
         "yocto.py",
+        "ipblocks_codegen.py",
     )
     root = Path(__file__).parent
     return {name: digest(root / name) for name in modules}
@@ -133,6 +138,15 @@ def compiler_hashes():
 
 def identity(project):
     return hashlib.sha256(json.dumps(project.ir.to_dict(), sort_keys=True).encode()).hexdigest()
+
+
+def generation_templates(project):
+    paths = {p.name: p for p in sorted((Path(__file__).parent / "templates").glob("*.in"))}
+    if project.manifest["profile"] == "usp-rv64-ips-v1":
+        from .ipblocks_codegen import templates
+
+        paths.update(templates())
+    return {name: digest(path) for name, path in paths.items()}
 
 
 def generate(project, out):
@@ -167,6 +181,12 @@ def generate(project, out):
     templates = Path(__file__).parent / "templates"
     values.update(bridge_code="", bridge_init="", bridge_dts="")
     hybrid = project.manifest["profile"] == "usp-rv64-hybrid-v1"
+    ip_profile = project.manifest["profile"] == "usp-rv64-ips-v1"
+    ip_guest = ""
+    if ip_profile:
+        from .ipblocks_codegen import lower
+
+        ip_guest = lower(project, out, values)
     if hybrid:
         values["fifo_irq"] = next(r.line for r in project.ir.interrupts if r.source == "scfifo")
         values["bridge_code"] = Template((templates / "bridge.c.in").read_text()).substitute(values)
@@ -220,6 +240,10 @@ def generate(project, out):
         "CONFIG_PRINTK=y\nCONFIG_UART_INTERRUPT_DRIVEN=y\nCONFIG_ASSERT=y\nCONFIG_MAIN_STACK_SIZE=2048\n"
     )
     values.update(bridge_declarations="", bridge_test="")
+    if ip_profile:
+        values.update(
+            bridge_declarations=ip_guest, bridge_test="if (!test_source_ips()) { goto fail; }"
+        )
     if hybrid:
         declarations = (
             "#include <zephyr/irq.h>\n"
@@ -240,7 +264,7 @@ def generate(project, out):
     (app / "main.c").write_text(Template((templates / "app.c.in").read_text()).substitute(values))
     from .yocto import generate_layer
 
-    if not hybrid:
+    if not hybrid and not ip_profile:
         generate_layer(out)
     write_json(
         out / "software-contract.json",
@@ -290,7 +314,7 @@ def generate(project, out):
             "schema_version": "1",
             "ir_sha256": ir_hash,
             "compiler_sha256": compiler_hashes(),
-            "templates": {p.name: digest(p) for p in sorted(templates.glob("*.in"))},
+            "templates": generation_templates(project),
             "catalog_sha256": digest(Path(__file__).parent / "schemas/model-catalog-v1.json"),
             "qemu_commit": QEMU_SHA,
             "zephyr_commit": ZEPHYR_SHA,
@@ -311,8 +335,7 @@ def verify_generated(project, out):
     compiler = compiler_hashes()
     if manifest.get("compiler_sha256") != compiler:
         raise ContractError("stale compiler revision; regenerate outputs")
-    templates = Path(__file__).parent / "templates"
-    if manifest.get("templates") != {p.name: digest(p) for p in sorted(templates.glob("*.in"))}:
+    if manifest.get("templates") != generation_templates(project):
         raise ContractError("stale generator templates; regenerate outputs")
     if manifest.get("catalog_sha256") != digest(
         Path(__file__).parent / "schemas/model-catalog-v1.json"
@@ -394,11 +417,14 @@ def build_qemu(project, out, source, jobs=4):
 def build_zephyr(project, out, source, cross_compile, jobs=4):
     verify_generated(project, out)
     source = verify_source(source, ZEPHYR_SHA)
+    compiler = shutil.which(str(cross_compile) + "gcc")
+    if not compiler:
+        raise ContractError("RISC-V GCC tool prefix is unavailable")
     env = os.environ.copy()
     env.update(
         ZEPHYR_BASE=str(source),
         ZEPHYR_TOOLCHAIN_VARIANT="cross-compile",
-        CROSS_COMPILE=str(cross_compile),
+        CROSS_COMPILE=compiler.removesuffix("gcc"),
         XDG_CACHE_HOME=str(out / "cache"),
     )
     ninja = shutil.which("ninja")
@@ -423,6 +449,7 @@ def build_zephyr(project, out, source, cross_compile, jobs=4):
             "-DZEPHYR_MODULES=",
             "-DBUILD_VERSION=usp-pinned",
             "-DCMAKE_MAKE_PROGRAM=" + ninja,
+            "-DCROSS_COMPILE=" + compiler.removesuffix("gcc"),
         ],
         source,
         out / "logs/zephyr-build.log",
@@ -533,6 +560,8 @@ def run_custom(project, out, result_dir, timeout=20, osname="zephyr", bridge_soc
         ]
     if project.manifest["profile"] == "usp-rv64-hybrid-v1":
         markers.append("USP_TLM_RTL_IRQ_OK")
+    if project.manifest["profile"] == "usp-rv64-ips-v1":
+        markers.extend(["USP_CHIPYARD_GCD_IRQ_OK", "USP_OPENTITAN_GPIO_IRQ_OK"])
     checks = {marker: marker in serial for marker in markers}
     report = {
         "status": "PASSED"

@@ -1,0 +1,29 @@
+schema_version: '1'
+bindings:
+- vlnv: socsim.example:reference:rv64:1.0
+  backend: qemu
+  implementation: qemu.rv64
+- vlnv: socsim.example:reference:ram:1.0
+  backend: qemu
+  implementation: qemu.virt.ram
+- vlnv: socsim.example:reference:uart:1.0
+  backend: qemu
+  implementation: qemu.virt.ns16550
+- vlnv: socsim.example:reference:finisher:1.0
+  backend: qemu
+  implementation: qemu.virt.sifive-test
+- vlnv: socsim.example:reference:rom:1.0
+  backend: qemu
+  implementation: qemu.rom
+- vlnv: socsim.example:reference:clint:1.0
+  backend: qemu
+  implementation: qemu.clint
+- vlnv: socsim.example:reference:plic:1.0
+  backend: qemu
+  implementation: qemu.plic
+- vlnv: ucb-bar:chipyard:gcd:1.13.0
+  backend: qemu
+  implementation: usp.chipyard.gcd32
+- vlnv: lowrisc:ip:gpio:silver-v5
+  backend: qemu
+  implementation: usp.opentitan.gpio

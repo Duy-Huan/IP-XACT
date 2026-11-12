@@ -5,12 +5,14 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 [[ "$(git branch --show-current)" == dev ]] || { echo 'Run on dev' >&2; exit 1; }
 [[ -z "$(git status --porcelain)" ]] || { echo 'Working tree must be clean' >&2; exit 1; }
 candidate=$(git rev-parse HEAD)
-export USP_REQUIRE_BRINGUP=1 USP_REQUIRE_LINUX=1 USP_REQUIRE_MODELS=1 USP_REQUIRE_GEM5=1 USP_REQUIRE_FREERTOS=1
+export USP_REQUIRE_BRINGUP=1 USP_REQUIRE_LINUX=1 USP_REQUIRE_MODELS=1 USP_REQUIRE_GEM5=1 USP_REQUIRE_FREERTOS=1 USP_REQUIRE_IPS=1
 : "${USP_GENERATED_DIR:?Promotion requires the verified custom QEMU/Zephyr build directory}"
 : "${USP_MODEL_DIR:?Promotion requires the TLM/RTL model build}"
 : "${USP_HYBRID_GENERATED_DIR:?Promotion requires the generated hybrid machine}"
 : "${USP_GEM5_BUILD_DIR:?Promotion requires the verified gem5 build}"
 : "${USP_FREERTOS_SOURCE:?Promotion requires the pinned FreeRTOS kernel for negative guest tests}"
+: "${USP_IP_MODELS_DIR:?Promotion requires the real Chipyard/OpenTitan source models}"
+: "${USP_IP_GENERATED_DIR:?Promotion requires the source IP machine/Zephyr build}"
 bash scripts/regression.sh
 [[ "$(git rev-parse HEAD)" == "$candidate" && -z "$(git status --porcelain)" ]] || exit 1
 if git show-ref --verify --quiet refs/heads/main; then

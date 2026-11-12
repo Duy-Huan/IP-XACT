@@ -1,0 +1,82 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+/* Generated IP binding: original transport, upstream RTL stays in the model process. */
+#include "hw/irq.h"
+#include <sys/socket.h>
+#include <sys/un.h>
+static int usp_ip_fd = -1;
+static uint32_t usp_ip_seq;
+static uint32_t usp_ip_levels;
+static qemu_irq usp_ip_irqs[2];
+static uint32_t usp_ip_call(uint32_t op, uint32_t offset, uint32_t value)
+{
+    uint32_t request[5], response[5];
+    if (usp_ip_fd < 0) {
+        const char *path = getenv("USP_BRIDGE_SOCKET");
+        struct sockaddr_un addr = { .sun_family = AF_UNIX };
+        struct timeval timeout = { .tv_sec = 2 };
+        if (!path || strlen(path) >= sizeof(addr.sun_path)) {
+            error_report("USP IP bridge requires a local socket path"); exit(1);
+        }
+        strcpy(addr.sun_path, path);
+        usp_ip_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+        if (usp_ip_fd < 0 || connect(usp_ip_fd, (struct sockaddr *)&addr, sizeof(addr))) {
+            error_report("USP IP bridge connection failed"); exit(1);
+        }
+        setsockopt(usp_ip_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+        setsockopt(usp_ip_fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+    }
+    request[0] = cpu_to_le32(0x31505355);
+    request[1] = cpu_to_le32(++usp_ip_seq);
+    request[2] = cpu_to_le32(op);
+    request[3] = cpu_to_le32(offset);
+    request[4] = cpu_to_le32(value);
+    for (size_t pos = 0; pos < sizeof(request); ) {
+        ssize_t n = send(usp_ip_fd, (char *)request + pos, sizeof(request) - pos, MSG_NOSIGNAL);
+        if (n < 0 && errno == EINTR) { continue; }
+        if (n <= 0) { error_report("USP IP bridge send failed"); exit(1); }
+        pos += n;
+    }
+    for (size_t pos = 0; pos < sizeof(response); ) {
+        ssize_t n = recv(usp_ip_fd, (char *)response + pos, sizeof(response) - pos, 0);
+        if (n < 0 && errno == EINTR) { continue; }
+        if (n <= 0) { error_report("USP IP bridge receive failed"); exit(1); }
+        pos += n;
+    }
+    if (le32_to_cpu(response[0]) != 0x31505355 || response[1] != request[1] || response[2]) {
+        error_report("USP IP bridge transaction rejected"); exit(1);
+    }
+    uint32_t irqs = le32_to_cpu(response[4]);
+    for (unsigned i = 0; i < 2; ++i) {
+        if ((irqs ^ usp_ip_levels) & (1U << i)) {
+            qemu_set_irq(usp_ip_irqs[i], (irqs >> i) & 1);
+        }
+    }
+    usp_ip_levels = irqs;
+    return le32_to_cpu(response[3]);
+}
+static uint64_t usp_ip_read(void *opaque, hwaddr addr, unsigned size)
+{
+    return usp_ip_call(0, (uintptr_t)opaque * 0x1000 + addr, 0);
+}
+static void usp_ip_write(void *opaque, hwaddr addr, uint64_t value, unsigned size)
+{
+    usp_ip_call(1, (uintptr_t)opaque * 0x1000 + addr, value);
+}
+static const MemoryRegionOps usp_ip_ops = {
+    .read = usp_ip_read, .write = usp_ip_write, .endianness = DEVICE_LITTLE_ENDIAN,
+    .valid = { .min_access_size = 4, .max_access_size = 4, .unaligned = false },
+    .impl = { .min_access_size = 4, .max_access_size = 4 },
+};
+static void usp_ip_init(MemoryRegion *memory, DeviceState *plic)
+{
+    const hwaddr bases[2] = { $cygcd_base, $otgpio_base };
+    const unsigned irqs[2] = { $cygcd_irq, $otgpio_irq };
+    const char *names[2] = { "usp.chipyard-gcd", "usp.opentitan-gpio" };
+    for (unsigned i = 0; i < 2; ++i) {
+        MemoryRegion *region = g_new0(MemoryRegion, 1);
+        usp_ip_irqs[i] = qdev_get_gpio_in(plic, irqs[i]);
+        memory_region_init_io(region, NULL, &usp_ip_ops, (void *)(uintptr_t)i, names[i], 0x1000);
+        memory_region_add_subregion(memory, bases[i], region);
+    }
+    usp_ip_call(2, 0, 0);
+}

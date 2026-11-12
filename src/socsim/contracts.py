@@ -11,6 +11,11 @@ from .ipxact import digest, integer
 from .project import inside, keys, read_yaml
 
 ROLES = {"rv64", "ram", "rom", "uart", "finisher", "clint", "plic"}
+PROFILE_EXTRAS = {
+    "usp-rv64-v1": set(),
+    "usp-rv64-hybrid-v1": {"scfifo"},
+    "usp-rv64-ips-v1": {"cygcd", "otgpio"},
+}
 
 
 def attach_contract(project):
@@ -40,10 +45,15 @@ def attach_contract(project):
     )
     if cpu.timebase_hz != 10000000 or cpu.reset_vector % 4 or cpu.entry % 4:
         raise ContractError("invalid timebase/reset/entry alignment")
-    roles = ROLES | ({"scfifo"} if project.manifest["profile"] == "usp-rv64-hybrid-v1" else set())
+    profile = project.manifest["profile"]
+    if profile not in PROFILE_EXTRAS:
+        raise ContractError("unsupported custom hardware profile")
+    roles = ROLES | PROFILE_EXTRAS[profile]
     instances = {i.name: i for i in project.ir.instances}
     if set(instances) != roles:
-        raise ContractError("custom v1 requires exactly rv64/ram/rom/uart/finisher/clint/plic")
+        raise ContractError(
+            f"{profile} requires exactly the declared profile roles: {sorted(roles)}"
+        )
     if instances["rv64"].windows:
         raise ContractError("CPU cannot expose MMIO")
     ranges = {
@@ -56,6 +66,9 @@ def attach_contract(project):
     }
     if "scfifo" in roles:
         ranges["scfifo"] = (0x1000, 32)
+    for name in ("cygcd", "otgpio"):
+        if name in roles:
+            ranges[name] = (0x1000, 32)
     for name, (size, width) in ranges.items():
         windows = instances[name].windows
         if len(windows) != 1 or (windows[0].size, windows[0].width) != (size, width):
@@ -82,20 +95,22 @@ def attach_contract(project):
     uart = [r for r in routes if (r.source, r.target) == ("uart", "plic")]
     actual = {(r.source, r.target, r.line) for r in routes}
     if (
-        len(routes) != (6 if "scfifo" in roles else 5)
+        len(routes) != 5 + len(PROFILE_EXTRAS[profile])
         or not fixed.issubset(actual)
         or len(uart) != 1
         or not 1 <= uart[0].line < 32
     ):
         raise ContractError("invalid CLINT/PLIC/UART interrupt routing")
-    if "scfifo" in roles:
-        fifo_routes = [r for r in routes if (r.source, r.target) == ("scfifo", "plic")]
+    peripheral_lines = {uart[0].line}
+    for peripheral in sorted(PROFILE_EXTRAS[profile]):
+        device_routes = [r for r in routes if (r.source, r.target) == (peripheral, "plic")]
         if (
-            len(fifo_routes) != 1
-            or not 1 <= fifo_routes[0].line < 32
-            or fifo_routes[0].line == uart[0].line
+            len(device_routes) != 1
+            or not 1 <= device_routes[0].line < 32
+            or device_routes[0].line in peripheral_lines
         ):
-            raise ContractError("invalid FIFO IRQ routing")
+            raise ContractError(f"invalid {peripheral} IRQ routing")
+        peripheral_lines.add(device_routes[0].line)
     space = keys(data["address_space"], {"name", "initiator", "targets"}, "address_space")
     if space["initiator"] != "rv64" or not isinstance(space["name"], str):
         raise ContractError("invalid address-space initiator")

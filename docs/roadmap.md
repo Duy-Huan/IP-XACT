@@ -8,11 +8,11 @@ Detailed observed status and evidence are maintained in verification-status.md.
 |---|---|---|
 | 0 | Audited, pinned QEMU/Zephyr combination and reproducible setup | Source-pinned reference builds and real guest tests |
 | 1 | Safe IP-XACT/XSD, typed deterministic IR and semantic diagnostics | Flat 2022 subset plus strict CPU/boot/IRQ/address-space overlays; generic hierarchy/bus/register features still unsupported |
-| 2 | Strict catalog/lock and generated compiled custom QEMU machine | Seven supported roles; separate explicit eight-role hybrid profile |
+| 2 | Strict catalog/lock and generated compiled custom QEMU machine | Seven-role base, eight-role FIFO and nine-role Chipyard/OpenTitan profiles |
 | 3 | Generated Zephyr BSP, real build, UART and IRQ | CLINT timer ISR and UART→PLIC ISR; original guest conformance application |
 | 4 | Linux userspace and Yocto BSP/image | Direct OpenSBI/Linux path and generated layer; Yocto image fetch policy remains a prerequisite |
 | 5 | Pinned gem5 workload/statistics and cross-engine behavior | Explicit SE workload adapter; not a full-system SoC board |
-| 6 | Real SystemC/RTL MMIO/IRQ bridge with time contract | FIFO TLM and pinned OpenTitan RTL; deterministic replay; no DMA/coherence |
+| 6 | Real SystemC/RTL MMIO/IRQ bridge with time contract | FIFO plus actual Chipyard GCD generation and OpenTitan GPIO/TL-UL; deterministic replay; no DMA/coherence |
 | 7 | Versioned release, support matrix, regression and repeatable evidence | CLI, native CI and development workflow; no industrial/universal support claim |
 
 Extend the parser deliberately: IP-XACT addressSpaces per initiator, bridge
@@ -24,8 +24,9 @@ Do not infer behavior from XML names or add unsupported metadata as ignored fiel
 The selected FreeRTOS GCC RV64 port now has a generated static-allocation BSP,
 real timer preemption/register checks and UART/PLIC FromISR notification on the
 non-hybrid profile; see freertos.md for its limits. Broader FreeRTOS drivers and
-the requested µC/OS product/license remain separate work. Chipyard requires a
-pinned Chisel/CIRCT/submodule configuration and actual generated RTL verification.
-OpenTitan currently supplies a FIFO primitive only, not a complete secure SoC.
+the requested µC/OS product/license remain separate work. The selected Chipyard
+GCD classes now compile with pinned Chisel/Scala/CIRCT and execute as real RTL;
+the full Rocket/submodule configuration remains unimplemented. OpenTitan supplies
+both FIFO and a complete GPIO/TL-UL peripheral, not the complete secure SoC.
 Hybrid expansion requires reset/error/backpressure/width/ordering tests, then DMA
 and memory permissions. Security and calibrated performance remain separate work.

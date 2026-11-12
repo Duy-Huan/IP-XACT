@@ -55,7 +55,7 @@ jobs:
   custom-zephyr:
     runs-on: ubuntu-latest
     container: debian:trixie-slim
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Install source-build prerequisites
         run: |
@@ -65,6 +65,7 @@ jobs:
             device-tree-compiler flex bison bc m4 libsystemc-dev verilator \
             gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu gcc-riscv64-unknown-elf=14.2.0+19 \
             binutils-riscv64-unknown-elf=2.44-3+7+b1
+          apt-get install -y --no-install-recommends curl openjdk-21-jdk-headless
           python3 -m venv /opt/ci-uv
           /opt/ci-uv/bin/pip install uv==0.13.5
           echo /opt/ci-uv/bin >> "$GITHUB_PATH"
@@ -78,6 +79,7 @@ jobs:
           USP_FETCH_LINUX: '1'
           USP_FETCH_MODELS: '1'
           USP_FETCH_FREERTOS: '1'
+          USP_FETCH_CHIPYARD: '1'
           CROSS_COMPILE_LINUX: riscv64-linux-gnu-
         run: |
           uv python install 3.12.14
@@ -87,6 +89,8 @@ jobs:
           bash scripts/freertos_bringup.sh
           bash scripts/linux_bringup.sh
           bash scripts/hybrid_bringup.sh
+          bash scripts/setup_chipyard_tools.sh
+          bash scripts/source_ips_bringup.sh
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
@@ -96,6 +100,7 @@ jobs:
             build/linux-junit.xml
             build/hybrid-junit.xml
             build/freertos-junit.xml
+            build/source-ips-junit.xml
           if-no-files-found: ignore
           retention-days: 7
 

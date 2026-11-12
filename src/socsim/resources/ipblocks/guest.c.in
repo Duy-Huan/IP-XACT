@@ -1,0 +1,47 @@
+// SPDX-License-Identifier: Apache-2.0
+// Included in the generated Zephyr acceptance app after the common boot checks.
+#include <zephyr/irq.h>
+static K_SEM_DEFINE(gcd_done, 0, 1);
+static K_SEM_DEFINE(gpio_done, 0, 1);
+static volatile uint32_t gcd_result, gpio_state;
+static void gcd_isr(const void *arg) {
+    ARG_UNUSED(arg); gcd_result = sys_read32($cygcd_base + 12); k_sem_give(&gcd_done);
+}
+static void gpio_isr(const void *arg) {
+    ARG_UNUSED(arg); uint32_t pending = sys_read32($otgpio_base);
+    if (pending) {
+        gpio_state = pending; sys_write32(pending, $otgpio_base); k_sem_give(&gpio_done);
+    }
+}
+static bool test_source_ips(void) {
+    IRQ_CONNECT(DT_IRQN(DT_NODELABEL(cygcd)), 1, gcd_isr, NULL, 0);
+    IRQ_CONNECT(DT_IRQN(DT_NODELABEL(otgpio)), 1, gpio_isr, NULL, 0);
+    irq_enable(DT_IRQN(DT_NODELABEL(cygcd)));
+    irq_enable(DT_IRQN(DT_NODELABEL(otgpio)));
+    const uint32_t vectors[][3] = {{48,18,6}, {270,192,6}, {65535,255,255}, {1,1,1}};
+    for (unsigned v=0; v<ARRAY_SIZE(vectors); ++v) {
+        if (sys_read32($cygcd_base) != 2) return false;
+        sys_write32(vectors[v][0], $cygcd_base + 4);
+        sys_write32(vectors[v][1], $cygcd_base + 8);
+        // The transaction-driven model advances only during bridge accesses.
+        // Poll status to advance RTL; completion is consumed only by the ISR.
+        bool complete = false;
+        for (unsigned n=0; n<1024; ++n) {
+            (void)sys_read32($cygcd_base);
+            if (k_sem_take(&gcd_done, K_NO_WAIT) == 0) { complete = true; break; }
+        }
+        if (!complete || gcd_result != vectors[v][2] || sys_read32($cygcd_base) != 2) return false;
+    }
+    printk("USP_CHIPYARD_GCD_IRQ_OK\n");
+    if (sys_read32($otgpio_base + 0x10) || sys_read32($otgpio_base)) return false;
+    sys_write32(1, $otgpio_base + 0x20); // output enable, loopback pin
+    sys_write32(1, $otgpio_base + 0x2c); // rising-edge event
+    sys_write32(1, $otgpio_base + 4);    // interrupt enable
+    sys_write32(1, $otgpio_base + 0x14); // actual pin transition
+    if (k_sem_take(&gpio_done, K_MSEC(100)) || gpio_state != 1) return false;
+    if (sys_read32($otgpio_base) || sys_read32($otgpio_base + 0x10) != 1) return false;
+    sys_write32(0x00010000, $otgpio_base + 0x18); // masked output bit clear
+    if (sys_read32($otgpio_base + 0x10)) return false;
+    printk("USP_OPENTITAN_GPIO_IRQ_OK\n");
+    return true;
+}

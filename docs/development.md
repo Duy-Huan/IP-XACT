@@ -44,6 +44,12 @@ public sources. It runs synthetic fixtures only and uploads JUnit, not arbitrary
 run bundles. Include that check in main protection in addition to the quick jobs.
 Hosted completion must be observed separately from local execution.
 
+The same native job also builds the selected Chipyard GCD and OpenTitan GPIO
+profile, including Java 21 and content-verified Scala/SBT/CIRCT tooling. Source IP
+host conformance and guest/replay acceptance have a separate source-ips JUnit.
+Local promotion requires USP_IP_MODELS_DIR and USP_IP_GENERATED_DIR and sets
+USP_REQUIRE_IPS=1. Full Chipyard/Rocket and Earlgrey are distinct future targets.
+
 For local promotion export USP_GENERATED_DIR to the built rv64-minimal directory;
 promote.sh requires the custom boot/IRQ test rather than allowing it to skip.
 Promotion also requires USP_MODEL_DIR, USP_HYBRID_GENERATED_DIR and
