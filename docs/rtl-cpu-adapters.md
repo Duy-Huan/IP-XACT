@@ -27,6 +27,9 @@ to 1a030b1d20e0bfb3f8ca250549f4826f1d2b2c32, which pins lowRISC/ibex to
 48f11c673348908c37d3eaa9bd1cd0a5b5c69253. The builder verifies the three clean
 repositories and both gitlinks, compiles the unchanged upstream blackbox/core
 with Verilator 5.032, SystemC and RVFI, and retains licenses and source hashes.
+Cached CPU/master builds also bind the builder source hash. CPU verification
+checks the exact three source pins, model and interface contract before launch;
+modified provenance labels cannot make an obsolete build executable.
 This CPU source revision is separate from the existing RTL test-chip source pin.
 
 ```bash

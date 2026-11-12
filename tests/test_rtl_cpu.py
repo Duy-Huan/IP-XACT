@@ -184,6 +184,14 @@ def test_actual_modified_cpu_binary_and_wrong_port_width_are_rejected(tmp_path):
         validate_ports(header.replace("&d_addr_o,31,0", "&d_addr_o,15,0"))
     copied = tmp_path / "cpu"
     shutil.copytree(paths["ibex"], copied)
+    manifest = copied / "cpu-build.json"
+    original = json.loads(manifest.read_text())
+    for field in ("core_commit", "builder_sha256", "model", "contract"):
+        modified = {**original, field: "unverified"}
+        manifest.write_text(json.dumps(modified))
+        with pytest.raises(ContractError, match="stale/modified"):
+            verify_cpu(ROOT / "models/cpus/chipyard-ibex.yaml", copied)
+    manifest.write_text(json.dumps(original))
     with (copied / "sim/Vusp_rtl_cpu").open("ab") as f:
         f.write(b"tamper")
     with pytest.raises(ContractError, match="modified"):

@@ -230,6 +230,7 @@ def build_cpu(manifest, out, chipyard, wrapper, core, jobs=2):
         "inputs": inputs,
         "driver_sha256": digest(RESOURCES / "master.cpp"),
         "adapter_template_sha256": digest(RESOURCES / "ibex.sv.in"),
+        "builder_sha256": digest(Path(__file__)),
     }
     write_json(out / "cpu-build.json", r)
     return r
@@ -239,7 +240,12 @@ def verify_cpu(manifest, out):
     m = load_manifest(manifest)
     r = json.loads((out / "cpu-build.json").read_text())
     if (
-        r["manifest"] != m
+        r.get("contract") != "obi-rvfi32-v1"
+        or r.get("builder_sha256") != digest(Path(__file__))
+        or (r.get("chipyard_commit"), r.get("wrapper_commit"), r.get("core_commit"))
+        != (CHIPYARD, WRAPPER, CORE)
+        or r.get("model") != m["model"]
+        or r["manifest"] != m
         or r["manifest_sha256"] != digest(manifest)
         or r["driver_sha256"] != digest(RESOURCES / "master.cpp")
         or r["adapter_template_sha256"] != digest(RESOURCES / "ibex.sv.in")
@@ -298,6 +304,7 @@ def build_engine(source, out, jobs=2):
     shutil.copy2(source / "LICENSE", out / "gem5-LICENSE")
     r = {
         "contract": "rtl-master-gem5-v1",
+        "builder_sha256": digest(Path(__file__)),
         "source_commit": GEM5_SHA,
         "base_binary_sha256": old,
         "binary_sha256": digest(out / "gem5.opt"),
@@ -313,6 +320,7 @@ def verify_engine(out):
     r = json.loads((out / "engine-build.json").read_text())
     if (
         r["contract"] != "rtl-master-gem5-v1"
+        or r.get("builder_sha256") != digest(Path(__file__))
         or r["source_commit"] != GEM5_SHA
         or r["binary_sha256"] != digest(out / "gem5.opt")
         or r["peripherals"] != native_identity()
