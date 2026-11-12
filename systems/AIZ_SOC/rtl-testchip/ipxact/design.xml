@@ -1,0 +1,45 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<design xmlns="http://www.accellera.org/XMLSchema/IPXACT/1685-2022">
+  <vendor>socsim.public</vendor>
+  <library>testchip</library>
+  <name>AIZ_SOC</name>
+  <version>1.0</version>
+  <componentInstances>
+    <componentInstance>
+      <instanceName>cpu</instanceName>
+      <componentRef vendor="lowrisc" library="ibex" name="ibex_top" version="silver-v5"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>rom</instanceName>
+      <componentRef vendor="socsim.public" library="rtl" name="rom" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>ram</instanceName>
+      <componentRef vendor="socsim.public" library="rtl" name="sram" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>uart</instanceName>
+      <componentRef vendor="lowrisc" library="ip" name="uart" version="silver-v5"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>gpio</instanceName>
+      <componentRef vendor="lowrisc" library="ip" name="gpio" version="silver-v5"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>gcd</instanceName>
+      <componentRef vendor="ucb-bar" library="chipyard" name="gcd" version="1.13.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>timer</instanceName>
+      <componentRef vendor="lowrisc" library="ip" name="rv_timer" version="silver-v5"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>finisher</instanceName>
+      <componentRef vendor="socsim.public" library="rtl" name="finisher" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>fabric</instanceName>
+      <componentRef vendor="socsim.public" library="rtl" name="obi_tlul" version="1.0"/>
+    </componentInstance>
+  </componentInstances>
+</design>

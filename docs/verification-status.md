@@ -26,7 +26,7 @@ QEMU/Linux and gem5 SE with the same hash; the acceptance scopes remain distinct
 SystemC and RTL hybrid runs additionally require USP_TLM_RTL_IRQ_OK and independently
 verify trace write/readback/IRQ state transitions. Repeated RTL traces matched.
 
-Observed full local gate on 2026-11-12: **210 tests passed, zero failed/skipped**, including the
+Observed full local gate on 2026-11-12: **223 tests passed, zero failed/skipped**, including the
 shared QEMU/Linux and gem5 ELF test, both TLM/RTL modes, and real CLI SIGTERM
 cleanup of its owned guest process. Raw gem5 observations
 include simInsts=3012 and simTicks=80400000 under explicitly uncalibrated assumptions;
@@ -159,3 +159,30 @@ acceptances pass their four implemented stages, including snapshots of that one
 verified reference layout. The ten-target workspace and artifact verification
 pass. Full heterogeneous SoC execution, full RTL/ASIC and foundry signoff remain
 open; see dual-soc.md and openroad.md for exact scope and original evidence.
+
+## Complete functional RTL test-chip flow
+
+Separate nine-component profiles now execute actual Ibex-owned RV32 firmware with
+ROM/SRAM, OpenTitan UART/GPIO/timer, Chipyard GCD and original OBI/TL-UL fabric.
+Both whole tops completed synthesis through Nangate45 GDS and passed the reference
+setup/hold and router-DRC gate. Both post-route binaries then executed the same
+firmware with exact UART equality to RTL across two boots/reset sequences. SRAM
+word/byte access, an unmapped load exception and actual timer/GPIO/GCD interrupts
+passed. Short cycle limits failed as required. Both portable acceptance bundles
+passed hash and cross-stage identity verification.
+
+Observed evidence is results/AI_SOC-rtl-complete-first and
+results/AIZ_SOC-rtl-complete-first; actual layouts are
+build/NAME-full-testchip-asic. See rtl-testchips.md for configuration, final metrics,
+GDS identities and reproducible commands. These are complete small test-chip flow
+fixtures, not completion of the original 46/37-instance designs. Final STA still
+reports 14/11 max-capacitance violations; no production/electrical/PVT closure,
+live Garnet interconnect, RTOS on these RTL CPUs or manufacturing signoff is claimed.
+
+The complete local native gate passed all 223 tests in 84.82 seconds, including
+both test-chip acceptances and the existing ten-target workspace. Static typing,
+lint/format and all 26 documentation checks passed. A separately installed wheel
+contained all six test-chip resources, executed both actual RTL and mapped
+binaries with two boots each and verified both portable bundles. That packaging
+check reused the actual compiled artifacts; it does not claim a second source
+or physical build. Hosted EDA execution remains unobserved.

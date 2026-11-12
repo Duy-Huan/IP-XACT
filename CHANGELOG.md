@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+Added separate nine-component AI_SOC/AIZ_SOC functional RTL test-chip profiles.
+Actual Ibex CPUs execute compiled RV32 firmware against OpenTitan UART/GPIO/timer,
+Chipyard GCD, real ROM/SRAM and original OBI/TL-UL fabric. Added complete-top Slang
+synthesis and OpenROAD GDS flow, mapped-netlist compilation, repeated boot/IRQ/
+memory/exception tests, serial comparison, cycle-limit negatives and portable
+hashed evidence. Added explicit rebuild history, mandatory local native gates and
+a manual provisioned-runner workflow. Larger architecture completion and foundry
+signoff remain open, including the reported electrical violations.
+
 Integrated pinned OpenROAD-flow-scripts for a self-contained RTL top/SDC or the
 verified Chipyard GCD leaf. Actual Nangate45 implementation produces final GDS,
 netlist, extraction and timing/routing reports. Added artifact/negative timing/DRC

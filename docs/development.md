@@ -80,3 +80,12 @@ USP_REQUIRE_ASIC=1, checking the actual reference GCD GDS/timing/artifact eviden
 The separate physical-reference workflow is manually dispatched on a host runner
 with Docker and uses an original public RTL counter, not company source. Hosted
 completion remains unobserved. See docs/openroad.md for the immutable tool setup.
+
+Both functional RTL test chips are also mandatory in local promotion. Export
+USP_RTL_CHIP_ROOT, USP_CHIP_PHYSICAL_ROOT and USP_GATE_CHIP_ROOT to directories
+containing AI_SOC and AIZ_SOC builds; promotion sets USP_REQUIRE_TESTCHIP=1.
+The test executes actual RTL and post-route binaries twice, compares serial
+traces, rejects a short cycle limit and verifies physical/evidence identities.
+See rtl-testchips.md and scripts/rtl_testchip_flow.sh for preparation. The manual
+rtl-testchips workflow requires a provisioned soc-eda runner; its presence in Git
+does not establish a hosted result.

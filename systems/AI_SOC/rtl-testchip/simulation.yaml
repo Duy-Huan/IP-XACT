@@ -1,0 +1,15 @@
+schema_version: '1'
+design: ipxact/design.xml
+models: models.yaml
+toolchain: toolchain.lock.yaml
+placements:
+  cpu: 0
+  rom: 0
+  ram: 268435456
+  uart: 402653184
+  gpio: 402657280
+  gcd: 402661376
+  timer: 402665472
+  finisher: 402669568
+  fabric: 0
+profile: ibex-testchip-v1

@@ -5,6 +5,13 @@ description: Update platform dependencies and model profiles with reproducible r
 
 # Update workflow
 
+Functional RTL test-chip changes require both exact nine-component profiles to
+pass real CPU firmware, complete-top physical implementation and mapped-netlist
+firmware acceptance. Read docs/rtl-testchips.md. Explicitly rebuild stale native
+or mapped caches; never edit hashes. Local promotion requires the three chip build
+roots and USP_REQUIRE_TESTCHIP. Keep the original 46/37-instance architecture and
+foundry/electrical signoff requirements separate from this reference gate.
+
 OpenROAD changes must preserve the immutable source OCI/local image identities
 and reference PDK scope. Read docs/openroad.md, run an actual RTL-to-GDS job,
 inspect final setup/hold TNS/slack and detailed-route DRC, then verify artifact

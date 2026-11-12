@@ -1,0 +1,183 @@
+// SPDX-License-Identifier: Apache-2.0
+// Complete bare-metal test-chip configuration, distinct from the larger target.
+module @NAME@(
+  input logic clk_i, rst_ni,
+  input logic uart_rx_i,
+  output logic uart_tx_o,
+  output logic done_o, success_o,
+  output logic [31:0] signature_o,
+  output logic [31:0] gpio_o,
+  output logic fault_o
+);
+  localparam logic [31:0] ROM_BASE = @ROM_BASE@, RAM_BASE = @RAM_BASE@;
+  localparam logic [31:0] UART_BASE = @UART_BASE@, GPIO_BASE = @GPIO_BASE@;
+  localparam logic [31:0] GCD_BASE = @GCD_BASE@, TIMER_BASE = @TIMER_BASE@;
+  localparam logic [31:0] FINISH_BASE = @FINISH_BASE@;
+  logic [31:0] ram [0:@RAM_WORDS@-1];
+  function automatic logic [31:0] rom_word(input logic [31:0] address);
+    case (address[31:2])
+@ROM_CASES@
+      default: rom_word = 32'h00000000;
+    endcase
+  endfunction
+
+  logic i_req, i_gnt, i_valid, i_error;
+  logic [31:0] i_addr, i_data;
+  logic d_req, d_gnt, d_valid, d_write, d_error;
+  logic [3:0] d_be;
+  logic [31:0] d_addr, d_wdata, d_rdata;
+  logic timer_irq, gpio_irq, gcd_irq, cpu_alert_minor, cpu_alert_major;
+  logic uart_alert, gpio_alert;
+  ibex_top #(.RV32M(ibex_pkg::RV32MFast), .ICache(0), .SecureIbex(0),
+             .WritebackStage(@WRITEBACK@), .BranchTargetALU(@BRANCH@)) cpu (
+    .clk_i, .rst_ni, .test_en_i(1'b0), .ram_cfg_i('0),
+    .hart_id_i(32'b0), .boot_addr_i(ROM_BASE),
+    .instr_req_o(i_req), .instr_gnt_i(i_gnt), .instr_rvalid_i(i_valid),
+    .instr_addr_o(i_addr), .instr_rdata_i(i_data), .instr_err_i(i_error),
+    .data_req_o(d_req), .data_gnt_i(d_gnt), .data_rvalid_i(d_valid),
+    .data_we_o(d_write), .data_be_o(d_be), .data_addr_o(d_addr),
+    .data_wdata_o(d_wdata), .data_rdata_i(d_rdata), .data_err_i(d_error),
+    .irq_software_i(1'b0), .irq_timer_i(timer_irq), .irq_external_i(gpio_irq | gcd_irq),
+    .irq_fast_i('0), .irq_nm_i(1'b0), .debug_req_i(1'b0), .crash_dump_o(),
+    .fetch_enable_i(1'b1), .alert_minor_o(cpu_alert_minor),
+    .alert_major_o(cpu_alert_major), .core_sleep_o(), .scan_rst_ni(rst_ni)
+  );
+  assign i_gnt = i_req;
+  always_ff @(posedge clk_i) begin
+    if (!rst_ni) begin i_valid <= 0; i_error <= 0; i_data <= 0; end
+    else begin
+      i_valid <= i_req;
+      i_error <= i_req && !(i_addr >= ROM_BASE && i_addr < ROM_BASE + @ROM_BYTES@);
+      i_data <= rom_word(i_addr);
+    end
+  end
+
+  // One outstanding data transaction. Grants, TL acceptance and responses are
+  // distinct handshakes; invalid addresses and peripheral errors reach the CPU.
+  typedef enum logic [1:0] {IDLE, LOCAL, SEND, WAIT_RSP} bus_state_t;
+  bus_state_t state;
+  logic [31:0] address_q, data_q;
+  logic [3:0] be_q;
+  logic write_q;
+  logic [1:0] target_q;
+  assign d_gnt = d_req && state == IDLE;
+  always_ff @(posedge clk_i) begin
+    if (!rst_ni) begin
+      state <= IDLE; d_valid <= 0; d_error <= 0; d_rdata <= 0;
+      address_q <= 0; data_q <= 0; be_q <= 0; write_q <= 0; target_q <= 0;
+      done_o <= 0; success_o <= 0; signature_o <= 0;
+    end else begin
+      d_valid <= 0; d_error <= 0;
+      case (state)
+        IDLE: if (d_gnt) begin
+          address_q <= d_addr; data_q <= d_wdata; be_q <= d_be; write_q <= d_write;
+          if (d_addr >= GPIO_BASE && d_addr < GPIO_BASE + 4096) begin
+            target_q <= 0; state <= SEND;
+          end else if (d_addr >= UART_BASE && d_addr < UART_BASE + 4096) begin
+            target_q <= 1; state <= SEND;
+          end else if (d_addr >= TIMER_BASE && d_addr < TIMER_BASE + 4096) begin
+            target_q <= 2; state <= SEND;
+          end else state <= LOCAL;
+        end
+        LOCAL: begin
+          d_valid <= 1; d_rdata <= 0; state <= IDLE;
+          if (address_q >= ROM_BASE && address_q < ROM_BASE + @ROM_BYTES@) begin
+            d_rdata <= rom_word(address_q); d_error <= write_q;
+          end else if (address_q >= RAM_BASE && address_q < RAM_BASE + @RAM_BYTES@) begin
+            d_rdata <= ram[(address_q - RAM_BASE) >> 2];
+            for (int b=0; b<4; b++)
+              if (write_q && be_q[b]) ram[(address_q-RAM_BASE)>>2][8*b+:8] <= data_q[8*b+:8];
+          end else if (address_q >= GCD_BASE && address_q < GCD_BASE + 16) begin
+            d_rdata <= gcd_data; d_error <= gcd_error || be_q != 4'hf;
+          end else if (address_q == FINISH_BASE && write_q && be_q == 4'hf) begin
+            done_o <= 1; success_o <= data_q == 32'h5555; signature_o <= data_q;
+          end else d_error <= 1;
+        end
+        SEND: if (tl_response.a_ready) state <= WAIT_RSP;
+        WAIT_RSP: if (tl_response.d_valid) begin
+          d_valid <= 1; d_error <= tl_response.d_error || !response_integrity;
+          d_rdata <= tl_response.d_data; state <= IDLE;
+        end
+        default: state <= IDLE;
+      endcase
+    end
+  end
+
+  logic [31:0] gcd_x, gcd_result, gcd_data;
+  logic input_ready, output_valid, gcd_busy, gcd_error, gcd_access;
+  assign gcd_access = state == LOCAL && address_q >= GCD_BASE && address_q < GCD_BASE+16;
+  assign gcd_irq = output_valid;
+  always_comb begin
+    gcd_data = 0; gcd_error = 0;
+    case (address_q-GCD_BASE)
+      0: begin gcd_data = {30'b0,input_ready,output_valid}; gcd_error = write_q; end
+      4: gcd_error = !write_q || !input_ready;
+      8: gcd_error = !write_q || !input_ready || gcd_x == 0 || data_q == 0;
+      12: begin gcd_data = gcd_result; gcd_error = write_q || !output_valid; end
+      default: gcd_error = 1;
+    endcase
+  end
+  always_ff @(posedge clk_i) begin
+    if (!rst_ni) gcd_x <= 0;
+    else if (gcd_access && write_q && !gcd_error && be_q == 4'hf && address_q-GCD_BASE == 4)
+      gcd_x <= data_q;
+  end
+  GCDMMIOChiselModule gcd (
+    .clock(clk_i), .reset(!rst_ni), .io_clock(clk_i), .io_reset(!rst_ni),
+    .io_x(gcd_x), .io_y(data_q), .io_input_ready(input_ready),
+    .io_input_valid(gcd_access && write_q && !gcd_error && be_q == 4'hf && address_q-GCD_BASE == 8),
+    .io_output_ready(gcd_access && !write_q && !gcd_error && address_q-GCD_BASE == 12),
+    .io_output_valid(output_valid), .io_gcd(gcd_result), .io_busy(gcd_busy)
+  );
+
+  import tlul_pkg::*;
+  tl_h2d_t tl_request, gpio_request, uart_request, timer_request;
+  tl_d2h_t tl_response, gpio_response, uart_response, timer_response;
+  logic [31:0] gpio_pins, gpio_enables, gpio_interrupts;
+  prim_alert_pkg::alert_tx_t [0:0] gpio_alerts, uart_alerts;
+  logic [63:0] response_code, data_code;
+  logic response_integrity;
+  always_comb begin
+    tl_request = TL_H2D_DEFAULT;
+    tl_request.a_valid = state == SEND;
+    tl_request.a_opcode = write_q ? (be_q == 4'hf ? PutFullData : PutPartialData) : Get;
+    tl_request.a_size = 2;
+    tl_request.a_mask = be_q;
+    tl_request.a_address = target_q == 0 ? address_q-GPIO_BASE :
+                           target_q == 1 ? address_q-UART_BASE : address_q-TIMER_BASE;
+    tl_request.a_data = data_q;
+    tl_request.a_user.tl_type = DataType;
+    tl_request.a_user.cmd_intg = get_cmd_intg(tl_request);
+    tl_request.a_user.data_intg = get_data_intg(data_q);
+    tl_request.d_ready = state == WAIT_RSP;
+    gpio_request = tl_request; gpio_request.a_valid = tl_request.a_valid && target_q == 0;
+    uart_request = tl_request; uart_request.a_valid = tl_request.a_valid && target_q == 1;
+    timer_request = tl_request; timer_request.a_valid = tl_request.a_valid && target_q == 2;
+    tl_response = target_q == 0 ? gpio_response : target_q == 1 ? uart_response : timer_response;
+  end
+  assign response_code = prim_secded_pkg::prim_secded_64_57_enc(57'(extract_d2h_rsp_intg(tl_response)));
+  assign data_code = prim_secded_pkg::prim_secded_64_57_enc(57'(tl_response.d_data));
+  assign response_integrity = tl_response.d_user.rsp_intg == response_code[63:57] &&
+                              tl_response.d_user.data_intg == data_code[63:57];
+  gpio #(.AlertAsyncOn('0)) gpio_ip (
+    .clk_i, .rst_ni, .tl_i(gpio_request), .tl_o(gpio_response),
+    .intr_gpio_o(gpio_interrupts), .cio_gpio_i(gpio_pins & gpio_enables),
+    .cio_gpio_o(gpio_pins), .cio_gpio_en_o(gpio_enables),
+    .alert_rx_i('{prim_alert_pkg::ALERT_RX_DEFAULT}), .alert_tx_o(gpio_alerts)
+  );
+  uart #(.AlertAsyncOn('0)) uart_ip (
+    .clk_i, .rst_ni, .tl_i(uart_request), .tl_o(uart_response),
+    .cio_rx_i(uart_rx_i), .cio_tx_o(uart_tx_o), .cio_tx_en_o(),
+    .alert_rx_i('{prim_alert_pkg::ALERT_RX_DEFAULT}), .alert_tx_o(uart_alerts),
+    .intr_tx_watermark_o(), .intr_rx_watermark_o(), .intr_tx_empty_o(),
+    .intr_rx_overflow_o(), .intr_rx_frame_err_o(), .intr_rx_break_err_o(),
+    .intr_rx_timeout_o(), .intr_rx_parity_err_o()
+  );
+  rv_timer timer_ip (.clk_i, .rst_ni, .tl_i(timer_request), .tl_o(timer_response),
+                     .intr_timer_expired_0_0_o(timer_irq));
+  assign gpio_irq = |gpio_interrupts;
+  assign gpio_o = gpio_pins & gpio_enables;
+  assign gpio_alert = gpio_alerts[0].alert_p;
+  assign uart_alert = uart_alerts[0].alert_p;
+  assign fault_o = cpu_alert_major | cpu_alert_minor | gpio_alert | uart_alert;
+endmodule
