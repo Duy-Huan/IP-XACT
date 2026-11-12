@@ -108,3 +108,10 @@ docs/verification-status.md; no universal or industrial-completeness claim is ma
 
 Native process owners handle SIGTERM with scoped cleanup and restore the previous
 handler. A real CLI cancellation test verifies exit 143 and that its guest is reaped.
+
+Gem5 source builds now explicitly configure the external SystemC process profile
+through upstream Kconfig, retaining the native configuration and executable
+build-info evidence. Configuration tampering is rejected. This avoids building
+the unused embedded SystemC kernel; actual SystemC/TLM co-simulation remains in
+its existing source-built processes, with the original native engine binaries
+preserved by extension builds.

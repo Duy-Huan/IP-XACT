@@ -116,3 +116,12 @@ tampering. Promotion requires USP_REQUIRE_RTL_CPU, USP_RTL_CPU_IBEX_BUILD,
 USP_RTL_CPU_CUSTOM_BUILD and USP_RTL_MASTER_BUILD. No DMA/coherence, multihart,
 cross-ISS or full-architecture/signoff completion is claimed. Hosted workflow
 configuration is separate from a successful hosted execution.
+
+The source builders explicitly select upstream Kconfig USE_SYSTEMC=n for gem5:
+our SystemC kernel runs in the separate, source-built model/CPU processes. This
+bounds the engine build to its native CPU/memory/event functionality. It does not
+change the IPC/TLM bridge or replace its RTL. New build records retain the native
+Kconfig snapshot and the executable's actual --build-info output; both are
+verified, including the compiled setting. Preexisting pinned engine binaries
+remain supported under their recorded identities. Embedded gem5 SystemC modules
+are outside this profile.

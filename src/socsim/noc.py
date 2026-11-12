@@ -9,7 +9,13 @@ from pathlib import Path
 from typing import Any
 
 from .domain import ContractError
-from .gem5 import GEM5_SHA, python_environment
+from .gem5 import (
+    GEM5_SHA,
+    configure_external_systemc,
+    python_environment,
+    record_gem5_configuration,
+    verify_gem5_configuration,
+)
 from .ipxact import digest
 from .pipeline import execute, verify_source
 from .project import keys
@@ -78,6 +84,7 @@ def build_noc(source, out, jobs=4):
     source = verify_source(source.resolve(), GEM5_SHA)
     out = out.resolve()
     out.mkdir(parents=True, exist_ok=True)
+    configuration = configure_external_systemc(source, "Garnet_standalone", out)
     command = ["scons", "build/Garnet_standalone/gem5.opt", f"-j{jobs}", "--without-tcmalloc"]
     config = Path(sys.base_prefix) / "bin/python3-config"
     if config.exists():
@@ -100,8 +107,10 @@ def build_noc(source, out, jobs=4):
     shutil.copy2(PATCH, out / "garnet-datablock-init.patch")
     shutil.copy2(source / "LICENSE", out / "gem5-LICENSE")
     binary = source / "build/Garnet_standalone/gem5.opt"
+    record_gem5_configuration(out, binary, configuration)
     record = {
         "source_commit": GEM5_SHA,
+        "configuration": configuration,
         "source": str(source),
         "binary": str(binary),
         "binary_sha256": digest(binary),
@@ -115,6 +124,7 @@ def build_noc(source, out, jobs=4):
 def run_noc(config, build, out):
     config = validate_noc(config)
     record = json.loads((build / "noc-build.json").read_text())
+    verify_gem5_configuration(build, record)
     if record["source_commit"] != GEM5_SHA or record["protocol"] != "Garnet_standalone":
         raise ContractError("NoC source/protocol identity mismatch")
     if record.get("initialization_patch_sha256") != digest(PATCH):

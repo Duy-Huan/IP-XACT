@@ -11,7 +11,13 @@ from pathlib import Path
 
 from .domain import ContractError
 from .execution import cleanup_on_termination
-from .gem5 import GEM5_SHA, python_environment
+from .gem5 import (
+    GEM5_SHA,
+    configure_external_systemc,
+    python_environment,
+    record_gem5_configuration,
+    verify_gem5_configuration,
+)
 from .ipxact import digest
 from .pipeline import execute, verify_source
 from .project import inside, read_yaml
@@ -266,6 +272,7 @@ def build_engine(source, out, jobs=2):
     if not 1 <= jobs <= 4:
         raise ContractError("invalid build parallelism")
     out.mkdir(parents=True, exist_ok=False)
+    configuration = configure_external_systemc(source, "RISCV", out)
     extension = out / "extension"
     extension.mkdir()
     for n in native_identity():
@@ -302,8 +309,10 @@ def build_engine(source, out, jobs=2):
                 raise ContractError("failed to restore gem5 SE executable")
     verify_source(source, GEM5_SHA)
     shutil.copy2(source / "LICENSE", out / "gem5-LICENSE")
+    record_gem5_configuration(out, out / "gem5.opt", configuration)
     r = {
         "contract": "rtl-master-gem5-v1",
+        "configuration": configuration,
         "builder_sha256": digest(Path(__file__)),
         "source_commit": GEM5_SHA,
         "base_binary_sha256": old,
@@ -318,6 +327,7 @@ def build_engine(source, out, jobs=2):
 
 def verify_engine(out):
     r = json.loads((out / "engine-build.json").read_text())
+    verify_gem5_configuration(out, r)
     if (
         r["contract"] != "rtl-master-gem5-v1"
         or r.get("builder_sha256") != digest(Path(__file__))

@@ -17,7 +17,13 @@ from pathlib import Path
 
 from .domain import ContractError
 from .execution import cleanup_on_termination
-from .gem5 import GEM5_SHA, python_environment
+from .gem5 import (
+    GEM5_SHA,
+    configure_external_systemc,
+    python_environment,
+    record_gem5_configuration,
+    verify_gem5_configuration,
+)
 from .ipblocks import run_ipblocks, verify_models
 from .ipxact import digest
 from .pipeline import execute, identity, resolve, verify_generated, verify_source
@@ -41,6 +47,7 @@ def build_bridge(source, out, jobs=2):
     if not 1 <= jobs <= 4:
         raise ContractError("unsupported gem5 build parallelism")
     out.mkdir(parents=True, exist_ok=False)
+    configuration = configure_external_systemc(source, "RISCV", out)
     native = native_identity()
     extension = out / "extension"
     extension.mkdir()
@@ -77,8 +84,10 @@ def build_bridge(source, out, jobs=2):
     if native != native_identity():
         raise ContractError("bridge source changed during compilation")
     shutil.copy2(source / "LICENSE", out / "gem5-LICENSE")
+    record_gem5_configuration(out, out / "gem5.opt", configuration)
     record = {
         "contract": "systemc-ips-gem5-v1",
+        "configuration": configuration,
         "source_commit": GEM5_SHA,
         "native_identity": native,
         "base_binary_sha256": old_sha,
@@ -92,6 +101,7 @@ def build_bridge(source, out, jobs=2):
 def verify_bridge(out):
     out = out.resolve()
     r = json.loads((out / "bridge-build.json").read_text())
+    verify_gem5_configuration(out, r)
     if (
         r["contract"] != "systemc-ips-gem5-v1"
         or r["source_commit"] != GEM5_SHA
