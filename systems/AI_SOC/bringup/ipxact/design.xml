@@ -1,0 +1,25 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<design xmlns="http://www.accellera.org/XMLSchema/IPXACT/1685-2022">
+  <vendor>socsim.example</vendor>
+  <library>reference</library>
+  <name>AI_SOC_bringup</name>
+  <version>1.0</version>
+  <componentInstances>
+    <componentInstance>
+      <instanceName>rv64</instanceName>
+      <componentRef vendor="socsim.example" library="reference" name="rv64" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>ram</instanceName>
+      <componentRef vendor="socsim.example" library="reference" name="ram" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>uart</instanceName>
+      <componentRef vendor="socsim.example" library="reference" name="uart" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>finisher</instanceName>
+      <componentRef vendor="socsim.example" library="reference" name="finisher" version="1.0"/>
+    </componentInstance>
+  <componentInstance><instanceName>rom</instanceName><componentRef vendor="socsim.example" library="reference" name="rom" version="1.0"/></componentInstance><componentInstance><instanceName>clint</instanceName><componentRef vendor="socsim.example" library="reference" name="clint" version="1.0"/></componentInstance><componentInstance><instanceName>plic</instanceName><componentRef vendor="socsim.example" library="reference" name="plic" version="1.0"/></componentInstance><componentInstance><instanceName>cygcd</instanceName><componentRef vendor="ucb-bar" library="chipyard" name="gcd" version="1.13.0"/></componentInstance><componentInstance><instanceName>otgpio</instanceName><componentRef vendor="lowrisc" library="ip" name="gpio" version="silver-v5"/></componentInstance></componentInstances>
+</design>

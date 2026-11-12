@@ -1,0 +1,17 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<component xmlns="http://www.accellera.org/XMLSchema/IPXACT/1685-2022">
+  <vendor>socsim.public</vendor>
+  <library>architecture</library>
+  <name>app_cpu2</name>
+  <version>1.0</version>
+  <parameters>
+    <parameter parameterId="ICACHE_BYTES" type="longint" resolve="user" sign="unsigned">
+      <name>ICACHE_BYTES</name>
+      <value>32768</value>
+    </parameter>
+    <parameter parameterId="DCACHE_BYTES" type="longint" resolve="user" sign="unsigned">
+      <name>DCACHE_BYTES</name>
+      <value>32768</value>
+    </parameter>
+  </parameters>
+</component>

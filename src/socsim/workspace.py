@@ -12,7 +12,16 @@ from .ipxact import digest
 from .project import inside, keys, load_project, read_yaml
 from .runner import write_json
 
-KINDS = {"zephyr", "freertos", "linux", "gem5-se", "fifo-tlm", "fifo-rtl", "source-ips"}
+KINDS = {
+    "zephyr",
+    "freertos",
+    "linux",
+    "gem5-se",
+    "fifo-tlm",
+    "fifo-rtl",
+    "source-ips",
+    "system-bringup",
+}
 OPEN_CRITERIA = {
     "P1-general-elaboration": (
         "General hierarchy/parameters, register side effects, "
@@ -41,8 +50,10 @@ def load_workspace(path):
         if not isinstance(kind, str) or kind not in KINDS:
             raise ContractError("unsupported workspace target kind")
         required = {"name", "kind", "project", "generated"}
-        if kind in {"gem5-se", "fifo-tlm", "fifo-rtl", "source-ips"}:
+        if kind in {"gem5-se", "fifo-tlm", "fifo-rtl", "source-ips", "system-bringup"}:
             required.add("models")
+        if kind == "system-bringup":
+            required.add("noc")
         keys(target, required, "workspace target")
         name = target["name"]
         if (
@@ -52,8 +63,13 @@ def load_workspace(path):
         ):
             raise ContractError("duplicate/unsafe workspace target name")
         names.add(name)
-        for field in required & {"project", "generated", "models"}:
+        for field in required & {"project", "generated", "models", "noc"}:
             inside(path.parent, target[field])
+        if kind == "system-bringup":
+            from .systems import load_system
+
+            load_system(inside(path.parent, target["project"]))
+            continue
         project = load_project(inside(path.parent, target["project"]))
         expected = "usp-rv64-v1"
         if kind.startswith("fifo-"):
@@ -66,6 +82,24 @@ def load_workspace(path):
 
 
 def run_target(root, target, out):
+    if target["kind"] == "system-bringup":
+        from .systems import run_system
+
+        for field, artifact in (
+            ("generated", "manifest.json"),
+            ("models", "ipblocks-build.json"),
+            ("noc", "noc-build.json"),
+        ):
+            if not (inside(root, target[field]) / artifact).is_file():
+                raise ContractError(f"missing system {field} build")
+        return run_system(
+            inside(root, target["project"]),
+            inside(root, target["generated"]),
+            inside(root, target["models"]),
+            inside(root, target["noc"]),
+            out,
+            "bringup",
+        )
     project = load_project(inside(root, target["project"]))
     generated = inside(root, target["generated"])
     kind = target["kind"]

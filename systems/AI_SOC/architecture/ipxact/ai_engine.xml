@@ -1,0 +1,20 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<component xmlns="http://www.accellera.org/XMLSchema/IPXACT/1685-2022">
+  <vendor>socsim.public</vendor>
+  <library>architecture</library>
+  <name>ai_engine</name>
+  <version>1.0</version>
+  <memoryMaps>
+    <memoryMap>
+      <name>physical</name>
+      <addressBlock>
+        <name>window</name>
+        <baseAddress>0</baseAddress>
+        <range>4096</range>
+        <width>32</width>
+        <usage>register</usage>
+      </addressBlock>
+      <addressUnitBits>8</addressUnitBits>
+    </memoryMap>
+  </memoryMaps>
+</component>

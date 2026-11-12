@@ -1,5 +1,17 @@
 schema_version: '1'
 targets:
+  - name: ai-soc-bringup
+    kind: system-bringup
+    project: systems/AI_SOC
+    generated: build/AI_SOC
+    models: build/source-ip-models
+    noc: build/garnet
+  - name: aiz-soc-bringup
+    kind: system-bringup
+    project: systems/AIZ_SOC
+    generated: build/AIZ_SOC
+    models: build/source-ip-models
+    noc: build/garnet
   - name: hierarchy
     kind: zephyr
     project: examples/rv64-hierarchy

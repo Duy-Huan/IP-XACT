@@ -13,7 +13,7 @@ not a claim that every future standard/backend feature is implemented.
 | 4 Linux/Yocto | Direct Linux verified; Yocto image blocked | OpenSBI + Linux boot to original userspace; generated meta-usp parsed successfully (924 recipes, MACHINE=usp-rv64); upstream dependency fetch rejected by proxy |
 | 5 gem5 | Verified SE workload subset | Same exact RV64 ELF executed under QEMU/Linux and gem5; guest exit zero and real raw stats; full-system board remains unsupported |
 | 6 SystemC/RTL/hybrid | Verified selected IPs | FIFO TLM/RTL, actual Chipyard GCD Chisel generation, complete OpenTitan GPIO/TL-UL peripheral, guest PLIC IRQ and deterministic replay; no full Rocket/Earlgrey/DMA/coherence claim |
-| 7 maturity | Partial; multi-SoC gate verified | Eight-target workspace execution and artifact-integrity verification, native CI and support docs; release/hosted checks/IDE still open |
+| 7 maturity | Partial; multi-SoC gate verified | Ten-target workspace execution and artifact-integrity verification, native CI and support docs; release/hosted checks/IDE still open |
 
 The actual initial MVP sequence is IP-XACT → typed IR → exact binding → generated
 QEMU C → compiled usp-rv64 → generated Zephyr board/DTS → west ELF → real UART,
@@ -26,7 +26,7 @@ QEMU/Linux and gem5 SE with the same hash; the acceptance scopes remain distinct
 SystemC and RTL hybrid runs additionally require USP_TLM_RTL_IRQ_OK and independently
 verify trace write/readback/IRQ state transitions. Repeated RTL traces matched.
 
-Observed full local gate on 2026-11-12: **184 tests passed, zero failed/skipped**, including the
+Observed full local gate on 2026-11-12: **210 tests passed, zero failed/skipped**, including the
 shared QEMU/Linux and gem5 ELF test, both TLM/RTL modes, and real CLI SIGTERM
 cleanup of its owned guest process. Raw gem5 observations
 include simInsts=3012 and simTicks=80400000 under explicitly uncalibrated assumptions;
@@ -42,9 +42,9 @@ FreeRTOS, Linux, gem5 and hybrid/workspace gates passed. The 32 new parameter te
 include invalid input, cycles and instance isolation. General parameter types,
 full expression semantics and translations are still incomplete.
 
-The checked-in workspace.yaml executes eight targets across four SoC projects:
+The checked-in workspace.yaml executes ten targets, including two scoped system bring-ups:
 hierarchy Zephyr, base Zephyr, FreeRTOS, Linux, gem5 SE, FIFO TLM/RTL and source IP.
-All eight passed in one workspace acceptance run. Aggregate evidence hashes every
+All ten passed in one workspace acceptance run. Aggregate evidence hashes every
 retained target artifact; modified raw logs and false full-completion claims are
 rejected. Missing builds are ERROR rather than skipped. Local promotion requires
 the full matrix. See milestone-checklist.md for the item-level open/verified ledger;
@@ -140,3 +140,22 @@ Hosted GitHub Actions completion and main protection are distinct from local tes
 Full Chipyard/Rocket SoC generation, complete OpenTitan/security integration, µC/OS,
 general IP-XACT wiring/translation and full-system gem5 are not implemented.
 No silicon/security guarantee or calibrated performance equivalence is implied.
+
+## AI_SOC/AIZ_SOC and OpenROAD extension
+
+Both sanitized architecture targets pass offline XSD and metadata elaboration
+(46/37 instances). Separate nine-role bring-up subsets pass actual generated
+QEMU/Zephyr boot, timer/PLIC and real Chipyard GCD/OpenTitan GPIO IRQ tests.
+The independent pinned Garnet meshes pass with 16/8 routers: observed injected
+and received packets are 7552/7552 and 3776/3776, average hops 2.474576 and 1.727754.
+The standalone initialization adapter fixes explicit 64B cache metadata and a
+dummy DataBlock constructor; the reviewed patch/native binary are hashed and the
+original upstream tracked tree is restored. No live CPU/RTL coupling is claimed.
+
+Native Yosys 0.52 produces 610 generic GCD cells and passes equivalence. The same
+actual source leaf completes the pinned OpenROAD Nangate45 flow to GDS, with
+zero detailed-router DRC, setup/hold TNS=0 and positive worst slacks. Both system
+acceptances pass their four implemented stages, including snapshots of that one
+verified reference layout. The ten-target workspace and artifact verification
+pass. Full heterogeneous SoC execution, full RTL/ASIC and foundry signoff remain
+open; see dual-soc.md and openroad.md for exact scope and original evidence.

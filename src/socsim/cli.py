@@ -19,6 +19,18 @@ def main(argv=None) -> int:
     argv = [argument for argument in argv if argument != "--json"]
     if argv[:2] == ["ipxact", "validate"]:
         argv = argv[1:]
+    if argv and argv[0] == "noc":
+        from .noc import main as noc_main
+
+        return noc_main(argv[1:])
+    if argv and argv[0] == "asic":
+        from .asic import main as asic_main
+
+        return asic_main(argv[1:])
+    if argv and argv[0] == "system":
+        from .systems import main as system_main
+
+        return system_main(argv[1:])
     if argv and argv[0] == "workspace":
         from .workspace import main as workspace_main
 
@@ -36,6 +48,9 @@ def main(argv=None) -> int:
     commands.add_parser("backends", help="show implemented and planned capabilities")
     commands.add_parser("doctor", help="inspect runtime tools without installing")
     commands.add_parser("workspace", help="validate/run/verify multi-SoC acceptance; use --help")
+    commands.add_parser("system", help="validate/plan/test AI_SOC and AIZ_SOC; use --help")
+    commands.add_parser("noc", help="build pinned Garnet network tools; use --help")
+    commands.add_parser("asic", help="build/verify reference RTL-to-GDS flow; use --help")
     for extra in ("generate", "build", "software", "test", "report", "models", "gem5", "ipblocks"):
         commands.add_parser(extra, help="custom QEMU/Zephyr lifecycle; use --help")
     for name in ("validate", "elaborate", "plan", "run"):
