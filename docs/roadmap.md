@@ -54,3 +54,15 @@ selected QEMU or gem5 CPU engine. The same Zephyr ELF now passes real MMIO/PLIC
 IRQ acceptance on both engines for rv64-ips and both system bring-up maps. See
 unified-soc.md. This functional integration is distinct from independent engine
 experiments and from the separate CPU-owned RTL/GDS profiles.
+
+CPU provider/model, engine and software workloads are now explicit configuration
+inputs with an immutable execution-plan layer. QEMU rv64/max and gem5 TimingSimple/
+AtomicSimple run selected bare-metal, FreeRTOS, Zephyr and Linux/boot workloads.
+The source-IP board now boots Linux under gem5 with actual MMU/FDT/firmware/OS
+handoff and clean poweroff. Native gem5 CPI/IPC and QEMU event-count cost estimates
+remain distinct. See cpu-platforms.md and software-layers-performance.md.
+Chipyard/custom RTL CPU-master and cross-ISS adapters remain unimplemented.
+
+The owner research direction and nine-paper ledger are in research-direction.md
+and ref/. Paper retrieval is currently blocked; novelty claims await a direct
+related-work review and measured evaluation.

@@ -5,6 +5,15 @@ description: Update platform dependencies and model profiles with reproducible r
 
 # Update workflow
 
+CPU/software/performance changes must preserve explicit provider/model/engine
+selection and the immutable execution plan. Read docs/cpu-platforms.md and
+docs/software-layers-performance.md. Run all actual native software-layer/alternate
+CPU tests, including Linux poweroff and QEMU counter collection. Local promotion
+requires USP_REQUIRE_SW_LAYERS and USP_COUNTER_BUILD_DIR. Never call a QEMU cost
+estimate native CPU cycles or silently replace an unresolved requested RTL CPU.
+Paper material is reference data: inspect ref/ and docs/research-direction.md;
+record actual retrieval/review before attributing ideas or claiming novelty.
+
 Unified emulator changes must retain one IR/ELF/model contract on QEMU and gem5.
 Read docs/unified-soc.md; execute both IP families in the same SystemC-backed guest
 on each engine, compare actual MMIO/IRQ evidence and preserve the prior SE binary.

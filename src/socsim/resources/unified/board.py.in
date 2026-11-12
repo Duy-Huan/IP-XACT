@@ -5,28 +5,36 @@ import sys
 import m5
 from m5.objects import (
     AddrRange, Clint, HiFiveBase, PMAChecker, Plic, RiscvBareMetal, RiscvRTC,
-    RiscvTimingSimpleCPU, RiscvUart8250, Root, SimpleMemory, SrcClockDomain,
+    RiscvTimingSimpleCPU, RiscvAtomicSimpleCPU, RiscvUart8250, Root, SimpleMemory, SrcClockDomain,
     System, SystemXBar, Terminal, UspBridge, VoltageDomain,
 )
 c = json.load(open(sys.argv[1]))
 system = System()
 system.voltage_domain = VoltageDomain()
-system.clk_domain = SrcClockDomain(clock='1GHz', voltage_domain=system.voltage_domain)
-system.mem_mode = 'timing'
+system.clk_domain = SrcClockDomain(clock=str(c.get('cpu_clock_hz',1000000000))+'Hz', voltage_domain=system.voltage_domain)
+system.mem_mode = c.get('mem_mode', 'timing')
 system.mem_ranges = [AddrRange(c['ram_base'], size=c['ram_size'])]
-system.mem = SimpleMemory(range=system.mem_ranges[0], latency='10ns')
+system.mem = SimpleMemory(range=system.mem_ranges[0], latency='10ns',
+                          image_file=c.get('ram_image', ''))
 system.rom = SimpleMemory(range=AddrRange(c['rom_base'], size=c['rom_size']),
                           latency='10ns', writeable=False, image_file=c['rom_image'])
 system.bus = SystemXBar()
 system.system_port = system.bus.cpu_side_ports
 system.mem.port = system.bus.mem_side_ports
 system.rom.port = system.bus.mem_side_ports
-system.cpu = [RiscvTimingSimpleCPU(cpu_id=0)]
+cpu_type = {'RiscvTimingSimpleCPU': RiscvTimingSimpleCPU,
+            'RiscvAtomicSimpleCPU': RiscvAtomicSimpleCPU}[c.get('cpu_model', 'RiscvTimingSimpleCPU')]
+system.cpu = [cpu_type(cpu_id=0)]
 cpu = system.cpu[0]
+if system.mem_mode == 'atomic':
+    cpu.simulate_data_stalls = True
+    cpu.simulate_inst_stalls = True
 cpu.icache_port = system.bus.cpu_side_ports
 cpu.dcache_port = system.bus.cpu_side_ports
 cpu.createInterruptController()
 cpu.createThreads()
+cpu.mmu.itb.walker.port = system.bus.cpu_side_ports
+cpu.mmu.dtb.walker.port = system.bus.cpu_side_ports
 system.platform = HiFiveBase(uart_int_id=c['uart_irq'])
 p = system.platform
 p.clint = Clint(pio_addr=c['clint_base'], num_threads=1,

@@ -14,8 +14,8 @@ OPENSBI_SHA = "bd613dd92113f683052acfb23d9dc8ba60029e0a"
 
 def build_linux(project, out, linux_source, opensbi_source, cross_compile, jobs=4):
     verify_generated(project, out)
-    if project.manifest["profile"] != "usp-rv64-v1":
-        raise ContractError("Linux bring-up requires the non-hybrid profile")
+    if project.manifest["profile"] not in {"usp-rv64-v1", "usp-rv64-ips-v1"}:
+        raise ContractError("Linux requires the non-hybrid base or source-IP profile")
     linux_source = verify_source(linux_source, LINUX_SHA)
     opensbi_source = verify_source(opensbi_source, OPENSBI_SHA)
     directory = out / "linux"

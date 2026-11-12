@@ -58,7 +58,11 @@ The image deliverable remains blocked. Direct Linux does not close the Yocto ite
 - [ ] Broader registry, configurable cache/memory experiments and calibrated models.
 - [x] Selected full-system Zephyr board with actual SystemC GCD/GPIO MMIO and PLIC IRQ.
 - [x] Same IR/ELF/model and IP command/data acceptance on QEMU/gem5 for three maps.
-- [ ] Full-system Linux and broader board/OS coverage remain unsupported.
+- [x] Full-system Linux/OpenSBI userspace/poweroff on the source-IP gem5 board.
+- [x] Configurable native QEMU rv64/max and gem5 TimingSimple/AtomicSimple CPU adapters.
+- [x] Measured QEMU instruction/data events with explicit analytical CPI/IPC estimates.
+- [x] Native gem5 committed-instruction/cycle CPI/IPC with retained raw statistics.
+- [ ] Calibrated CPU-specific/ROI models and broader board/OS coverage.
 
 The shared-workload exit is verified for SE; complete hardware equivalence is not.
 
@@ -131,3 +135,15 @@ The separate rtl-testchip profiles are explicit functional flow fixtures. Their
 reference layout acceptance does not require electrical/signoff closure; final
 STA still reports 14/11 max-capacitance violations. See rtl-testchips.md for the
 actual result table and mapped firmware acceptance contract.
+
+## Configurable co-design integration and research
+
+- [x] Strict CPU-provider/engine/workload configuration and unresolved-adapter diagnostics.
+- [x] Immutable execution bindings, memory ownership, address/IRQ routes and time-domain declarations.
+- [x] Real co-simulation trace order/routing/IRQ/annotated-time validation.
+- [x] Bare-metal, FreeRTOS, Zephyr, Linux and boot sequence on both CPU engines.
+- [x] Original paper ledger and bounded HTTPS/PDF download tooling under ref/.
+- [ ] Retrieve/read the nine requested papers after network policy is applied.
+- [ ] Complete direct related-work comparison and experimentally substantiate novelty.
+- [ ] Actual Chipyard/custom RTL CPU-master and cross-ISS adapters.
+- [ ] Asynchronous global scheduling, DMA/coherence, checkpoint and live NoC integration.

@@ -48,8 +48,8 @@ def adapter_identity():
 def generate_bsp(project, out):
     """Generate an independent software BSP from verified hardware artifacts/IR."""
     verify_generated(project, out)
-    if project.manifest["profile"] != "usp-rv64-v1":
-        raise ContractError("FreeRTOS acceptance requires the non-hybrid usp-rv64-v1 profile")
+    if project.manifest["profile"] not in {"usp-rv64-v1", "usp-rv64-ips-v1"}:
+        raise ContractError("FreeRTOS requires the non-hybrid base or source-IP profile")
     if project.ir.cpu is None:
         raise ContractError("FreeRTOS requires an explicit CPU contract")
     clint = next(i.windows[0].base for i in project.ir.instances if i.name == "clint")
@@ -184,8 +184,8 @@ def build_freertos(project, out, source, cross_compile, test_case="smoke"):
 
 def verify_freertos(project, out):
     verify_generated(project, out)
-    if project.manifest["profile"] != "usp-rv64-v1":
-        raise ContractError("FreeRTOS runtime requires the non-hybrid profile")
+    if project.manifest["profile"] not in {"usp-rv64-v1", "usp-rv64-ips-v1"}:
+        raise ContractError("FreeRTOS runtime requires the non-hybrid base or source-IP profile")
     record = json.loads((out / "freertos-build.json").read_text())
     if (
         not isinstance(record, dict)

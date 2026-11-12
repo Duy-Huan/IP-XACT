@@ -122,7 +122,7 @@ def board_contract(project, max_ticks=2000000000000):
         timebase_hz=project.ir.cpu.timebase_hz,
         reset_vector=project.ir.cpu.reset_vector,
         entry=project.ir.cpu.entry,
-        plic_sources=max(values[k] for k in ("uart_irq", "cygcd_irq", "otgpio_irq")) + 1,
+        plic_sources=32,
         max_ticks=max_ticks,
     )
     return values

@@ -95,3 +95,11 @@ USP_REQUIRE_UNIFIED=1. Tests run the same Zephyr ELF and actual SystemC GCD/GPIO
 models on QEMU and gem5 full-system for rv64-ips, AI_SOC and AIZ_SOC bring-up maps.
 They compare real IP command/data sequences and reject a short gem5 simulation
 limit. See unified-soc.md for the supported extension build and ownership contract.
+
+Software-layer/CPU/performance changes additionally require USP_REQUIRE_SW_LAYERS=1
+and USP_COUNTER_BUILD_DIR. The full matrix executes real software on both engines,
+plus alternate CPU models. Local promotion enforces this gate. The software-layers
+manual workflow requires a trusted provisioned soc-eda runner with matching built
+software/model artifacts; publishing YAML does not prove hosted execution.
+Read cpu-platforms.md and software-layers-performance.md before changing fidelity
+claims. ref/ and research-direction.md track actual paper access/review separately.

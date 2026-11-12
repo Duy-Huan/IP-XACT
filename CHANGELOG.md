@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+Pinned ELF inspection is now a core dependency so minimal installations can
+validate/run external firmware artifacts without the optional source-build SDK.
+
+Added configurable CPU provider/model/engine/workload profiles, immutable execution
+plans with explicit ownership/routing/time domains and real bridge-trace checks.
+Native adapters select QEMU rv64/max and gem5 TimingSimple/AtomicSimple; unresolved
+Chipyard/custom RTL or cross-ISS CPU combinations fail without substitution.
+Added actual bare-metal, FreeRTOS, Zephyr, Linux/OpenSBI and boot-sequence runs on
+the unified source-IP board, QEMU plugin event counters, explicitly estimated
+CPI/IPC, native gem5 statistics and portable software-matrix verification.
+Added a nine-paper reference ledger/fetch tool and an evaluation roadmap; network
+policy currently blocks retrieval, so no paper review or research-priority claim
+is made.
+
 Added a unified virtual-SoC adapter: the same IP-XACT IR, Zephyr ELF and actual
 SystemC/Verilator Chipyard GCD/OpenTitan GPIO models now execute on QEMU or gem5
 full-system. Added out-of-tree gem5 MMIO/PLIC bridge, real reset ROM, explicit

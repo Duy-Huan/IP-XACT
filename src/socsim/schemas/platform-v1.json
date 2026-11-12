@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "engine", "cpu", "workloads"],
+  "properties": {
+    "schema_version": {"const": "1"},
+    "engine": {"enum": ["qemu", "gem5"]},
+    "cpu": {
+      "type": "object", "additionalProperties": false,
+      "required": ["provider", "model"],
+      "properties": {
+        "provider": {"enum": ["qemu", "gem5", "chipyard", "custom-rtl"]},
+        "model": {"type": "string", "pattern": "^[A-Za-z0-9_.-]{1,80}$"},
+        "clock_hz": {"type": "integer", "minimum": 100000, "maximum": 5000000000},
+        "rtl_manifest": {"type": "string", "minLength": 1, "maxLength": 500}
+      }
+    },
+    "workloads": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": {"enum": ["baremetal", "freertos", "zephyr", "linux", "boot-sequence"]}
+    },
+    "artifacts": {
+      "type": "object",
+      "propertyNames": {"enum": ["baremetal", "freertos", "zephyr", "linux", "boot-sequence"]},
+      "additionalProperties": {
+        "type": "object", "additionalProperties": false,
+        "required": ["elf", "sha256", "expected_markers"],
+        "properties": {
+          "elf": {"type": "string", "minLength": 1, "maxLength": 1000},
+          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "expected_markers": {"type": "array", "maxItems": 40, "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1, "maxLength": 200}},
+          "dtb": {"type": "string", "minLength": 1},
+          "dtb_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+        },
+        "dependentRequired": {"dtb": ["dtb_sha256"], "dtb_sha256": ["dtb"]}
+      }
+    },
+    "qemu_cost_model": {
+      "type": "object", "additionalProperties": false,
+      "required": ["base_cpi", "memory_extra_cycles"],
+      "properties": {
+        "base_cpi": {"type": "number", "exclusiveMinimum": 0, "maximum": 1000000},
+        "memory_extra_cycles": {"type": "number", "minimum": 0, "maximum": 1000000}
+      }
+    }
+  }
+}
