@@ -77,7 +77,13 @@ CHILDREN = {
     "componentInstance": {"instanceName", "componentRef"},
     "memoryMaps": {"memoryMap"},
     "memoryMap": {"name", "addressBlock", "addressUnitBits"},
-    "addressBlock": {"name", "baseAddress", "range", "width", "usage"},
+    "addressBlock": {"name", "baseAddress", "range", "width", "usage", "register"},
+    "register": {"name", "addressOffset", "size", "volatile", "accessPolicies", "field"},
+    "field": {"name", "bitOffset", "bitWidth", "volatile", "fieldAccessPolicies"},
+    "accessPolicies": {"accessPolicy"},
+    "accessPolicy": {"access"},
+    "fieldAccessPolicies": {"fieldAccessPolicy"},
+    "fieldAccessPolicy": {"access"},
     "parameters": {"parameter"},
     "parameter": {"name", "value"},
     "componentRef": {"configurableElementValues"},
@@ -112,6 +118,12 @@ LEAVES = {
     "addressUnitBits",
     "value",
     "configurableElementValue",
+    "addressOffset",
+    "size",
+    "volatile",
+    "access",
+    "bitOffset",
+    "bitWidth",
     "designRef",
     "designConfigurationRef",
     "designInstantiationRef",
@@ -152,6 +164,8 @@ def check_subset(root: etree._Element, source: str) -> None:
 
 
 def component_windows(root: etree._Element, parameters=None) -> tuple[Window, ...]:
+    from .registers import parse_registers
+
     parameters = resolve_parameters(root) if parameters is None else parameters
 
     def number(value, label):
@@ -181,7 +195,10 @@ def component_windows(root: etree._Element, parameters=None) -> tuple[Window, ..
             width = number(text(block, "width"), name)
             if size == 0 or width not in {8, 16, 32, 64} or base + size > 2**64:
                 raise ContractError(f"{name}: invalid range/width")
-            windows.append(Window(name, base, size, width))
+            registers = parse_registers(block, number, size)
+            if registers and usage != "register":
+                raise ContractError("E_REGISTER_USAGE register declarations require usage=register")
+            windows.append(Window(name, base, size, width, registers))
     return tuple(sorted(windows, key=lambda w: (w.base, w.name)))
 
 
@@ -224,7 +241,7 @@ def elaborate(project: Path, placements: dict, design_path: Path, aliases=None) 
         offset = integer(placements.get(source_name, 0), f"placement {source_name}")
         parameters = resolve_parameters(component, ref)
         windows = tuple(
-            Window(w.name, offset + w.base, w.size, w.width)
+            Window(w.name, offset + w.base, w.size, w.width, w.registers)
             for w in component_windows(component, parameters)
         )
         instances.append(Instance(name, vlnv, windows, tuple(sorted(parameters.items())), path))

@@ -6,12 +6,14 @@ flowchart LR
     YAML[Placement / model / toolchain manifests] --> IR[Canonical immutable SoCIR]
     XSD --> IR
     IR --> B[Explicit model and capability resolution]
-    B --> Q[QEMU virt reference plan]
-    Q --> RUN[Real RV64 firmware execution]
-    RUN --> E[Raw logs + JSON/Markdown evidence]
-    B -. future .-> G[gem5 adapter]
-    B -. future .-> R[Chipyard / OpenTitan / RTL adapters]
-    R -. future .-> S[SystemC TLM bridge]
+    B --> Q[Generated custom QEMU machine]
+    Q --> RUN[Zephyr / FreeRTOS / Linux execution]
+    RUN --> E[Raw logs and hashed evidence]
+    B --> G[Shared workload: gem5 SE]
+    G --> E
+    B --> R[Selected Chipyard / OpenTitan RTL]
+    R --> S[SystemC transaction bridge]
+    S --> Q
 ```
 
 `ipxact.py` checks the 2022 namespace and bundled XSD before semantic intake.
@@ -32,7 +34,8 @@ The XML baseAddress is component-local; supplemental placement adds its offset.
 Overlaps and unsigned 64-bit overflow are rejected; aliases are not implemented.
 
 Everything outside the accepted child/attribute sets is rejected, including
-general parameter types/expressions, registers/fields, busInterfaces, views, fileSets,
+general parameter types/expressions, register arrays/side effects, busInterfaces,
+nonstructural views and fileSets,
 general hierarchy/bus translations and vendor extensions. This is **not complete
 IEEE 1685 semantic compliance**. XSD validity is necessary but insufficient.
 `socsim validate` checks this metadata subset; `socsim plan` additionally checks
@@ -85,7 +88,7 @@ the new custom profile does not inherit the legacy virt clock mismatch.
 schemas/ir-v2.json exports the typed IR structure, hardware-v1.json describes the
 strict overlay, and model-catalog-v1.json identifies exact source/contract versions.
 The importer still rejects unsupported standard XML semantics. The current IR has
-one initiator-visible address space; no general translations or hierarchy are claimed.
+one initiator-visible address space; general translations remain unsupported.
 
 The structural hierarchy extension resolves model views through exact design and
 designConfiguration references, preserving full leaf paths in hierarchy_path.
@@ -130,3 +133,10 @@ captures actual RTL source inputs, generated SV and binary identities. QEMU owns
 CPU/RAM; the native process owns the two peripheral states and advances only on
 transactions. The rv64-ips guide documents the MMIO/IRQ shim, loopback, protocol,
 time annotations, evidence and full-SoC boundaries.
+
+Scalar registers and fields now elaborate into immutable Window.registers metadata
+with explicit access/volatile policies, bounds, alignment and overlap checks.
+registers.py verifies declared GCD metadata against its exact executable model
+contract; other model declarations fail lowering until an adapter supports them.
+pipeline.py generates soc_registers.h, which the real source-IP Zephyr guest uses
+for GCD offsets and masks. See registers.md; general register behavior is not inferred.

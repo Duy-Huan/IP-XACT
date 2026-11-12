@@ -59,11 +59,13 @@ old evidence is not overwritten. Failed guests/timeouts remain failed results.
 - [Milestone checklist and multi-SoC acceptance](docs/milestone-checklist.md)
 - [Architecture and supported IP-XACT subset](docs/architecture.md)
 - [Component parameters and safe integer expressions](docs/parameters.md)
+- [Scalar registers and executable model contracts](docs/registers.md)
 - [Configured structural hierarchy](docs/examples/rv64-hierarchy.md)
 - [Create a SoC](docs/creating-soc.md)
 - [Generated QEMU/Zephyr reference](docs/examples/rv64-minimal.md)
 - [SystemC/OpenTitan RTL bridge](docs/examples/rv64-hybrid.md)
 - [Chipyard GCD and OpenTitan GPIO](docs/examples/rv64-ips.md)
+- [Full Rocket/Earlgrey integration boundary](docs/full-soc-integration.md)
 - [Shared gem5 SE workload](docs/gem5-se.md)
 - [FreeRTOS preemption and interrupt acceptance](docs/freertos.md)
 - [Firmware, Linux, Yocto and RTOS](docs/firmware-and-os.md)
@@ -74,8 +76,10 @@ old evidence is not overwritten. Failed guests/timeouts remain failed results.
 The legacy `examples/riscv-virt` QEMU 10.0.13 bare-metal smoke remains a separate
 compatibility test. The generated machine uses pinned QEMU 10.0.0 and deliberately
 relocates UART away from virt. The parser supports bounded component integer
-parameters and structural hierarchy. Unsupported parameter types, buses,
-register fields and nonstructural views are rejected.
+parameters, structural hierarchy and scalar register/field metadata. The GCD
+profile checks its exact executable register contract and generates a header used
+by the real guest. General access side effects, buses, unsupported parameter types
+and nonstructural views are rejected.
 Yocto image completion depends on permitted upstream downloads; consult the phase
 status for observed blockers. Full Chipyard/Earlgrey SoCs and generic hardware/security integrations
 remain future work. No calibrated timing or silicon equivalence is claimed.

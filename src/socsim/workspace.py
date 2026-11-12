@@ -14,7 +14,10 @@ from .runner import write_json
 
 KINDS = {"zephyr", "freertos", "linux", "gem5-se", "fifo-tlm", "fifo-rtl", "source-ips"}
 OPEN_CRITERIA = {
-    "P1-general-elaboration": "Hierarchy, parameters, bus/clock/reset graphs and translations",
+    "P1-general-elaboration": (
+        "General hierarchy/parameters, register side effects, "
+        "bus/clock/reset graphs and translations"
+    ),
     "P4-yocto-image": "Actual Yocto image build and boot; download access remains blocked",
     "P5-full-system": "gem5 full-system board and hardware/software conformance",
     "P6-full-socs": "Rocket/Chipyard and Earlgrey full SoCs beyond selected peripherals",

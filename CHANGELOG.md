@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+Added scalar IP-XACT register/field metadata, explicit access policies, alignment,
+bounds and overlap diagnostics. Declared GCD metadata must match the executable
+shim/RTL contract. Generated register offsets/masks now feed the real Zephyr
+source-IP driver; unsupported model contracts fail before execution.
+
 Added bounded recursive structural IP-XACT hierarchy and designConfiguration view
 selection. Source paths remain in IR while explicit aliases preserve logical
 backend identities. Added a hierarchical SoC with real generated-machine Zephyr
@@ -11,7 +16,7 @@ Added bounded unsigned component parameter elaboration, dependency resolution,
 per-instance overrides and minimum/maximum checks. Expressions are interpreted
 through a strict bounded operator whitelist. Resolved values are retained in IR;
 the reference UART now requires a real instance override to match its model window.
-General signed/string/vector parameters and hierarchy remain unsupported.
+General signed/string/vector parameters and wrapper parameter propagation remain unsupported.
 
 Added strict multi-SoC workspace validation/execution and aggregate evidence
 verification. Seven real OS/engine/hybrid targets now have one repeatable acceptance

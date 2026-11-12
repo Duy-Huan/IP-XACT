@@ -8,11 +8,31 @@ class ContractError(ValueError):
 
 
 @dataclass(frozen=True)
+class RegisterField:
+    name: str
+    lsb: int
+    width: int
+    access: str
+    volatile: bool
+
+
+@dataclass(frozen=True)
+class Register:
+    name: str
+    offset: int
+    size: int
+    access: str
+    volatile: bool
+    fields: tuple[RegisterField, ...]
+
+
+@dataclass(frozen=True)
 class Window:
     name: str
     base: int
     size: int
     width: int
+    registers: tuple[Register, ...] = ()
 
 
 @dataclass(frozen=True)

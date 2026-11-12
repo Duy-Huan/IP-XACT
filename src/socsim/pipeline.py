@@ -71,6 +71,8 @@ def verify_source(path, sha):
 
 
 def resolve(project):
+    from .registers import verify_model_registers
+
     if (
         project.manifest["profile"] not in {"usp-rv64-v1", "usp-rv64-hybrid-v1", "usp-rv64-ips-v1"}
         or project.ir.cpu is None
@@ -92,6 +94,7 @@ def resolve(project):
     catalog = json.loads((Path(__file__).parent / "schemas/model-catalog-v1.json").read_text())
     descriptors = {m["role"]: m for m in catalog["models"]}
     for instance in project.ir.instances:
+        verify_model_registers(instance)
         descriptor = descriptors[instance.name]
         expected = descriptor["id"]
         if (
@@ -128,6 +131,7 @@ def compiler_hashes():
         "ipxact.py",
         "parameters.py",
         "hierarchy.py",
+        "registers.py",
         "project.py",
         "contracts.py",
         "pipeline.py",
@@ -304,6 +308,27 @@ def generate(project, out):
                 ]
             )
     (out / "soc.h").write_text("\n".join(header) + "\n")
+    register_header = [
+        "/* Generated register metadata; SPDX-License-Identifier: Apache-2.0 */",
+        "#pragma once",
+    ]
+    for instance in project.ir.instances:
+        for window in instance.windows:
+            for reg in window.registers:
+                prefix = "USP_" + instance.name.upper() + "_" + reg.name.upper()
+                register_header.extend(
+                    [
+                        f"#define {prefix}_OFFSET {hex(reg.offset)}UL",
+                        f"#define {prefix}_ADDRESS {hex(window.base + reg.offset)}UL",
+                    ]
+                )
+                for field in reg.fields:
+                    mask = ((1 << field.width) - 1) << field.lsb
+                    register_header.append(
+                        f"#define {prefix}_{field.name.upper()}_MASK {hex(mask)}UL"
+                    )
+    (out / "soc_registers.h").write_text("\n".join(register_header) + "\n")
+    shutil.copyfile(out / "soc_registers.h", app / "soc_registers.h")
     ram = next(i.windows[0] for i in project.ir.instances if i.name == "ram")
     (out / "memory.ld").write_text(
         f"MEMORY {{ RAM (rwx) : ORIGIN = {hex(ram.base)}, LENGTH = {hex(ram.size)} }}\n"

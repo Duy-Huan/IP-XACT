@@ -4,6 +4,8 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 required = [
+    "docs/full-soc-integration.md",
+    "docs/registers.md",
     "docs/parameters.md",
     "docs/milestone-checklist.md",
     "docs/verification-status.md",

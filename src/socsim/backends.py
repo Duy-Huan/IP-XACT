@@ -53,6 +53,10 @@ def qemu_plan(project: Project, backend: str) -> dict:
     resolved = []
     by_model = {}
     for instance in project.ir.instances:
+        if any(window.registers for window in instance.windows):
+            raise ContractError(
+                "UNSUPPORTED register declarations in the legacy virt model profile"
+            )
         model = registry.get((instance.vlnv, backend))
         if model not in MODELS:
             raise ContractError(

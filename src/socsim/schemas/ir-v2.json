@@ -34,6 +34,92 @@
                 },
                 "width": {
                   "type": "integer"
+                },
+                "registers": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "offset": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 18446744073709551615
+                      },
+                      "size": {
+                        "type": "integer",
+                        "enum": [
+                          8,
+                          16,
+                          32,
+                          64
+                        ]
+                      },
+                      "access": {
+                        "type": "string",
+                        "enum": [
+                          "read-only",
+                          "write-only",
+                          "read-write"
+                        ]
+                      },
+                      "volatile": {
+                        "type": "boolean"
+                      },
+                      "fields": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string"
+                            },
+                            "lsb": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 18446744073709551615
+                            },
+                            "width": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 18446744073709551615
+                            },
+                            "access": {
+                              "type": "string",
+                              "enum": [
+                                "read-only",
+                                "write-only",
+                                "read-write"
+                              ]
+                            },
+                            "volatile": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "lsb",
+                            "width",
+                            "access",
+                            "volatile"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "minItems": 1
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "offset",
+                      "size",
+                      "access",
+                      "volatile",
+                      "fields"
+                    ],
+                    "additionalProperties": false
+                  }
                 }
               },
               "required": [
