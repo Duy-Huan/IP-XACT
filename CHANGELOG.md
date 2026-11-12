@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+Added a source-pinned FreeRTOS 11.2.0 RV64 M-mode acceptance BSP using the verified
+hardware IR and unmodified upstream port. Actual guest tests cover timer-driven
+preemption, saved-register checks, UART/PLIC FromISR task notification, assertion
+failure and missing-tick timeout. Software identity, packaging, documentation,
+source acquisition and required local/hosted native regression were extended.
+
 ## 0.1.0
 
 Initial original implementation: offline IEEE 1685-2022 XSD, strict flat metadata

@@ -59,3 +59,10 @@ build target, with Python development headers and an actual libpython runtime.
 Relocated cloud Python distributions can have stale sysconfig LIBDIR values; the
 adapter uses sys.base_prefix/lib for its subprocess loader path. This is a loader
 configuration correction, not a skipped version or link check.
+
+The optional FreeRTOS kernel is V11.2.0 at
+0adc196d4bd52a2d91102b525b0aafc1e14a2386, acquired with USP_FETCH_FREERTOS=1.
+It uses the existing GNU unknown-elf GCC 14.2.0 toolchain and unmodified upstream
+RISC-V port. The software BSP has an independent resource/adapter identity and
+binds its ELF to the validated hardware generation manifest. See freertos.md for
+the real preemption/IRQ and negative guest acceptance contract.

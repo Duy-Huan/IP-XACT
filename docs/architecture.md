@@ -103,3 +103,11 @@ Generation manifests bind compiler module, template, catalog, input and output
 hashes. Build records bind binary/ELF identities to that manifest. Old outputs must
 be regenerated when any input identity changes. All run artifacts remain ignored
 and may contain private inputs; hosted CI only executes original synthetic fixtures.
+
+freertos.py independently generates and builds the original static-allocation BSP
+against the unmodified source-pinned upstream RV64 port. It consumes verified
+soc.h/memory.ld and the same timer/IRQ IR, then binds the software resources,
+adapter and ELF in freertos-build.json. It does not change the hardware generation
+manifest when adding this optional software build. Its runner verifies both
+software and QEMU identities, captures real tick/preemption/PLIC evidence and
+cleans up owned native processes on timeout or cancellation.

@@ -18,6 +18,9 @@ fetch() {
 }
 fetch qemu https://github.com/qemu/qemu.git v10.0.0 7c949c53e936aa3a658d84ab53bae5cadaa5d59c
 fetch zephyr https://github.com/zephyrproject-rtos/zephyr.git v4.2.0 413b789deb391d3a37d06b463288a5fe765ee57e
+if [[ "${USP_FETCH_FREERTOS:-0}" == 1 ]]; then
+    fetch freertos https://github.com/FreeRTOS/FreeRTOS-Kernel.git V11.2.0 0adc196d4bd52a2d91102b525b0aafc1e14a2386
+fi
 if [[ "${USP_FETCH_LINUX:-0}" == 1 ]]; then
     fetch linux https://github.com/torvalds/linux.git v6.12 adc218676eef25575469234709c2d87185ca223a
     fetch opensbi https://github.com/riscv-software-src/opensbi.git v1.6 bd613dd92113f683052acfb23d9dc8ba60029e0a

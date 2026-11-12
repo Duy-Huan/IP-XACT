@@ -1,0 +1,25 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+OUTPUT_ARCH(riscv)
+ENTRY(_start)
+INCLUDE memory.ld
+SECTIONS {
+    . = ORIGIN(RAM);
+    .text : { KEEP(*(.text.init)) *(.text .text.*) } > RAM
+    .rodata : { *(.rodata .rodata.* .srodata .srodata.*) } > RAM
+    .data : {
+        . = ALIGN(16);
+        __global_pointer$$ = . + 0x800;
+        *(.data .data.* .sdata .sdata.*)
+    } > RAM
+    .bss (NOLOAD) : {
+        . = ALIGN(16);
+        __bss_start = .;
+        *(.bss .bss.* .sbss .sbss.*) *(COMMON)
+        . = ALIGN(16);
+        __bss_end = .;
+    } > RAM
+    .stack (NOLOAD) : { . = ALIGN(16); . += 16384; __stack_top = .; } > RAM
+    /DISCARD/ : { *(.comment .note .note.* .eh_frame .eh_frame.*) }
+}
+ASSERT(_start == $entry, "FreeRTOS entry differs from IR")
+ASSERT(__stack_top <= ORIGIN(RAM) + LENGTH(RAM), "FreeRTOS exceeds RAM")

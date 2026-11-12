@@ -7,7 +7,8 @@ execution with evidence. The master-spec objective and development rules are in
 
 The implemented reference path generates and compiles an RV64 machine, generates
 an external Zephyr board, builds Zephyr and checks real CLINT timer and UART/PLIC
-interrupts. A separate OpenSBI/Linux path boots an original initramfs. A second
+interrupts. A FreeRTOS BSP verifies actual tick preemption, saved registers and
+UART/PLIC task notification. A separate OpenSBI/Linux path boots an original initramfs. A second
 profile connects guest MMIO/IRQ to real SystemC TLM or an OpenTitan FIFO compiled
 with Verilator. These are constrained, tested profiles, not arbitrary SoC support.
 
@@ -24,7 +25,7 @@ export CROSS_COMPILE=riscv64-unknown-elf-
 bash scripts/bringup.sh
 ```
 
-Set USP_FETCH_LINUX=1 or USP_FETCH_MODELS=1 during explicit dependency acquisition
+Set USP_FETCH_LINUX=1, USP_FETCH_MODELS=1 or USP_FETCH_FREERTOS=1 during explicit dependency acquisition
 for the additional sources. Normal generation and simulation do not download
 workloads. QEMU's first Meson configuration fetches three immutable wrap-git
 subprojects; those acquisition steps are documented with the upstream pins.
@@ -56,6 +57,7 @@ old evidence is not overwritten. Failed guests/timeouts remain failed results.
 - [Generated QEMU/Zephyr reference](docs/examples/rv64-minimal.md)
 - [SystemC/OpenTitan RTL bridge](docs/examples/rv64-hybrid.md)
 - [Shared gem5 SE workload](docs/gem5-se.md)
+- [FreeRTOS preemption and interrupt acceptance](docs/freertos.md)
 - [Firmware, Linux, Yocto and RTOS](docs/firmware-and-os.md)
 - [Development, CI and promotion](docs/development.md)
 - [Cloud startup](docs/cloud-environment.md)

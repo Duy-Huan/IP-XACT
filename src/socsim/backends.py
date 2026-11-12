@@ -7,7 +7,7 @@ CAPABILITIES = {
     "qemu": {
         "status": "implemented",
         "fidelity": "functional",
-        "scope": "legacy virt smoke and generated RV64 machine; Zephyr and Linux direct boot",
+        "scope": "legacy virt smoke; generated RV64 machine with Zephyr, FreeRTOS and Linux",
     },
     "gem5": {
         "status": "experimental",

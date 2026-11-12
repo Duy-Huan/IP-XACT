@@ -51,3 +51,9 @@ bare-metal linker. SystemC/Verilator versions and public source pins are checked
 BitBake user namespaces may require execution outside the command sandbox; never
 change host security settings or disable its sanity checks. Preserve explicit
 blocked status when downloads are denied, and finish independent validation.
+
+For the selected FreeRTOS profile set USP_FETCH_FREERTOS=1 during explicit source
+acquisition, then run scripts/freertos_bringup.sh after the custom QEMU build. It
+uses the existing unknown-elf compiler, generates the software BSP and tests real
+preemption, registers, timer/PLIC IRQ and negative guests. See docs/freertos.md;
+do not treat other RTOS products or untested FreeRTOS drivers as implemented.

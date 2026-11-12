@@ -1,59 +1,53 @@
 # Firmware and software bring-up
 
-## Implemented: RV64 bare-metal
+All supported software paths use real guest execution and record raw serial,
+return code and artifact identity. Keep proprietary firmware and run bundles
+outside Git. Each backend/OS acceptance has its own scope.
 
-`scripts/build_firmware.sh` builds `boot.S` with an external RISC-V ELF toolchain,
-no C runtime and the example linker at 0x80000000. It polls NS16550 transmit-ready,
-writes `SOCSIM_BOOT_OK`, then writes the SiFive success finisher. The runner uses
-`-bios none`, no OpenSBI/bootloader and one hart. Integration regression also builds
-a nonterminating guest and a guest writing the failure finisher. Their expected
-failure outcomes test timeout cleanup and real simulator exit handling.
+## RV64 bare-metal compatibility path
 
-These tests cover CPU execution, RAM/ELF loading, UART access and finisher exit.
-They do not cover interrupts, multitasking, Linux, DMA, secure boot or timing.
-`socsim run` currently expects the smoke marker and finisher contract; a generic
-workload acceptance mechanism is future work.
+`scripts/build_firmware.sh` builds original `boot.S` with an external RISC-V ELF
+toolchain, no C runtime and an entry at 0x80000000. The legacy virt runner polls
+NS16550 transmit-ready, requires `SOCSIM_BOOT_OK` and a success finisher. Regression
+also executes a nonterminating guest and a failure-finisher guest, checking timeout
+cleanup and simulator exit classification. It does not establish OS/IRQ behavior.
 
-## Zephyr and RTOS integration contract
+## Generated Zephyr BSP
 
-Zephyr is the first planned RTOS. Pin a supported Zephyr release, west manifest,
-SDK and modules. Generate a board/DTS/Kconfig using the actual validated topology,
-following that release's board format. Build hello_world, then timer/interrupt,
-threading and driver tests. Boot in the selected backend and capture actual guest
-assertions. A DTS file alone is not a BSP validation.
+The custom `usp-rv64-v1` profile generates an external Zephyr 4.2.0 board, DTS,
+Kconfig and original conformance application from the validated hardware IR. The
+real west build boots on the generated machine, with a UART deliberately relocated
+from upstream virt. Acceptance requires guest boot, a CLINT timer ISR, an NS16550
+UART interrupt delivered through PLIC and a success finisher. See
+[rv64-minimal](examples/rv64-minimal.md) for commands and exact source pins.
 
-FreeRTOS needs a specific RISC-V port, timer source, interrupt/trap handler, heap
-and linker contract. For `uOS`, first identify the intended product (for example
-µC/OS-II or µC/OS-III) and its license; do not assume it is Zephyr-compatible or
-redistributable. No external RTOS source is downloaded by the current setup.
+The separate hybrid profile additionally verifies MMIO/readback/PLIC IRQ against
+SystemC TLM and OpenTitan FIFO RTL. It is not a general peripheral bridge. A DTS
+file or a preexisting virt board boot alone does not satisfy either profile.
 
-## Yocto/Linux integration contract
+## FreeRTOS and other RTOS
 
-Use a separate pinned Yocto workspace with exact poky, meta-openembedded and BSP
-layer commits and a selected release series. Generate a real MACHINE/layer contract
-from validated hardware: ISA/ABI/tune, UART console, RAM, IRQ/timer, DTB, kernel and
-image format. Decide OpenSBI/U-Boot handoff and rootfs storage per board. Reuse
-downloads/sstate caches without embedding credentials. Keep large builds outside
-the platform package and size disk/RAM before BitBake builds.
+The selected FreeRTOS Kernel 11.2.0 GCC RISC-V port has a generated RV64 M-mode,
+single-hart BSP with static task storage and no hosted libc/heap. It verifies
+actual tick-driven preemption between two nonyielding tasks, saved-register state,
+and UART/PLIC notification from an ISR to a waiting task. Negative guests exercise
+assertion failure and disabled-timer timeout. See [FreeRTOS](freertos.md) for source
+and compiler pins, commands, evidence and unverified driver/context features.
 
-Acceptance requires a real Linux console/login or self-test, guest device discovery
-and chosen userspace/driver workload. QEMU functional success does not establish
-gem5 FS, Chipyard RTL or OpenTitan platform equivalence. No current Zephyr, RTOS or
-Yocto build/boot is claimed by this release. Secure boot signing, lifecycle and
-anti-rollback require independent negative tests with synthetic development keys.
+For `uOS`, the intended product (for example µC/OS-II or µC/OS-III), its version
+and license still need selection before an integration can be specified. It is not
+assumed to be compatible with Zephyr or freely redistributable. No such source is
+downloaded or runtime support claimed.
 
-## v0.2 verified software path and remaining OS boundary
+## Direct Linux/OpenSBI
 
-The earlier planned-only sections describe v0.1 history. The current custom profile
-has a real generated external Zephyr 4.2.0 board, a west build and real timer/UART
-interrupt checks. See the rv64-minimal guide for actual CLI commands and markers.
-
-The direct Linux path pins Linux 6.12 and OpenSBI 1.6, uses a RISC-V Linux GNU
-compiler/linker, and packages an original static initramfs. It is intentionally
-small: PID 1 runs the same arithmetic/write/exit ELF used by gem5 SE, verifies its
-status, prints USP_LINUX_USERSPACE_OK, then requests poweroff. The earlier direct
-PID-1-only smoke was already observed passing; current shared-workload acceptance
-is independently recorded in each new report.
+Linux 6.12 and OpenSBI 1.6 use the generated RAM/IRQ/timer/UART DTS. A RISC-V Linux
+GNU compiler/linker is required; the bare-metal linker cannot build the vDSO and
+is rejected by a preflight probe. ROM enters OpenSBI in M mode, which starts the
+S-mode kernel and the original initramfs PID 1. PID 1 executes the same static
+arithmetic/write/exit ELF used by gem5 SE, verifies status, emits
+`USP_LINUX_USERSPACE_OK` and requests poweroff. Cross-engine acceptance compares
+the exact ELF hash; it does not imply full hardware/topology equivalence.
 
 ```bash
 export USP_FETCH_LINUX=1
@@ -62,17 +56,20 @@ export CROSS_COMPILE_LINUX=riscv64-linux-gnu-
 bash scripts/linux_bringup.sh
 ```
 
-The generated Yocto meta-usp layer targets scarthgap/Poky 5.0.9, supplies its own
-usp-rv64 machine and generated DTS, a pinned kernel recipe, minimal image and
+## Yocto image: blocked
+
+The generated `meta-usp` layer targets scarthgap/Poky 5.0.9, supplies its own
+`usp-rv64` MACHINE and generated DTS, a pinned kernel recipe, minimal image and
 original console smoke service. It does not inherit qemu virt device topology.
-Layer parsing has been exercised with the target machine, but image build/boot is
-blocked by upstream download policy. It must not be described as a verified Yocto
-image. At least downloads.yoctoproject.org and download.savannah.gnu.org need access;
-additional sources must be diagnosed as BitBake progresses. No checksum, TLS or
-namespace/sanity checks are disabled to make a build pass.
+Parsing has succeeded for the target machine (924 recipes), but the image has not
+been built or booted. Download policy denies at least downloads.yoctoproject.org
+and download.savannah.gnu.org; both were rechecked on 2026-11-12 and returned proxy
+CONNECT 403. Further source requirements must be diagnosed as BitBake progresses.
+Never disable checksum, TLS, namespace or sanity checks to make a build pass.
 
 BitBake parsing required execution outside the command sandbox (user namespaces)
-and process umask 022. The normal source command is not compatible with shell
-nounset, so source oe-init-build-env without set -u. Debian 13 is not a validated
-Poky 5.0 host; retain that warning or use a supported build host for production.
-No FreeRTOS, µC/OS or secure-boot acceptance is claimed yet.
+and process umask 022. Source oe-init-build-env without shell nounset. Debian 13 is
+not a validated Poky 5.0 host; retain that warning or select a supported production
+build host. Reuse downloads/sstate without embedding credentials. Secure boot,
+signing, lifecycle and anti-rollback remain independent work requiring dedicated
+positive and negative tests with synthetic development keys.
