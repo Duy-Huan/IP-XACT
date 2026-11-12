@@ -18,7 +18,8 @@ broader feature completion are tracked separately.
 - [x] Deterministic serialization, overlap/overflow/path/model/IRQ diagnostics.
 - [x] Working validate/elaborate CLI and positive/negative compiler tests.
 - [ ] Recursive component hierarchy and designConfiguration elaboration.
-- [ ] Parameter resolution, constrained expressions and dependency-cycle diagnostics.
+- [x] Bounded unsigned component parameters, instance overrides and cycle diagnostics.
+- [ ] General signed/string/vector parameters and full expression/assertion semantics.
 - [ ] Initiator-specific translations and general bus/clock/reset graphs.
 - [ ] Register/field/access semantics with executable compatible model contracts.
 

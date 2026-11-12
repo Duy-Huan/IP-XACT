@@ -15,7 +15,7 @@
     </componentInstance>
     <componentInstance>
       <instanceName>uart</instanceName>
-      <componentRef vendor="socsim.example" library="reference" name="uart" version="1.0"/>
+      <componentRef vendor="socsim.example" library="reference" name="uart" version="1.0"><configurableElementValues><configurableElementValue referenceId="SPAN">2</configurableElementValue></configurableElementValues></componentRef>
     </componentInstance>
     <componentInstance>
       <instanceName>finisher</instanceName>

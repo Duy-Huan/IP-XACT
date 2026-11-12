@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+Added bounded unsigned component parameter elaboration, dependency resolution,
+per-instance overrides and minimum/maximum checks. Expressions are interpreted
+through a strict bounded operator whitelist. Resolved values are retained in IR;
+the reference UART now requires a real instance override to match its model window.
+General signed/string/vector parameters and hierarchy remain unsupported.
+
 Added strict multi-SoC workspace validation/execution and aggregate evidence
 verification. Seven real OS/engine/hybrid targets now have one repeatable acceptance
 command, with missing artifacts classified ERROR, retained raw logs and explicit

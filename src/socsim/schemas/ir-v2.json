@@ -44,6 +44,24 @@
               ],
               "additionalProperties": false
             }
+          },
+          "parameters": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 18446744073709551615
+                }
+              ],
+              "minItems": 2,
+              "maxItems": 2
+            }
           }
         },
         "required": [

@@ -20,6 +20,7 @@ class Instance:
     name: str
     vlnv: str
     windows: tuple[Window, ...]
+    parameters: tuple[tuple[str, int], ...] = ()
 
 
 @dataclass(frozen=True)
