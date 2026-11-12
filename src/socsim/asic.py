@@ -1,6 +1,7 @@
 """Reference Nangate45 RTL-to-layout flow using pinned, local OpenROAD tools."""
 
 import argparse
+import fcntl
 import json
 import math
 import os
@@ -85,6 +86,55 @@ def run_container(image, mounts, command, cwd, log, timeout=1800):
         )
 
 
+def validate_resume_inputs(out, rtl, sdc, config, image):
+    if (out / "report.json").exists():
+        raise ContractError("completed ASIC output must be verified or rebuilt in a new directory")
+    previous = json.loads((out / "flow.command.json").read_text())
+    args = previous.get("argv")
+    if (
+        not isinstance(args, list)
+        or image not in args
+        or "--name" not in args
+        or previous.get("cwd") != str(out)
+        or not (out / "flow").is_dir()
+        or not (out / "flow").resolve().is_relative_to(out)
+        or args[args.index(image) + 1 : args.index(image) + 3] != ["/bin/bash", "-c"]
+        or f"type=bind,src={out},dst=/work" not in args
+        or digest(inside(out, "input.sv")) != digest(rtl)
+        or digest(inside(out, "constraints.sdc")) != digest(sdc)
+        or inside(out, "config.mk").read_text() != config
+    ):
+        raise ContractError("ASIC resume input/config/image identity mismatch")
+    return previous
+
+
+def require_inactive_container(args):
+    try:
+        name = args[args.index("--name") + 1]
+    except (IndexError, ValueError) as exc:
+        raise ContractError("missing owned container identity") from exc
+    if not isinstance(name, str) or not re.fullmatch(r"usp-asic-[a-f0-9]{32}", name):
+        raise ContractError("invalid owned container identity")
+    result = subprocess.run(
+        [*DOCKER, "inspect", "--format", "{{.State.Running}}", name],
+        capture_output=True,
+        text=True,
+        env=docker_environment(),
+        timeout=10,
+    )
+    if result.returncode == 0:
+        if result.stdout.strip() != "false":
+            raise ContractError("prior ASIC container is still active")
+    elif not (
+        name in result.stderr.lower()
+        and any(
+            message in result.stderr.lower()
+            for message in ("no such object:", "no such container:")
+        )
+    ):
+        raise ContractError("cannot establish prior ASIC container shutdown")
+
+
 def build_asic(
     toolchain,
     out,
@@ -94,7 +144,11 @@ def build_asic(
     models=None,
     frontend="verilog",
     memory_limit_bits=4096,
+    timeout=3600,
+    resume=False,
 ):
+    if type(timeout) is not int or not 60 <= timeout <= 14400:
+        raise ContractError("ASIC timeout must be an integer in 60..14400 seconds")
     if frontend not in {"verilog", "slang"}:
         raise ContractError("unsupported HDL frontend")
     if type(memory_limit_bits) is not int or memory_limit_bits not in {4096, 8192, 16384}:
@@ -118,9 +172,20 @@ def build_asic(
         raise ContractError("missing RTL or constraints input")
     tools = verify_toolchain(toolchain)
     out = out.resolve()
-    out.mkdir(parents=True, exist_ok=False)
-    shutil.copy2(rtl, out / "input.sv")
-    shutil.copy2(sdc, out / "constraints.sdc")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with (out.parent / ("." + out.name + ".asic.lock")).open("w") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise ContractError("ASIC flow is already active") from exc
+        return _build_asic_locked(
+            out, rtl, sdc, top, model, tools, frontend, memory_limit_bits, timeout, resume
+        )
+
+
+def _build_asic_locked(
+    out, rtl, sdc, top, model, tools, frontend, memory_limit_bits, timeout, resume
+):
     image = tools["flat_image_id"]
     config = f"""export DESIGN_NAME = {top}
 export PLATFORM = nangate45
@@ -135,15 +200,37 @@ export PDN_TCL = $(DESIGN_HOME)/nangate45/gcd/grid_strategy-M1-M4-M7.tcl
 export NUM_CORES = 2
 export SYNTH_MEMORY_MAX_BITS = {memory_limit_bits}
 """
-    (out / "config.mk").write_text(config)
     if frontend == "slang":
-        with (out / "config.mk").open("a") as stream:
-            stream.write("export SYNTH_HDL_FRONTEND = slang\n")
+        config += "export SYNTH_HDL_FRONTEND = slang\n"
+    if resume:
+        previous = validate_resume_inputs(out, rtl, sdc, config, image)
+        require_inactive_container(previous["argv"])
+        history = out / "attempts" / uuid.uuid4().hex
+        history.mkdir(parents=True)
+        for name in ("flow.log", "flow.command.json"):
+            if (out / name).exists():
+                shutil.copy2(out / name, history / name)
+        write_json(
+            history / "resume.json",
+            {
+                "source_image": SOURCE_IMAGE,
+                "flat_image_id": image,
+                "input_sha256": digest(out / "input.sv"),
+                "sdc_sha256": digest(out / "constraints.sdc"),
+                "config_sha256": digest(out / "config.mk"),
+                "validation": "same RTL/SDC/config/image; upstream Make resumes incomplete flow",
+            },
+        )
+    else:
+        out.mkdir(parents=True, exist_ok=False)
+        shutil.copy2(rtl, out / "input.sv")
+        shutil.copy2(sdc, out / "constraints.sdc")
+        (out / "config.mk").write_text(config)
     run_container(
         image,
         [(out, "/work")],
-        "set -e; cp -a /OpenROAD-flow-scripts/flow /work/flow; "
-        "ln -s /OpenROAD-flow-scripts/tools /work/tools; "
+        "set -e; mkdir -p /work/flow; cp -a /OpenROAD-flow-scripts/flow/. /work/flow/; "
+        "ln -sfn /OpenROAD-flow-scripts/tools /work/tools; "
         "source /OpenROAD-flow-scripts/env.sh; export FLOW_HOME=/work/flow; "
         "openroad -version; yosys -V; cd /work/flow; "
         f"mkdir -p results/nangate45/{top}/base logs/nangate45/{top}/base "
@@ -151,7 +238,7 @@ export SYNTH_MEMORY_MAX_BITS = {memory_limit_bits}
         "make DESIGN_CONFIG=/work/config.mk -j2",
         out,
         out / "flow.log",
-        3600,
+        timeout,
     )
     results = out / "flow/results/nangate45" / top / "base"
     gds = results / "6_final.gds"
@@ -163,6 +250,13 @@ export SYNTH_MEMORY_MAX_BITS = {memory_limit_bits}
     artifacts.update(
         {name: digest(out / name) for name in ("input.sv", "constraints.sdc", "config.mk")}
     )
+    artifacts.update(
+        {
+            p.relative_to(out).as_posix(): digest(p)
+            for p in sorted((out / "attempts").rglob("*"))
+            if p.is_file()
+        }
+    )
     metrics = {}
     for path in sorted((out / "flow/logs/nangate45" / top / "base").glob("*.json")):
         metrics[path.name] = json.loads(path.read_text())
@@ -172,6 +266,8 @@ export SYNTH_MEMORY_MAX_BITS = {memory_limit_bits}
         "top": top,
         "frontend": frontend,
         "memory_limit_bits": memory_limit_bits,
+        "resumed": resume,
+        "timeout_seconds": timeout,
         "pdk": "nangate45",
         "source_image": SOURCE_IMAGE,
         "flat_image_id": image,
@@ -286,6 +382,8 @@ def main(argv):
     build.add_argument("--top")
     build.add_argument("--frontend", choices=("verilog", "slang"), default="verilog")
     build.add_argument("--memory-limit-bits", type=int, choices=(4096, 8192, 16384), default=4096)
+    build.add_argument("--timeout", type=int, default=3600)
+    build.add_argument("--resume", action="store_true")
     sub.add_parser("verify").add_argument("run_dir", type=Path)
     args = parser.parse_args(argv)
     try:
@@ -301,6 +399,8 @@ def main(argv):
                 args.models,
                 args.frontend,
                 args.memory_limit_bits,
+                args.timeout,
+                args.resume,
             )
         )
         print(json.dumps(result, indent=2))

@@ -115,3 +115,9 @@ build-info evidence. Configuration tampering is rejected. This avoids building
 the unused embedded SystemC kernel; actual SystemC/TLM co-simulation remains in
 its existing source-built processes, with the original native engine binaries
 preserved by extension builds.
+
+OpenROAD jobs now support explicit continuation of matching incomplete outputs
+and bounded configurable timeouts. Resume validates RTL/SDC/configuration/image
+identity, confirms prior container shutdown, locks the output and retains prior
+attempt logs. Native Make continues from its checkpoints; final DRC/STA/GDS and
+mapped-firmware acceptance remain mandatory.
