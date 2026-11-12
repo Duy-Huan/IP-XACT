@@ -1,0 +1,39 @@
+name: Unified QEMU gem5 SystemC SoC
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unified-soc:
+    # Trusted provisioned runner; activation supplies matching pinned source and
+    # native QEMU/Zephyr/SystemC model artifacts for all three public profiles.
+    runs-on: [self-hosted, linux, x64, soc-eda]
+    timeout-minutes: 90
+    env:
+      USP_TOOLCHAIN_ENV: ${{ vars.USP_TOOLCHAIN_ENV }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Build out-of-tree gem5 bridge and execute both CPU engines
+        run: |
+          test -n "$USP_TOOLCHAIN_ENV"
+          source "$USP_TOOLCHAIN_ENV"
+          uv sync --frozen --extra dev --extra bringup --extra models
+          source .venv/bin/activate
+          : "${USP_GEM5_SOURCE:?Provide the pinned clean gem5 checkout}"
+          export USP_UNIFIED_GEM5_BUILD="$PWD/build/unified-gem5-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          usp unified build-gem5 --source "$USP_GEM5_SOURCE" --out "$USP_UNIFIED_GEM5_BUILD" --jobs 2
+          export USP_REQUIRE_UNIFIED=1
+          python -m pytest tests/test_unified.py -v --junitxml=build/unified-junit.xml
+      - name: Upload synthetic regression results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: unified-soc-junit
+          path: build/unified-junit.xml
+          if-no-files-found: ignore
+          retention-days: 7

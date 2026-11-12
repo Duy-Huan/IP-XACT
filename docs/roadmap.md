@@ -11,7 +11,7 @@ Detailed observed status and evidence are maintained in verification-status.md.
 | 2 | Strict catalog/lock and generated compiled custom QEMU machine | Seven-role base, eight-role FIFO and nine-role Chipyard/OpenTitan profiles |
 | 3 | Generated Zephyr BSP, real build, UART and IRQ | CLINT timer ISR and UART→PLIC ISR; original guest conformance application |
 | 4 | Linux userspace and Yocto BSP/image | Direct OpenSBI/Linux path and generated layer; Yocto image fetch policy remains a prerequisite |
-| 5 | Pinned gem5 workload/statistics and cross-engine behavior | Explicit SE workload adapter; not a full-system SoC board |
+| 5 | Pinned gem5 workload/statistics and cross-engine behavior | SE workload and explicit full-system Zephyr/SystemC GCD/GPIO board; Linux full-system remains unverified |
 | 6 | Real SystemC/RTL MMIO/IRQ bridge with time contract | FIFO plus actual Chipyard GCD generation and OpenTitan GPIO/TL-UL; deterministic replay; no DMA/coherence |
 | 7 | Versioned release, support matrix, regression and repeatable evidence | Multi-SoC workspace, evidence integrity, CLI/native CI; release and optional API/IDE still open |
 
@@ -47,3 +47,10 @@ Both complete test-chip tops reach Nangate45 GDS with zero router DRC and passin
 reference setup/hold timing. Same-firmware RTL/mapped-netlist acceptance is a
 separate required gate. See rtl-testchips.md; this does not change the larger
 architecture inventory or close its remaining heterogeneous/signoff requirements.
+
+The current emulator priority is one virtual SoC, as clarified by the owner:
+actual Chipyard/OpenTitan peripherals share a SystemC process and bind into the
+selected QEMU or gem5 CPU engine. The same Zephyr ELF now passes real MMIO/PLIC
+IRQ acceptance on both engines for rv64-ips and both system bring-up maps. See
+unified-soc.md. This functional integration is distinct from independent engine
+experiments and from the separate CPU-owned RTL/GDS profiles.

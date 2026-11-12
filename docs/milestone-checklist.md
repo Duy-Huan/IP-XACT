@@ -56,7 +56,9 @@ The image deliverable remains blocked. Direct Linux does not close the Yocto ite
 - [x] Pinned SE adapter, explicit CPU/memory assumptions and real raw statistics.
 - [x] The same Linux-ABI ELF runs under QEMU/Linux and gem5 with matching hash.
 - [ ] Broader registry, configurable cache/memory experiments and calibrated models.
-- [ ] Full-system board/OS coverage is an additional unsupported capability.
+- [x] Selected full-system Zephyr board with actual SystemC GCD/GPIO MMIO and PLIC IRQ.
+- [x] Same IR/ELF/model and IP command/data acceptance on QEMU/gem5 for three maps.
+- [ ] Full-system Linux and broader board/OS coverage remain unsupported.
 
 The shared-workload exit is verified for SE; complete hardware equivalence is not.
 

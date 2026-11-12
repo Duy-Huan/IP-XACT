@@ -19,6 +19,10 @@ def main(argv=None) -> int:
     argv = [argument for argument in argv if argument != "--json"]
     if argv[:2] == ["ipxact", "validate"]:
         argv = argv[1:]
+    if argv and argv[0] == "unified":
+        from .unified import main as unified_main
+
+        return unified_main(argv[1:])
     if argv and argv[0] == "noc":
         from .noc import main as noc_main
 
@@ -49,6 +53,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="usp (socsim compatibility)")
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("unified", help="one SoC/ELF with SystemC IPs on QEMU or gem5; use --help")
     commands.add_parser("backends", help="show implemented and planned capabilities")
     commands.add_parser("doctor", help="inspect runtime tools without installing")
     commands.add_parser("workspace", help="validate/run/verify multi-SoC acceptance; use --help")

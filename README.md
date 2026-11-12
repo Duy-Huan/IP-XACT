@@ -68,6 +68,7 @@ old evidence is not overwritten. Failed guests/timeouts remain failed results.
 - [Generated QEMU/Zephyr reference](docs/examples/rv64-minimal.md)
 - [SystemC/OpenTitan RTL bridge](docs/examples/rv64-hybrid.md)
 - [Chipyard GCD and OpenTitan GPIO](docs/examples/rv64-ips.md)
+- [One SoC/Zephyr ELF with SystemC IPs on QEMU or gem5](docs/unified-soc.md)
 - [Full Rocket/Earlgrey integration boundary](docs/full-soc-integration.md)
 - [Shared gem5 SE workload](docs/gem5-se.md)
 - [FreeRTOS preemption and interrupt acceptance](docs/freertos.md)

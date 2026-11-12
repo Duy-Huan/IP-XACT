@@ -11,7 +11,7 @@ not a claim that every future standard/backend feature is implemented.
 | 2 models/QEMU | Verified selected profiles | Versioned exact catalog/lock; compiled C machine; ROM/ELF reset and relocated UART; separate FIFO and nine-role source IP profiles |
 | 3 Zephyr MVP and FreeRTOS extension | Verified selected profiles | Generated Zephyr board/DTS with real timer/PLIC ISR; FreeRTOS static BSP with tick preemption, saved registers and UART/PLIC notification |
 | 4 Linux/Yocto | Direct Linux verified; Yocto image blocked | OpenSBI + Linux boot to original userspace; generated meta-usp parsed successfully (924 recipes, MACHINE=usp-rv64); upstream dependency fetch rejected by proxy |
-| 5 gem5 | Verified SE workload subset | Same exact RV64 ELF executed under QEMU/Linux and gem5; guest exit zero and real raw stats; full-system board remains unsupported |
+| 5 gem5 | Verified SE and selected full-system bridge | Same Linux-ABI ELF on QEMU/Linux and gem5 SE; same Zephyr ELF on QEMU/gem5 full-system with real SystemC GCD/GPIO MMIO/PLIC IRQ; full-system Linux remains unverified |
 | 6 SystemC/RTL/hybrid | Verified selected IPs | FIFO TLM/RTL, actual Chipyard GCD Chisel generation, complete OpenTitan GPIO/TL-UL peripheral, guest PLIC IRQ and deterministic replay; no full Rocket/Earlgrey/DMA/coherence claim |
 | 7 maturity | Partial; multi-SoC gate verified | Ten-target workspace execution and artifact-integrity verification, native CI and support docs; release/hosted checks/IDE still open |
 
@@ -26,7 +26,7 @@ QEMU/Linux and gem5 SE with the same hash; the acceptance scopes remain distinct
 SystemC and RTL hybrid runs additionally require USP_TLM_RTL_IRQ_OK and independently
 verify trace write/readback/IRQ state transitions. Repeated RTL traces matched.
 
-Observed full local gate on 2026-11-12: **223 tests passed, zero failed/skipped**, including the
+Observed full local gate on 2026-11-12: **234 tests passed, zero failed/skipped**, including the
 shared QEMU/Linux and gem5 ELF test, both TLM/RTL modes, and real CLI SIGTERM
 cleanup of its owned guest process. Raw gem5 observations
 include simInsts=3012 and simTicks=80400000 under explicitly uncalibrated assumptions;
@@ -138,7 +138,7 @@ This does not claim publication or validation after a fresh environment restore.
 
 Hosted GitHub Actions completion and main protection are distinct from local tests.
 Full Chipyard/Rocket SoC generation, complete OpenTitan/security integration, µC/OS,
-general IP-XACT wiring/translation and full-system gem5 are not implemented.
+general IP-XACT wiring/translation and full-system Linux on gem5 are not implemented.
 No silicon/security guarantee or calibrated performance equivalence is implied.
 
 ## AI_SOC/AIZ_SOC and OpenROAD extension
@@ -179,10 +179,40 @@ fixtures, not completion of the original 46/37-instance designs. Final STA still
 reports 14/11 max-capacitance violations; no production/electrical/PVT closure,
 live Garnet interconnect, RTOS on these RTL CPUs or manufacturing signoff is claimed.
 
-The complete local native gate passed all 223 tests in 84.82 seconds, including
+Before the unified emulator extension, the local native gate passed all 223 tests in 84.82 seconds, including
 both test-chip acceptances and the existing ten-target workspace. Static typing,
 lint/format and all 26 documentation checks passed. A separately installed wheel
 contained all six test-chip resources, executed both actual RTL and mapped
 binaries with two boots each and verified both portable bundles. That packaging
 check reused the actual compiled artifacts; it does not claim a second source
 or physical build. Hosted EDA execution remains unobserved.
+
+## Unified QEMU/gem5/SystemC virtual SoC
+
+Owner clarification prioritizes an actual unified guest system, not independent
+model demonstrations. An out-of-tree gem5 v24.1.0.3 extension now binds CPU MMIO
+to the same owned SystemC/TLM/Verilator model process used by QEMU. Actual Chipyard
+GCD and OpenTitan GPIO coexist in that process, with their real IRQ levels routed
+to the selected engine's PLIC and guest ISR. CPU/RAM remain owned by the selected
+engine. Reset boots through an original read-only RV64 trampoline on gem5.
+
+rv64-ips, AI_SOC/bringup and AIZ_SOC/bringup all passed both engines. Within each
+profile, exactly the same Zephyr ELF, IR and native RTL model binary were used.
+Guest timer/UART/PLIC and GCD/GPIO interrupt checks passed. Both engines produced
+the same IP command/data sequence and GCD results 6/6/255/1. Observed raw trace
+lengths were 172 transactions on each engine for each profile. The gem5 run recorded
+37706 instructions and 21132470000 ticks under its explicit uncalibrated model.
+
+Portable verified evidence is results/unified-rv64-ips-verified,
+results/unified-AI_SOC-verified and results/unified-AIZ_SOC-verified. The 11 new
+tests passed, including real short-limit failure and modified-evidence rejection.
+The full local gate passed **234 tests, no skips/failures**, in 83.89 seconds;
+lint/format, typing and 27 documentation checks passed. A separately installed
+wheel ran and verified the actual two-engine acceptance using the prepared native
+artifacts. Clean upstream source and the original SE executable were preserved.
+
+See unified-soc.md for CLI, bindings, time/reset differences and limitations.
+The native three-profile gate is mandatory in local promotion. The separate manual
+workflow requires a provisioned runner; hosted success remains unobserved. This
+does not bind arbitrary IPs or establish full Rocket/Earlgrey, DMA/coherence,
+asynchronous scheduling, live Garnet, full-system Linux or cycle/timing equivalence.

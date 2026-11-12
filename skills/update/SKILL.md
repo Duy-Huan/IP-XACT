@@ -5,6 +5,12 @@ description: Update platform dependencies and model profiles with reproducible r
 
 # Update workflow
 
+Unified emulator changes must retain one IR/ELF/model contract on QEMU and gem5.
+Read docs/unified-soc.md; execute both IP families in the same SystemC-backed guest
+on each engine, compare actual MMIO/IRQ evidence and preserve the prior SE binary.
+Local promotion requires USP_UNIFIED_GEM5_BUILD/USP_REQUIRE_UNIFIED and the three
+mapped-profile native tests. Independent workloads or RTL/GDS alone are insufficient.
+
 Functional RTL test-chip changes require both exact nine-component profiles to
 pass real CPU firmware, complete-top physical implementation and mapped-netlist
 firmware acceptance. Read docs/rtl-testchips.md. Explicitly rebuild stale native
