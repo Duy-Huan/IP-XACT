@@ -57,3 +57,10 @@ acquisition, then run scripts/freertos_bringup.sh after the custom QEMU build. I
 uses the existing unknown-elf compiler, generates the software BSP and tests real
 preemption, registers, timer/PLIC IRQ and negative guests. See docs/freertos.md;
 do not treat other RTOS products or untested FreeRTOS drivers as implemented.
+
+For the selected Chipyard/OpenTitan IPs, use Java 21, USP_FETCH_CHIPYARD=1 and
+USP_FETCH_MODELS=1 for explicit acquisition. Run setup_chipyard_tools.sh for
+content-verified SBT/CIRCT tools, then source_ips_bringup.sh. Keep Scala caches
+writable and consume the exact artifact lock. This generates actual Chipyard GCD
+RTL and builds OpenTitan GPIO/TL-UL; it does not build Rocket or Earlgrey. See the
+rv64-ips guide for ownership, loopback, timing and IRQ contracts.

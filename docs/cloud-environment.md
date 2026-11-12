@@ -88,6 +88,13 @@ bash scripts/hybrid_bringup.sh
 bash scripts/gem5_bringup.sh
 ```
 
+For the selected Chipyard/OpenTitan peripherals, Java 21 is already installed in
+this workspace. After activating the same tools, set USP_FETCH_CHIPYARD=1 and
+USP_FETCH_MODELS=1 for fetch_upstreams.sh, run setup_chipyard_tools.sh, then
+source_ips_bringup.sh. The supported generator downloads use the existing Maven
+Central network preset and fixed artifact hashes. See the rv64-ips guide; this
+does not install or claim a full Chipyard/Rocket or Earlgrey build.
+
 After a prepared environment is restored, only activate `.venv` and
 `env_bringup.sh`, then select the needed commands. Native build directories retain
 valid outputs; installed dependencies do not imply processes are running. QEMU and

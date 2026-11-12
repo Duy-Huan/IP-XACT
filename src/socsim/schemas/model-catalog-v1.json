@@ -133,6 +133,38 @@
       },
       "contract_id": "usp.scfifo.v1",
       "conformance_test": "hybrid-mmio-irq"
+    },
+    {
+      "role": "cygcd",
+      "id": "usp.chipyard.gcd32",
+      "vlnv": "ucb-bar:chipyard:gcd:1.13.0",
+      "version": "1",
+      "backend": "qemu",
+      "profile": "usp-rv64-ips-v1",
+      "source": {
+        "url": "https://github.com/ucb-bar/chipyard",
+        "commit": "69eba860a352343e4ac6b6df0f3638a79a86ec78",
+        "path": "generators/chipyard/src/main/scala/example/GCD.scala",
+        "license": "BSD-3-Clause"
+      },
+      "contract_id": "usp.cygcd.v1",
+      "conformance_test": "test_source_ip_guest_irq_and_replay"
+    },
+    {
+      "role": "otgpio",
+      "id": "usp.opentitan.gpio",
+      "vlnv": "lowrisc:ip:gpio:silver-v5",
+      "version": "1",
+      "backend": "qemu",
+      "profile": "usp-rv64-ips-v1",
+      "source": {
+        "url": "https://github.com/lowRISC/opentitan",
+        "commit": "ed044fc9760bdf9fc075d0015ba1db07fa075355",
+        "path": "hw/ip/gpio/rtl/gpio.sv",
+        "license": "Apache-2.0"
+      },
+      "contract_id": "usp.otgpio.v1",
+      "conformance_test": "test_source_ip_guest_irq_and_replay"
     }
   ]
 }

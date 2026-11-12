@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+Added a nine-role IP-XACT profile with actual Chipyard GCD Chisel/CIRCT generation
+and OpenTitan GPIO/TL-UL RTL. Added source/tool/dependency locks, SystemC transaction
+adapter, two PLIC IRQs, guest vector/readback/W1C checks, host protocol/integrity/
+backpressure/reset checks and deterministic replay. Corrected repeated-level IRQ
+delivery in the new bridge and resolved Zephyr's compiler prefix explicitly in
+both environment and CMake cache. No full Rocket/Earlgrey platform claim is made.
+
 Added a source-pinned FreeRTOS 11.2.0 RV64 M-mode acceptance BSP using the verified
 hardware IR and unmodified upstream port. Actual guest tests cover timer-driven
 preemption, saved-register checks, UART/PLIC FromISR task notification, assertion

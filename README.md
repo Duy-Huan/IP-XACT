@@ -12,6 +12,10 @@ UART/PLIC task notification. A separate OpenSBI/Linux path boots an original ini
 profile connects guest MMIO/IRQ to real SystemC TLM or an OpenTitan FIFO compiled
 with Verilator. These are constrained, tested profiles, not arbitrary SoC support.
 
+The source IP profile additionally compiles Chipyard's actual GCD Chisel core and
+OpenTitan's complete GPIO/TL-UL peripheral, connected to guest MMIO and distinct
+PLIC IRQs. It is a peripheral integration, not a Rocket/Earlgrey full-SoC build.
+
 ## Development setup
 
 Python 3.11+; use the pinned dependencies through uv. Native build prerequisites
@@ -56,6 +60,7 @@ old evidence is not overwritten. Failed guests/timeouts remain failed results.
 - [Create a SoC](docs/creating-soc.md)
 - [Generated QEMU/Zephyr reference](docs/examples/rv64-minimal.md)
 - [SystemC/OpenTitan RTL bridge](docs/examples/rv64-hybrid.md)
+- [Chipyard GCD and OpenTitan GPIO](docs/examples/rv64-ips.md)
 - [Shared gem5 SE workload](docs/gem5-se.md)
 - [FreeRTOS preemption and interrupt acceptance](docs/freertos.md)
 - [Firmware, Linux, Yocto and RTOS](docs/firmware-and-os.md)
@@ -68,7 +73,7 @@ compatibility test. The generated machine uses pinned QEMU 10.0.0 and deliberate
 relocates UART away from virt. The current parser rejects unsupported hierarchy,
 parameters, buses, register fields and views rather than silently discarding them.
 Yocto image completion depends on permitted upstream downloads; consult the phase
-status for observed blockers. Chipyard and generic hardware/security integrations
+status for observed blockers. Full Chipyard/Earlgrey SoCs and generic hardware/security integrations
 remain future work. No calibrated timing or silicon equivalence is claimed.
 
 No internal archive, source or private Git history is included. Examples and

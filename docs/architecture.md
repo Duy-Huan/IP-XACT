@@ -111,3 +111,14 @@ adapter and ELF in freertos-build.json. It does not change the hardware generati
 manifest when adding this optional software build. Its runner verifies both
 software and QEMU identities, captures real tick/preemption/PLIC evidence and
 cleans up owned native processes on timeout or cancellation.
+
+`usp-rv64-ips-v1` has separate exact Chipyard GCD and OpenTitan GPIO roles/VLNVs,
+placements, address windows and unique IRQ routes. ipblocks_codegen.py lowers
+the dual-window QEMU transport and Zephyr device/guest tests; only this profile
+hashes those additional generation templates. ipblocks.py compiles the verbatim
+selected Chipyard Chisel classes and actual OpenTitan GPIO/TL-UL in a separate
+SystemC/Verilator process. It checks the generator dependency content lock and
+captures actual RTL source inputs, generated SV and binary identities. QEMU owns
+CPU/RAM; the native process owns the two peripheral states and advances only on
+transactions. The rv64-ips guide documents the MMIO/IRQ shim, loopback, protocol,
+time annotations, evidence and full-SoC boundaries.
