@@ -1,5 +1,11 @@
 # Development, regression and promotion
 
+The current supported-profile acceptance matrix is workspace.yaml. Run
+`usp workspace test workspace.yaml --out results/<new-id>` and verify the retained
+bundle using `usp workspace verify`. Promotion additionally sets
+USP_REQUIRE_WORKSPACE=1; the real seven-target integration test must pass.
+The milestone-checklist.md ledger explicitly retains uncompleted master items.
+
 Use the existing checkout and branch `dev`; do not create a worktree unless the
 owner requests one. Run `bash scripts/setup.sh`, then activate `.venv`. The setup
 script installs the frozen Python lock and validates the example, without host

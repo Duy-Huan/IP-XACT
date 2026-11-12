@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+Added strict multi-SoC workspace validation/execution and aggregate evidence
+verification. Seven real OS/engine/hybrid targets now have one repeatable acceptance
+command, with missing artifacts classified ERROR, retained raw logs and explicit
+open milestone criteria. The full supported matrix is mandatory in local promotion.
+
 Added a nine-role IP-XACT profile with actual Chipyard GCD Chisel/CIRCT generation
 and OpenTitan GPIO/TL-UL RTL. Added source/tool/dependency locks, SystemC transaction
 adapter, two PLIC IRQs, guest vector/readback/W1C checks, host protocol/integrity/

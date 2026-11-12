@@ -19,6 +19,10 @@ def main(argv=None) -> int:
     argv = [argument for argument in argv if argument != "--json"]
     if argv[:2] == ["ipxact", "validate"]:
         argv = argv[1:]
+    if argv and argv[0] == "workspace":
+        from .workspace import main as workspace_main
+
+        return workspace_main(argv[1:])
     if argv and (
         argv[0] in {"generate", "build", "software", "test", "report", "models", "gem5", "ipblocks"}
         or (argv[0] == "run" and "--generated" in argv)
@@ -31,6 +35,7 @@ def main(argv=None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("backends", help="show implemented and planned capabilities")
     commands.add_parser("doctor", help="inspect runtime tools without installing")
+    commands.add_parser("workspace", help="validate/run/verify multi-SoC acceptance; use --help")
     for extra in ("generate", "build", "software", "test", "report", "models", "gem5", "ipblocks"):
         commands.add_parser(extra, help="custom QEMU/Zephyr lifecycle; use --help")
     for name in ("validate", "elaborate", "plan", "run"):
