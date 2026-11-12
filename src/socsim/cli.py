@@ -19,6 +19,14 @@ def main(argv=None) -> int:
     argv = [argument for argument in argv if argument != "--json"]
     if argv[:2] == ["ipxact", "validate"]:
         argv = argv[1:]
+    if argv and argv[0] == "platform":
+        from .cpu_platform import main as platform_main
+
+        return platform_main(argv[1:])
+    if argv and argv[0] == "layers":
+        from .layers import main as layers_main
+
+        return layers_main(argv[1:])
     if argv and argv[0] == "unified":
         from .unified import main as unified_main
 
@@ -53,6 +61,10 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="usp (socsim compatibility)")
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser(
+        "platform", help="select CPU provider, engine and software workloads; use --help"
+    )
+    commands.add_parser("layers", help="software integration matrix and CPU metrics; use --help")
     commands.add_parser("unified", help="one SoC/ELF with SystemC IPs on QEMU or gem5; use --help")
     commands.add_parser("backends", help="show implemented and planned capabilities")
     commands.add_parser("doctor", help="inspect runtime tools without installing")

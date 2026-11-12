@@ -1,0 +1,13 @@
+# Original reference configuration; a CPU adapter must exist before execution.
+schema_version: '1'
+cpu:
+  provider: gem5
+  model: atomic-simple
+  clock_hz: 1000000000
+engine: gem5
+workloads:
+- baremetal
+- freertos
+- zephyr
+- linux
+- boot-sequence

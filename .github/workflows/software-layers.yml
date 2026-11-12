@@ -1,0 +1,44 @@
+name: Configurable CPU software layers and performance
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  software-layers:
+    runs-on: [self-hosted, linux, x64, soc-eda]
+    timeout-minutes: 180
+    env:
+      USP_TOOLCHAIN_ENV: ${{ vars.USP_TOOLCHAIN_ENV }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Build counters and bridge using provisioned pinned sources
+        run: |
+          test -n "$USP_TOOLCHAIN_ENV"
+          source "$USP_TOOLCHAIN_ENV"
+          uv sync --frozen --extra dev --extra bringup --extra models
+          source .venv/bin/activate
+          : "${USP_QEMU_SOURCE:?Provide pinned QEMU source}"
+          : "${USP_GEM5_SOURCE:?Provide pinned gem5 source}"
+          export USP_COUNTER_BUILD_DIR="$PWD/build/counter-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          export USP_UNIFIED_GEM5_BUILD="$PWD/build/gem5-layers-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          usp layers counter-build --source-qemu "$USP_QEMU_SOURCE" --out "$USP_COUNTER_BUILD_DIR"
+          usp unified build-gem5 --source "$USP_GEM5_SOURCE" --out "$USP_UNIFIED_GEM5_BUILD" --jobs 2
+          for name in rv64-ips AI_SOC AIZ_SOC; do
+            if [[ "$name" == rv64-ips ]]; then project=examples/rv64-ips; else project="systems/$name/bringup"; fi
+            usp layers enable-qemu "$project" --generated "$USP_DUAL_BUILD_ROOT/$name" --source-qemu "$USP_QEMU_SOURCE"
+          done
+          export USP_REQUIRE_SW_LAYERS=1
+          python -m pytest tests/test_layers.py tests/test_cpu_platform.py tests/test_execution_plan.py -v --junitxml=build/software-layers-junit.xml
+      - name: Upload synthetic JUnit only
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: software-layers-junit
+          path: build/software-layers-junit.xml
+          if-no-files-found: ignore
+          retention-days: 7

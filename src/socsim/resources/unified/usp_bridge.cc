@@ -64,9 +64,14 @@ Tick UspBridge::access(PacketPtr pkt, bool writing) {
     fatal_if(pkt->getSize() != 4 || (address & 3),
              "USP bridge accepts aligned 32-bit accesses only");
     if (address >= finish && address < finish + 0x1000) {
-        fatal_if(address != finish || !writing, "USP unsupported finisher access");
-        uint32_t code = pkt->getLE<uint32_t>();
-        exitSimLoop("USP guest finisher", code == 0x5555 ? 0 : 1);
+        fatal_if(address != finish, "USP unsupported finisher access");
+        // Linux's syscon poweroff performs read/modify/write at this register.
+        // Match the supported SiFive test read value, without exiting on reads.
+        if (!writing) pkt->setLE<uint32_t>(0);
+        else {
+            uint32_t code = pkt->getLE<uint32_t>();
+            exitSimLoop("USP guest finisher", code == 0x5555 ? 0 : 1);
+        }
     } else {
         uint32_t offset;
         if (address >= gcd && address < gcd + 0x1000) offset = address - gcd;

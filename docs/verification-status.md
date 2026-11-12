@@ -11,7 +11,7 @@ not a claim that every future standard/backend feature is implemented.
 | 2 models/QEMU | Verified selected profiles | Versioned exact catalog/lock; compiled C machine; ROM/ELF reset and relocated UART; separate FIFO and nine-role source IP profiles |
 | 3 Zephyr MVP and FreeRTOS extension | Verified selected profiles | Generated Zephyr board/DTS with real timer/PLIC ISR; FreeRTOS static BSP with tick preemption, saved registers and UART/PLIC notification |
 | 4 Linux/Yocto | Direct Linux verified; Yocto image blocked | OpenSBI + Linux boot to original userspace; generated meta-usp parsed successfully (924 recipes, MACHINE=usp-rv64); upstream dependency fetch rejected by proxy |
-| 5 gem5 | Verified SE and selected full-system bridge | Same Linux-ABI ELF on QEMU/Linux and gem5 SE; same Zephyr ELF on QEMU/gem5 full-system with real SystemC GCD/GPIO MMIO/PLIC IRQ; full-system Linux remains unverified |
+| 5 gem5 | Verified SE and selected full-system software | Shared Linux-ABI SE ELF; unified source-IP board boots bare-metal/FreeRTOS/Zephyr and OpenSBI/Linux userspace with actual MMU, PLIC and poweroff; broader boards remain unsupported |
 | 6 SystemC/RTL/hybrid | Verified selected IPs | FIFO TLM/RTL, actual Chipyard GCD Chisel generation, complete OpenTitan GPIO/TL-UL peripheral, guest PLIC IRQ and deterministic replay; no full Rocket/Earlgrey/DMA/coherence claim |
 | 7 maturity | Partial; multi-SoC gate verified | Ten-target workspace execution and artifact-integrity verification, native CI and support docs; release/hosted checks/IDE still open |
 
@@ -138,7 +138,7 @@ This does not claim publication or validation after a fresh environment restore.
 
 Hosted GitHub Actions completion and main protection are distinct from local tests.
 Full Chipyard/Rocket SoC generation, complete OpenTitan/security integration, µC/OS,
-general IP-XACT wiring/translation and full-system Linux on gem5 are not implemented.
+general IP-XACT wiring/translation and broader gem5 boards are not implemented.
 No silicon/security guarantee or calibrated performance equivalence is implied.
 
 ## AI_SOC/AIZ_SOC and OpenROAD extension
@@ -216,3 +216,37 @@ The native three-profile gate is mandatory in local promotion. The separate manu
 workflow requires a provisioned runner; hosted success remains unobserved. This
 does not bind arbitrary IPs or establish full Rocket/Earlgrey, DMA/coherence,
 asynchronous scheduling, live Garnet, full-system Linux or cycle/timing equivalence.
+
+## Configurable CPU and software/performance extension
+
+The later software extension now boots full-system Linux on the unified source-IP
+board in gem5. Actual MMU walkers, a loadable verified DTB, ROM/FDT/OpenSBI handoff
+and syscon poweroff read/modify/write are implemented. Bare-metal and FreeRTOS
+also execute on that board. QEMU binaries for the three source-IP maps were
+explicitly rebuilt with plugin support and their real build records refreshed.
+
+All five layer checks (bare-metal, FreeRTOS, Zephyr, Linux, boot sequence) passed
+QEMU and gem5 for rv64-ips, AI_SOC/bringup and AIZ_SOC/bringup. Portable matrices
+are results/software-matrix-NAME-verified. Each row retains actual logs/counters,
+software/build hashes and performance meaning. GCD/GPIO drivers are exercised in
+bare-metal and Zephyr; FreeRTOS/Linux custom-IP drivers remain unverified.
+
+YAML configuration selects QEMU rv64/max or gem5 TimingSimple/AtomicSimple and
+arbitrary supported workload subsets. Both alternate models passed every layer.
+QEMU uses actual instruction/data event counts with an explicitly uncalibrated
+uniform-memory cost estimate. Gem5 uses its native committed-instruction/cycle
+statistics. Whole-run CPI includes boot and idle; no ROI/silicon calibration or
+cross-engine hardware timing equivalence is claimed. Unsupported Chipyard/custom
+RTL CPU and cross-ISS combinations report NEEDS_ADAPTER and cannot execute.
+
+The full native gate passed 267 tests without skips in 512.44 seconds before the
+additional immutable-plan checks were added. That gate included all software-layer
+and alternate-CPU execution. Final promotion repeats the required current suite.
+The immutable execution plan adds explicit owners, time domains and address/IRQ
+routes; actual bridge traces check order, routing and annotated-time monotonicity.
+
+Nine research sources are indexed under ref/. All initial requests were denied
+by the proxy at CONNECT 403; none was downloaded/read. A network draft adding the
+five source domains was saved, preserving prior domains. User Review/Save/Publish
+and fresh successful requests remain prerequisites. No paper conclusions or
+scholarly novelty claims are inferred from this blocked retrieval.

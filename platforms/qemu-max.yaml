@@ -1,0 +1,16 @@
+# Original reference configuration; a CPU adapter must exist before execution.
+schema_version: '1'
+cpu:
+  provider: qemu
+  model: max
+  clock_hz: 1000000000
+engine: qemu
+workloads:
+- baremetal
+- freertos
+- zephyr
+- linux
+- boot-sequence
+qemu_cost_model:
+  base_cpi: 1.0
+  memory_extra_cycles: 1.0

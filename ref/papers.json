@@ -1,0 +1,158 @@
+{
+  "schema_version": "1",
+  "papers": [
+    {
+      "id": "arxiv-2606.27350",
+      "status": "BLOCKED_NETWORK",
+      "download_url": "https://arxiv.org/pdf/2606.27350",
+      "requested_url": "https://arxiv.org/pdf/2606.27350",
+      "read_status": "NOT_READ",
+      "title": null,
+      "license": "NOT_VERIFIED",
+      "retrieved_at": null,
+      "file": "papers/arxiv-2606.27350.pdf",
+      "last_attempt": {
+        "date": "2026-11-12",
+        "http_status": "000",
+        "curl_returncode": 56,
+        "error": "CONNECT tunnel failed, response 403"
+      }
+    },
+    {
+      "id": "electronics-15-21-4967",
+      "status": "BLOCKED_NETWORK",
+      "download_url": "https://www.mdpi.com/2079-9292/15/21/4967/pdf",
+      "requested_url": "https://www.mdpi.com/2079-9292/15/21/4967",
+      "read_status": "NOT_READ",
+      "title": null,
+      "license": "NOT_VERIFIED",
+      "retrieved_at": null,
+      "file": "papers/electronics-15-21-4967.pdf",
+      "last_attempt": {
+        "date": "2026-11-12",
+        "http_status": "000",
+        "curl_returncode": 56,
+        "error": "CONNECT tunnel failed, response 403"
+      }
+    },
+    {
+      "id": "arxiv-2611.02023v1",
+      "status": "BLOCKED_NETWORK",
+      "download_url": "https://arxiv.org/pdf/2611.02023v1",
+      "requested_url": "https://arxiv.org/pdf/2611.02023v1",
+      "read_status": "NOT_READ",
+      "title": null,
+      "license": "NOT_VERIFIED",
+      "retrieved_at": null,
+      "file": "papers/arxiv-2611.02023v1.pdf",
+      "last_attempt": {
+        "date": "2026-11-12",
+        "http_status": "000",
+        "curl_returncode": 56,
+        "error": "CONNECT tunnel failed, response 403"
+      }
+    },
+    {
+      "id": "ieee-11539069",
+      "status": "BLOCKED_NETWORK",
+      "download_url": "https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=11539069",
+      "requested_url": "https://ieeexplore.ieee.org/document/11539069",
+      "read_status": "NOT_READ",
+      "title": null,
+      "license": "NOT_VERIFIED",
+      "retrieved_at": null,
+      "file": "papers/ieee-11539069.pdf",
+      "last_attempt": {
+        "date": "2026-11-12",
+        "http_status": "000",
+        "curl_returncode": 56,
+        "error": "CONNECT tunnel failed, response 403"
+      }
+    },
+    {
+      "id": "arxiv-2407.20537",
+      "status": "BLOCKED_NETWORK",
+      "download_url": "https://arxiv.org/pdf/2407.20537",
+      "requested_url": "https://arxiv.org/pdf/2407.20537",
+      "read_status": "NOT_READ",
+      "title": null,
+      "license": "NOT_VERIFIED",
+      "retrieved_at": null,
+      "file": "papers/arxiv-2407.20537.pdf",
+      "last_attempt": {
+        "date": "2026-11-12",
+        "http_status": "000",
+        "curl_returncode": 56,
+        "error": "CONNECT tunnel failed, response 403"
+      }
+    },
+    {
+      "id": "arxiv-2005.02506",
+      "status": "BLOCKED_NETWORK",
+      "download_url": "https://arxiv.org/pdf/2005.02506",
+      "requested_url": "https://arxiv.org/pdf/2005.02506",
+      "read_status": "NOT_READ",
+      "title": null,
+      "license": "NOT_VERIFIED",
+      "retrieved_at": null,
+      "file": "papers/arxiv-2005.02506.pdf",
+      "last_attempt": {
+        "date": "2026-11-12",
+        "http_status": "000",
+        "curl_returncode": 56,
+        "error": "CONNECT tunnel failed, response 403"
+      }
+    },
+    {
+      "id": "dvcon-uml-ipxact-systemc",
+      "status": "BLOCKED_NETWORK",
+      "download_url": "https://dvcon-proceedings.org/wp-content/uploads/rapid-virtual-prototype-model-development-using-uml-and-ip-xact-systemc-code-generation.pdf",
+      "requested_url": "https://dvcon-proceedings.org/wp-content/uploads/rapid-virtual-prototype-model-development-using-uml-and-ip-xact-systemc-code-generation.pdf",
+      "read_status": "NOT_READ",
+      "title": null,
+      "license": "NOT_VERIFIED",
+      "retrieved_at": null,
+      "file": "papers/dvcon-uml-ipxact-systemc.pdf",
+      "last_attempt": {
+        "date": "2026-11-12",
+        "http_status": "000",
+        "curl_returncode": 56,
+        "error": "CONNECT tunnel failed, response 403"
+      }
+    },
+    {
+      "id": "cern-2927327",
+      "status": "BLOCKED_NETWORK",
+      "download_url": "https://cds.cern.ch/record/2927327/files/document.pdf",
+      "requested_url": "https://cds.cern.ch/record/2927327/files/document.pdf",
+      "read_status": "NOT_READ",
+      "title": null,
+      "license": "NOT_VERIFIED",
+      "retrieved_at": null,
+      "file": "papers/cern-2927327.pdf",
+      "last_attempt": {
+        "date": "2026-11-12",
+        "http_status": "000",
+        "curl_returncode": 56,
+        "error": "CONNECT tunnel failed, response 403"
+      }
+    },
+    {
+      "id": "arxiv-2406.11558v1",
+      "status": "BLOCKED_NETWORK",
+      "download_url": "https://arxiv.org/pdf/2406.11558v1",
+      "requested_url": "https://arxiv.org/pdf/2406.11558v1",
+      "read_status": "NOT_READ",
+      "title": null,
+      "license": "NOT_VERIFIED",
+      "retrieved_at": null,
+      "file": "papers/arxiv-2406.11558v1.pdf",
+      "last_attempt": {
+        "date": "2026-11-12",
+        "http_status": "000",
+        "curl_returncode": 56,
+        "error": "CONNECT tunnel failed, response 403"
+      }
+    }
+  ]
+}
