@@ -5,6 +5,18 @@ description: Update platform dependencies and model profiles with reproducible r
 
 # Update workflow
 
+OpenROAD changes must preserve the immutable source OCI/local image identities
+and reference PDK scope. Read docs/openroad.md, run an actual RTL-to-GDS job,
+inspect final setup/hold TNS/slack and detailed-route DRC, then verify artifact
+integrity. Local promotion requires USP_ASIC_BUILD_DIR/USP_REQUIRE_ASIC. Do not
+report GDS alone as foundry signoff or a complete AI_SOC/AIZ_SOC implementation.
+
+AI_SOC/AIZ_SOC changes must validate their complete architecture inventories and
+run each explicitly scoped bring-up, independent Garnet experiment and Yosys GCD
+synthesis/equivalence. Read docs/dual-soc.md; full-system requests remain BLOCKED
+until heterogeneous execution, live interconnect and full RTL/ASIC requirements
+have actual acceptance. Do not close those items using the bring-up subset.
+
 Register/field changes must retain explicit access and volatile metadata, reject
 unsupported side effects and verify the selected executable model contract. Read
 docs/registers.md and rerun the real source-IP guest using generated headers.
@@ -12,7 +24,7 @@ Regenerate/rebuild all affected identity-bound outputs; do not hand-edit manifes
 
 Structural hierarchy changes must preserve full leaf paths and explicit aliases,
 reject cycle/view/reference/placement ambiguity, and pass the configured hierarchy
-native Zephyr boot in the eight-target workspace. See docs/examples/rv64-hierarchy.md
+native Zephyr boot in the ten-target workspace. See docs/examples/rv64-hierarchy.md
 for the bounded subset; do not infer parent address translations or wiring.
 
 Parameter compiler changes affect generation identity. Read docs/parameters.md,
@@ -21,7 +33,7 @@ then regenerate and explicitly rebuild the affected native profiles. Keep the
 supported unsigned subset distinct from full IEEE expression semantics.
 
 For full supported-profile acceptance, also run the checked-in workspace.yaml
-through usp workspace test/verify. Local promotion requires the real eight-target
+through usp workspace test/verify. Local promotion requires the real ten-target
 workspace test. Consult docs/milestone-checklist.md; never translate selected
 matrix success into full master completion or close unimplemented deliverables.
 

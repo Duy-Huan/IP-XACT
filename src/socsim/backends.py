@@ -11,7 +11,7 @@ CAPABILITIES = {
     },
     "gem5": {
         "status": "experimental",
-        "scope": "explicit RISC-V SE workload adapter; no FS board claim",
+        "scope": "RISC-V SE and separate Garnet mesh experiments; no live hybrid/FS board claim",
     },
     "chipyard": {
         "status": "implemented-subset",
@@ -27,7 +27,11 @@ CAPABILITIES = {
     },
     "verilator": {
         "status": "implemented-subset",
-        "scope": "selected OpenTitan FIFO via SystemC bridge",
+        "scope": "OpenTitan FIFO/GPIO and generated Chipyard GCD via SystemC bridges",
+    },
+    "openroad": {
+        "status": "implemented-reference",
+        "scope": "RTL top + SDC to Nangate45 GDS; reference checks, no full-SoC/foundry signoff",
     },
 }
 

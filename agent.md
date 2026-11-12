@@ -136,3 +136,21 @@ signature/TLS verification and confidential input handling.
 
 Current acceptance scope and gaps live in `docs/roadmap.md`. Read and update that
 file instead of treating a future objective as an already working feature.
+
+## 7. Owner dual-SoC direction, 2026-11-12
+
+Use AI_SOC and AIZ_SOC as the only system names for the new reference-derived
+designs. Both use RISC-V. Do not commit the reference image or its original names.
+Prefer public Chipyard/OpenTitan models and gem5 network models. The requested
+delivery includes emulator, firmware/OS, RTL synthesis and ASIC implementation
+where the sources, tools and technology contracts support it. Keep full architecture
+targets distinct from executable bring-up subsets. Garnet network experiments are
+not a live RTL NoC or a synthesizable interconnect. Report missing accelerators,
+core integrations, PHYs, full RTL/PDK and physical/signoff stages explicitly; never
+replace them with successful stubs or claim a partial netlist is a complete SoC.
+
+The owner explicitly requested OpenROAD integration for RTL-to-chip flow. Use
+OpenROAD-flow-scripts with pinned public tool/technology inputs, actual layout and
+timing/routing evidence. Reference-library GDS is a supported engineering result;
+production/foundry signoff and full heterogeneous SoC completion require separate
+acceptance and must not be inferred from a successful leaf implementation.

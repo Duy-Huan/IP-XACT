@@ -74,7 +74,7 @@ The selected-IP hybrid exit is verified. Full SoCs are not implied by that exit.
 ## Phase 7: maturity
 
 - [x] Multiple explicit SoC profiles, source/dependency locks and capability guide.
-- [x] Multi-SoC acceptance workspace with eight actual execution targets.
+- [x] Multi-SoC acceptance workspace with ten actual execution targets.
 - [x] Evidence aggregation, artifact hash verification and machine-readable open scope.
 - [x] CLI, development/release scripts and native regression workflow definitions.
 - [ ] Observe hosted required CI checks and verify repository protection settings.
@@ -100,6 +100,22 @@ they are not a digital signature or external certification.
 Output paths must be new. Workspace inputs accept only supported target kinds,
 unique safe names and relative paths confined to the workspace root, including
 resolved symlinks. They cannot specify shell commands. Custom configurations may
-select fewer targets; only the checked-in eight-target matrix is the full current
+select fewer targets; only the checked-in ten-target matrix is the full current
 supported-profile gate. It is mandatory in local promotion. Hosted full-matrix
 execution is an explicit expensive workflow-dispatch job, not a claimed past run.
+
+## AI_SOC / AIZ_SOC extension
+
+- [x] Sanitized names, separate XSD-valid full architecture and explicit bring-up subset.
+- [x] Full architecture inventory: 46/37 instances with explicit candidate source/endpoint mapping.
+- [x] Separate generated QEMU/Zephyr maps and actual Chipyard GCD/OpenTitan GPIO bring-up.
+- [x] Independent 16/8-router Garnet mesh experiments with actual packet statistics.
+- [x] Actual GCD generic synthesis and formal equivalence.
+- [x] Actual GCD Nangate45 mapping/place/CTS/route/GDS with timing/router-DRC checks.
+- [x] Generic self-contained RTL/SDC path exercised through GDS on a public counter fixture.
+- [ ] Full heterogeneous CPU/cache/accelerator/fabric/controller execution.
+- [ ] Live CPU/RTL traffic through Garnet and a verified synthesizable NoC counterpart.
+- [ ] Complete SoC RTL synthesis, PDK mapping and physical/signoff acceptance.
+
+Independent mesh and synthesis acceptance belongs to the scoped system reports,
+not proof that the complete 46/37-instance architectures execute. See dual-soc.md.

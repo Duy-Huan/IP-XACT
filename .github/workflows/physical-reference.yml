@@ -1,0 +1,39 @@
+name: OpenROAD reference implementation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rtl-to-gds:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Install frozen Python environment
+        run: |
+          python3 -m venv .ci-uv
+          .ci-uv/bin/pip install uv==0.13.5
+          .ci-uv/bin/uv sync --frozen --extra dev
+      - name: Prepare immutable local OpenROAD tools
+        run: bash scripts/setup_openroad.sh
+      - name: Implement original public RTL fixture and verify layout evidence
+        run: |
+          .venv/bin/usp asic build --toolchain build/openroad-tools \
+            --rtl tests/rtl/physical_counter.sv --top usp_physical_counter \
+            --sdc tests/rtl/physical_counter.sdc --out build/physical-counter
+          .venv/bin/usp asic verify build/physical-counter
+      - name: Upload public-fixture summary only
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: openroad-reference-summary
+          path: |
+            build/physical-counter/report.json
+            build/physical-counter/report.md
+          if-no-files-found: ignore
+          retention-days: 7

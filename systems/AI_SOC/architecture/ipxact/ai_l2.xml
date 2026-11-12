@@ -1,0 +1,13 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<component xmlns="http://www.accellera.org/XMLSchema/IPXACT/1685-2022">
+  <vendor>socsim.public</vendor>
+  <library>architecture</library>
+  <name>ai_l2</name>
+  <version>1.0</version>
+  <parameters>
+    <parameter parameterId="CAPACITY_BYTES" type="longint" resolve="user" sign="unsigned">
+      <name>CAPACITY_BYTES</name>
+      <value>4194304</value>
+    </parameter>
+  </parameters>
+</component>

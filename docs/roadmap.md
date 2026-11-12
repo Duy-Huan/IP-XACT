@@ -34,3 +34,9 @@ and memory permissions. Security and calibrated performance remain separate work
 Full-board source inspection and the distinct CPU/memory/image ownership contracts
 are recorded in full-soc-integration.md. Its prerequisites are not completed
 builds or acceptance evidence; the full-SoC checklist remains open.
+
+AI_SOC/AIZ_SOC now have explicit complete metadata inventories and separate real
+bring-up configurations. Their supported flow includes independent Garnet mesh
+experiments, GCD generic synthesis/equivalence and a reference Nangate45
+OpenROAD RTL-to-GDS result. See dual-soc.md and openroad.md; this does not close
+the complete heterogeneous CPU/IP/NoC/RTL/ASIC architecture targets.

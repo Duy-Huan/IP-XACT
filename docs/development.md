@@ -3,7 +3,7 @@
 The current supported-profile acceptance matrix is workspace.yaml. Run
 `usp workspace test workspace.yaml --out results/<new-id>` and verify the retained
 bundle using `usp workspace verify`. Promotion additionally sets
-USP_REQUIRE_WORKSPACE=1; the real eight-target integration test must pass.
+USP_REQUIRE_WORKSPACE=1; the real ten-target integration test must pass.
 The milestone-checklist.md ledger explicitly retains uncompleted master items.
 
 Use the existing checkout and branch `dev`; do not create a worktree unless the
@@ -73,3 +73,10 @@ pinned kernel, preserving separate JUnit results.
 The expensive gem5 source-build job is available through workflow_dispatch; it is
 not silently reported as executed by the quick push/PR jobs. Local promotion still
 requires its actual shared-workload integration test with a verified build.
+
+AI_SOC/AIZ_SOC bring-up adds USP_REQUIRE_DUAL_SOC, USP_DUAL_BUILD_ROOT and
+USP_NOC_BUILD_DIR. Local promotion also requires USP_ASIC_BUILD_DIR and sets
+USP_REQUIRE_ASIC=1, checking the actual reference GCD GDS/timing/artifact evidence.
+The separate physical-reference workflow is manually dispatched on a host runner
+with Docker and uses an original public RTL counter, not company source. Hosted
+completion remains unobserved. See docs/openroad.md for the immutable tool setup.

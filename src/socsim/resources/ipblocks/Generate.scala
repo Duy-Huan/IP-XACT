@@ -4,5 +4,6 @@ object Generate extends App {
   circt.stage.ChiselStage.emitSystemVerilogFile(
     new chipyard.example.GCDMMIOChiselModule(32),
     args = Array("--target-dir", "rtl"),
-    firtoolOpts = Array("-disable-all-randomization"))
+    firtoolOpts = Array("-disable-all-randomization",
+      "--lowering-options=disallowLocalVariables"))
 }

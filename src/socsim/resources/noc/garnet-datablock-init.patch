@@ -1,0 +1,12 @@
+diff --git a/src/mem/ruby/protocol/Garnet_standalone-cache.sm b/src/mem/ruby/protocol/Garnet_standalone-cache.sm
+--- a/src/mem/ruby/protocol/Garnet_standalone-cache.sm
++++ b/src/mem/ruby/protocol/Garnet_standalone-cache.sm
+@@ -55,7 +55,7 @@ machine(MachineType:L1Cache, "Garnet_standalone L1 Cache")
+   }
+ 
+   // STRUCTURE DEFINITIONS
+-  DataBlock dummyData;
++  DataBlock dummyData, constructor="m_ruby_system->getBlockSizeBytes()";
+ 
+   // CacheEntry
+   structure(Entry, desc="...", interface="AbstractCacheEntry") {

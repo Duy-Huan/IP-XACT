@@ -1,0 +1,43 @@
+schema_version: '1'
+design: ipxact/design.xml
+models: models.yaml
+toolchain: toolchain.lock.yaml
+placements:
+  app_cpu0: 0
+  app_cpu1: 0
+  app_cpu2: 0
+  app_cpu3: 0
+  rt_cpu0: 0
+  rt_cpu1: 0
+  shared_l2: 0
+  ocm: 268435456
+  tcm: 269484032
+  dram: 2147483648
+  boot_rom: 4096
+  interrupt_controller: 201326592
+  aes: 402653184
+  hash: 402718720
+  bignum: 402784256
+  entropy: 402849792
+  rng: 402915328
+  gpio: 402980864
+  i2c: 403046400
+  spi: 403111936
+  qspi: 403177472
+  uart: 403243008
+  usb: 403308544
+  debug: 403374080
+  lvds: 403439616
+  ethernet: 403505152
+  emmc: 403570688
+  dma: 403636224
+  timer: 403701760
+  watchdog: 403767296
+  reset: 403832832
+  power: 403898368
+  clock: 403963904
+  programmable_fabric: 404029440
+  vector_engine: 404094976
+  vector_l2: 0
+  highspeed_io: 404160512
+profile: architecture-only-v1

@@ -1,0 +1,193 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<design xmlns="http://www.accellera.org/XMLSchema/IPXACT/1685-2022">
+  <vendor>socsim.public</vendor>
+  <library>architecture</library>
+  <name>AI_SOC</name>
+  <version>1.0</version>
+  <componentInstances>
+    <componentInstance>
+      <instanceName>app_cpu0</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="app_cpu0" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>app_cpu1</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="app_cpu1" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>app_cpu2</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="app_cpu2" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>app_cpu3</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="app_cpu3" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>rt_cpu0</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="rt_cpu0" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>rt_cpu1</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="rt_cpu1" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>dsp_cpu0</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="dsp_cpu0" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>dsp_cpu1</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="dsp_cpu1" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>dsp_cpu2</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="dsp_cpu2" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>dsp_cpu3</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="dsp_cpu3" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>shared_l2</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="shared_l2" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>ocm</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="ocm" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>tcm</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="tcm" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>dram</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="dram" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>boot_rom</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="boot_rom" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>interrupt_controller</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="interrupt_controller" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>aes</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="aes" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>hash</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="hash" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>bignum</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="bignum" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>entropy</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="entropy" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>rng</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="rng" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>gpio</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="gpio" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>i2c</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="i2c" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>spi</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="spi" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>qspi</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="qspi" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>uart</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="uart" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>usb</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="usb" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>debug</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="debug" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>lvds</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="lvds" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>ethernet</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="ethernet" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>emmc</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="emmc" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>dma</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="dma" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>timer</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="timer" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>watchdog</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="watchdog" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>reset</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="reset" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>power</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="power" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>clock</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="clock" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>programmable_fabric</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="programmable_fabric" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>dsp_sram</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="dsp_sram" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>ai_engine</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="ai_engine" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>ai_l2</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="ai_l2" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>fec</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="fec" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>fft_ifft</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="fft_ifft" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>ofdm</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="ofdm" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>narrowband</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="narrowband" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>fh_control</instanceName>
+      <componentRef vendor="socsim.public" library="architecture" name="fh_control" version="1.0"/>
+    </componentInstance>
+  </componentInstances>
+</design>

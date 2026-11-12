@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 @pytest.fixture
 def config(tmp_path):
     shutil.copytree(ROOT / "examples", tmp_path / "examples")
+    shutil.copytree(ROOT / "systems", tmp_path / "systems")
     path = tmp_path / "workspace.yaml"
     shutil.copy2(ROOT / "workspace.yaml", path)
     return path
@@ -42,7 +43,7 @@ def test_workspace_rejects_invalid_contract(config, case):
 def test_missing_builds_fail_every_target_without_skip(config, tmp_path):
     result = run_workspace(config, tmp_path / "run")
     assert result["status"] == "FAILED"
-    assert len(result["targets"]) == 8
+    assert len(result["targets"]) == 10
     assert all(r["status"] == "ERROR" for r in result["targets"])
     assert verify_bundle(tmp_path / "run")["full_master_complete"] is False
     with pytest.raises(FileExistsError):
@@ -56,7 +57,7 @@ def test_real_multi_soc_acceptance_and_evidence_integrity(tmp_path):
     out = tmp_path / "acceptance"
     result = run_workspace(ROOT / "workspace.yaml", out)
     assert result["status"] == "PASSED"
-    assert len(result["targets"]) == 8
+    assert len(result["targets"]) == 10
     assert verify_bundle(out)["status"] == "PASSED"
     serial = out / "zephyr/stdout.log"
     original = serial.read_bytes()

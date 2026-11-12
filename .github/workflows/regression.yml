@@ -109,7 +109,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     container: debian:trixie-slim
-    timeout-minutes: 120
+    timeout-minutes: 240
     steps:
       - name: Install full acceptance source-build prerequisites
         run: |
@@ -117,7 +117,7 @@ jobs:
           apt-get install -y --no-install-recommends git ca-certificates python3 python3-venv \
             gcc g++ make pkg-config libglib2.0-dev libpixman-1-dev zlib1g-dev libfdt-dev \
             device-tree-compiler flex bison bc m4 gcc-riscv64-linux-gnu \
-            libsystemc-dev verilator curl openjdk-21-jdk-headless \
+            libsystemc-dev verilator curl openjdk-21-jdk-headless yosys=0.52-2 yosys-abc=0.52-2 \
             binutils-riscv64-linux-gnu gcc-riscv64-unknown-elf=14.2.0+19 \
             binutils-riscv64-unknown-elf=2.44-3+7+b1
           python3 -m venv /opt/ci-uv
@@ -147,6 +147,7 @@ jobs:
           bash scripts/setup_chipyard_tools.sh
           bash scripts/source_ips_bringup.sh
           bash scripts/hierarchy_bringup.sh
+          bash scripts/dual_soc_bringup.sh
           USP_REQUIRE_WORKSPACE=1 .venv/bin/python -m pytest tests/test_workspace.py -v --junitxml=build/workspace-junit.xml
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
@@ -155,5 +156,6 @@ jobs:
           path: |
             build/gem5-junit.xml
             build/workspace-junit.xml
+            build/dual-soc-junit.xml
           if-no-files-found: ignore
           retention-days: 7

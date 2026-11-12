@@ -57,6 +57,8 @@ old evidence is not overwritten. Failed guests/timeouts remain failed results.
 
 - [Verification status and phase exits](docs/verification-status.md)
 - [Milestone checklist and multi-SoC acceptance](docs/milestone-checklist.md)
+- [AI_SOC / AIZ_SOC designs and scoped flow](docs/dual-soc.md)
+- [OpenROAD RTL-to-layout reference flow](docs/openroad.md)
 - [Architecture and supported IP-XACT subset](docs/architecture.md)
 - [Component parameters and safe integer expressions](docs/parameters.md)
 - [Scalar registers and executable model contracts](docs/registers.md)

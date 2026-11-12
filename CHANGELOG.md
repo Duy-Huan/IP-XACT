@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+Integrated pinned OpenROAD-flow-scripts for a self-contained RTL top/SDC or the
+verified Chipyard GCD leaf. Actual Nangate45 implementation produces final GDS,
+netlist, extraction and timing/routing reports. Added artifact/negative timing/DRC
+verification, process cleanup, immutable local image setup and optional physical
+evidence in system acceptance. Reference-layout completion remains distinct from
+full-SoC/foundry signoff.
+
+Added sanitized AI_SOC/AIZ_SOC architecture inventories and separate executable
+bring-up configurations. Added strict system plans, independent gem5 Garnet mesh
+experiments, actual GCD leaf synthesis/equivalence and aggregate evidence checks.
+Full heterogeneous execution/live NoC/full RTL/ASIC requirements remain explicit.
+The supported acceptance workspace now includes ten targets.
+
 Added scalar IP-XACT register/field metadata, explicit access policies, alignment,
 bounds and overlap diagnostics. Declared GCD metadata must match the executable
 shim/RTL contract. Generated register offsets/masks now feed the real Zephyr
