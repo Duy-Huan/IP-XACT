@@ -172,7 +172,7 @@ def test_actual_unchanged_rv64_firmware_is_rejected_before_start():
     with pytest.raises(ContractError, match="RV32"):
         validate_elf(
             load_project(ROOT / "examples/rv64-ips"),
-            Path(os.environ["USP_IP_GENERATED_DIR"]) / "baremetal/firmware.elf",
+            Path(os.environ["USP_IP_GENERATED_DIR"]) / "zephyr-build/zephyr/zephyr.elf",
         )
 
 
