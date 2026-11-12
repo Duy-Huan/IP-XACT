@@ -41,7 +41,7 @@ int main(void) {
  if(bytes!=0xbeef5a00) fail();
  puts_uart("USP_BAREMETAL_MEMORY_OK\n");
  fault_expected=1;
- __asm__ volatile(".option push; .option norvc; lw zero,0(%0); .option pop"::"r"(0x70000000U):"memory");
+ __asm__ volatile(".option push; .option norvc; lw zero,0(%0); .option pop"::"r"(USP_FAULT_ADDRESS):"memory");
  if(fault_expected || fault_hits!=1) fail();
  puts_uart("USP_RTL_BUS_FAULT_OK\n");
  R32(USP_PLIC_BASE+$gcd_irq*4)=1; R32(USP_PLIC_BASE+$gpio_irq*4)=1;

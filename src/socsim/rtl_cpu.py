@@ -84,6 +84,17 @@ def target_ir(project, manifest):
     )
 
 
+def unmapped_test_address(ir):
+    address = 0
+    for w in sorted((w for i in ir.instances for w in i.windows), key=lambda w: w.base):
+        if address + 4 <= w.base:
+            return address
+        address = max(address, (w.base + w.size + 3) & ~3)
+    if address + 4 > 1 << 32:
+        raise ContractError("no aligned unmapped RV32 address for firmware fault test")
+    return address
+
+
 def build_firmware(project, out):
     b = board_contract(project)
     out = out.resolve()
@@ -101,6 +112,7 @@ def build_firmware(project, out):
         (out / name.removesuffix(".in")).write_text(s)
     (out / "soc.h").write_text(
         "#include <stdint.h>\n"
+        + f"#define USP_FAULT_ADDRESS 0x{unmapped_test_address(project.ir):x}U\n"
         + "".join(
             f"#define USP_{n.upper()}_BASE 0x{b[n + '_base']:x}U\n"
             for n in ("uart", "clint", "plic", "finisher", "cygcd", "otgpio")

@@ -10,10 +10,23 @@ from socsim.cpu_platform import load_platform, platform_plan, run_platform, veri
 from socsim.domain import ContractError
 from socsim.ipxact import digest
 from socsim.project import load_project
-from socsim.rtl_cpu import run_cpu, validate_elf, verify_run
+from socsim.rtl_cpu import run_cpu, unmapped_test_address, validate_elf, verify_run
 from socsim.rtl_cpu_build import load_manifest, validate_ports, verify_cpu
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_fault_probe_address_follows_the_hardware_map():
+    from dataclasses import replace
+
+    from socsim.domain import Window
+
+    ir = load_project(ROOT / "examples/rv64-ips").ir
+    instances = tuple(replace(i, windows=(Window("test", 0, 128, 32),)) for i in ir.instances)
+    assert unmapped_test_address(replace(ir, instances=instances)) == 128
+    instances = tuple(replace(i, windows=(Window("test", 0, 1 << 32, 32),)) for i in ir.instances)
+    with pytest.raises(ContractError, match="unmapped"):
+        unmapped_test_address(replace(ir, instances=instances))
 
 
 @pytest.fixture(scope="module")
