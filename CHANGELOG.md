@@ -121,3 +121,8 @@ and bounded configurable timeouts. Resume validates RTL/SDC/configuration/image
 identity, confirms prior container shutdown, locks the output and retains prior
 attempt logs. Native Make continues from its checkpoints; final DRC/STA/GDS and
 mapped-firmware acceptance remain mandatory.
+
+The FreeRTOS preemption fixture now waits for observable progress from both
+workers within a bounded guest-tick interval. Delayed functional-emulator ticks
+can arrive in a burst before worker execution; the minimum timer/preemption,
+register preservation and IRQ acceptance requirements are unchanged.
