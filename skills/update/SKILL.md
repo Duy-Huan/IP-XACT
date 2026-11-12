@@ -5,6 +5,11 @@ description: Update platform dependencies and model profiles with reproducible r
 
 # Update workflow
 
+Register/field changes must retain explicit access and volatile metadata, reject
+unsupported side effects and verify the selected executable model contract. Read
+docs/registers.md and rerun the real source-IP guest using generated headers.
+Regenerate/rebuild all affected identity-bound outputs; do not hand-edit manifests.
+
 Structural hierarchy changes must preserve full leaf paths and explicit aliases,
 reject cycle/view/reference/placement ambiguity, and pass the configured hierarchy
 native Zephyr boot in the eight-target workspace. See docs/examples/rv64-hierarchy.md

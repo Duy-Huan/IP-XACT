@@ -22,7 +22,8 @@ broader feature completion are tracked separately.
 - [x] Bounded unsigned component parameters, instance overrides and cycle diagnostics.
 - [ ] General signed/string/vector parameters and full expression/assertion semantics.
 - [ ] Initiator-specific translations and general bus/clock/reset graphs.
-- [ ] Register/field/access semantics with executable compatible model contracts.
+- [x] Scalar registers/fields, explicit access policies and exact executable GCD model contract.
+- [ ] Register arrays/files, modes, reset/side-effect semantics and broader model contracts.
 
 The selected flat-subset exit is verified. General IP-XACT semantics are incomplete.
 

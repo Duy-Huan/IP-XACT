@@ -7,13 +7,13 @@ not a claim that every future standard/backend feature is implemented.
 | Phase | Status | Actual evidence / remaining boundary |
 |---|---|---|
 | 0 feasibility | Verified selected profile | Exact public QEMU/Zephyr source audit, real generated machine, guest timer/UART/PLIC |
-| 1 compiler/IR | Verified supported subset; broader requirements partial | Official 2022 XSD; bounded structural hierarchy/configured views, component parameters and CPU/IRQ contracts; general translations/buses/register semantics remain unsupported |
+| 1 compiler/IR | Verified supported subset; broader requirements partial | Official 2022 XSD; bounded structural hierarchy/configured views, component parameters, scalar register/field contracts and CPU/IRQ; general translations/buses/register side effects remain unsupported |
 | 2 models/QEMU | Verified selected profiles | Versioned exact catalog/lock; compiled C machine; ROM/ELF reset and relocated UART; separate FIFO and nine-role source IP profiles |
 | 3 Zephyr MVP and FreeRTOS extension | Verified selected profiles | Generated Zephyr board/DTS with real timer/PLIC ISR; FreeRTOS static BSP with tick preemption, saved registers and UART/PLIC notification |
 | 4 Linux/Yocto | Direct Linux verified; Yocto image blocked | OpenSBI + Linux boot to original userspace; generated meta-usp parsed successfully (924 recipes, MACHINE=usp-rv64); upstream dependency fetch rejected by proxy |
 | 5 gem5 | Verified SE workload subset | Same exact RV64 ELF executed under QEMU/Linux and gem5; guest exit zero and real raw stats; full-system board remains unsupported |
 | 6 SystemC/RTL/hybrid | Verified selected IPs | FIFO TLM/RTL, actual Chipyard GCD Chisel generation, complete OpenTitan GPIO/TL-UL peripheral, guest PLIC IRQ and deterministic replay; no full Rocket/Earlgrey/DMA/coherence claim |
-| 7 maturity | Partial; multi-SoC gate verified | Seven-target workspace execution and artifact-integrity verification, native CI and support docs; release/hosted checks/IDE still open |
+| 7 maturity | Partial; multi-SoC gate verified | Eight-target workspace execution and artifact-integrity verification, native CI and support docs; release/hosted checks/IDE still open |
 
 The actual initial MVP sequence is IP-XACT → typed IR → exact binding → generated
 QEMU C → compiled usp-rv64 → generated Zephyr board/DTS → west ELF → real UART,
@@ -26,7 +26,7 @@ QEMU/Linux and gem5 SE with the same hash; the acceptance scopes remain distinct
 SystemC and RTL hybrid runs additionally require USP_TLM_RTL_IRQ_OK and independently
 verify trace write/readback/IRQ state transitions. Repeated RTL traces matched.
 
-Observed full local gate on 2026-11-12: **173 tests passed, zero failed/skipped**, including the
+Observed full local gate on 2026-11-12: **184 tests passed, zero failed/skipped**, including the
 shared QEMU/Linux and gem5 ELF test, both TLM/RTL modes, and real CLI SIGTERM
 cleanup of its owned guest process. Raw gem5 observations
 include simInsts=3012 and simTicks=80400000 under explicitly uncalibrated assumptions;
@@ -57,6 +57,16 @@ The rv64-hierarchy example passes XSD, deterministic/negative import tests and
 actual custom QEMU/Zephyr UART/timer/PLIC boot. A two-wrapper/configuration fixture
 also elaborates correctly. Wrapper parameter propagation, physical ports, wiring
 and general hierarchical address translations remain unsupported.
+
+Scalar register/field metadata now passes bounds/alignment/overlap/access checks
+and exact GCD model conformance before lowering. The generated soc_registers.h
+feeds the real Zephyr GCD driver; all four machines, affected firmware and native
+source IP models were explicitly regenerated/rebuilt. The full native matrix
+passes with that header-driven guest. Eleven new tests cover canonical IR/schema,
+header generation, invalid metadata/model contracts and legacy-backend rejection.
+A newly built, separately installed wheel produced an identical generation
+manifest and passed the real dual-IP guest using the verified native binaries.
+General register side effects, arrays/files and mode-dependent access remain unsupported.
 
 The nine-role source IP profile additionally generates the actual selected
 Chipyard 1.13.0 GCD classes using Chisel 6.5.0/Scala 2.13.12/CIRCT 1.62.0, then

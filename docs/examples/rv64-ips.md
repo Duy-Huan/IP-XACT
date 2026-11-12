@@ -59,6 +59,17 @@ dependency resolution occurs during the selected model build, before compilation
 Normal core tests do not require Java/Chipyard/SystemC. The native promotion gate
 requires actual models and guest builds through USP_REQUIRE_IPS=1.
 
+## IP-XACT register contract
+
+cygcd.xml declares four scalar 32-bit registers and their fields: volatile RO
+status at offset 0, WO x/y at 4/8 and volatile RO result at 12. The importer checks
+metadata consistency and the resolver requires the exact executable shim/RTL
+contract. soc_registers.h is generated from that IR and consumed by the actual
+Zephyr driver for operand/result offsets and the input-ready mask. Changing the
+XML cannot silently redefine the model. See ../registers.md for the supported
+subset and rejected semantics. GPIO remains bound to its pinned source-defined
+register behavior; it does not yet accept an arbitrary declared register contract.
+
 ## Chipyard source boundary
 
 Chipyard 1.13.0 is pinned at 69eba860a352343e4ac6b6df0f3638a79a86ec78, BSD-3-Clause.

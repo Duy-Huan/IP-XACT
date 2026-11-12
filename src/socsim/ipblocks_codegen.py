@@ -11,6 +11,16 @@ def templates():
 
 
 def lower(project, out, values):
+    gcd = next(i for i in project.ir.instances if i.name == "cygcd")
+    # A missing optional declaration retains the pinned, explicit model contract.
+    offsets = {"x": 4, "y": 8, "result": 12}
+    values["gcd_input_ready_mask"] = "0x2"
+    for reg in gcd.windows[0].registers:
+        offsets[reg.name] = "USP_CYGCD_" + reg.name.upper() + "_OFFSET"
+        if reg.name == "status":
+            field = next(f for f in reg.fields if f.name == "input_ready")
+            values["gcd_input_ready_mask"] = "USP_CYGCD_STATUS_" + field.name.upper() + "_MASK"
+    values.update({"gcd_" + name + "_offset": offset for name, offset in offsets.items()})
     for name in ("cygcd", "otgpio"):
         values[name + "_irq"] = next(r.line for r in project.ir.interrupts if r.source == name)
         binding = out / "zephyr/dts/bindings/misc"

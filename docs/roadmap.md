@@ -7,7 +7,7 @@ Detailed observed status and evidence are maintained in verification-status.md.
 | Phase | Acceptance target | Current boundary |
 |---|---|---|
 | 0 | Audited, pinned QEMU/Zephyr combination and reproducible setup | Source-pinned reference builds and real guest tests |
-| 1 | Safe IP-XACT/XSD, typed deterministic IR and semantic diagnostics | Bounded structural hierarchy/configured views, component parameters and CPU/IRQ overlays; general bus/register/translation semantics still unsupported |
+| 1 | Safe IP-XACT/XSD, typed deterministic IR and semantic diagnostics | Bounded structural hierarchy/configured views, component parameters, scalar registers/fields and CPU/IRQ overlays; general bus/register side effects/translation semantics still unsupported |
 | 2 | Strict catalog/lock and generated compiled custom QEMU machine | Seven-role base, eight-role FIFO and nine-role Chipyard/OpenTitan profiles |
 | 3 | Generated Zephyr BSP, real build, UART and IRQ | CLINT timer ISR and UART→PLIC ISR; original guest conformance application |
 | 4 | Linux userspace and Yocto BSP/image | Direct OpenSBI/Linux path and generated layer; Yocto image fetch policy remains a prerequisite |
@@ -16,7 +16,7 @@ Detailed observed status and evidence are maintained in verification-status.md.
 | 7 | Versioned release, support matrix, regression and repeatable evidence | Multi-SoC workspace, evidence integrity, CLI/native CI; release and optional API/IDE still open |
 
 Extend the parser deliberately: IP-XACT addressSpaces per initiator, bridge
-translations, registers/fields/access policies, parameter constraints, bus and
+translations, general register access/side-effect semantics, parameter constraints, bus and
 abstraction definitions, views/fileSets, designConfiguration and recursive hierarchy.
 Each extension needs positive/negative fixtures and a compatible executable model.
 Do not infer behavior from XML names or add unsupported metadata as ignored fields.
@@ -30,3 +30,7 @@ the full Rocket/submodule configuration remains unimplemented. OpenTitan supplie
 both FIFO and a complete GPIO/TL-UL peripheral, not the complete secure SoC.
 Hybrid expansion requires reset/error/backpressure/width/ordering tests, then DMA
 and memory permissions. Security and calibrated performance remain separate work.
+
+Full-board source inspection and the distinct CPU/memory/image ownership contracts
+are recorded in full-soc-integration.md. Its prerequisites are not completed
+builds or acceptance evidence; the full-SoC checklist remains open.
