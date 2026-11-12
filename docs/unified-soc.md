@@ -2,7 +2,9 @@
 
 The executable contract is IP-XACT → one hardware IR → engine-specific CPU/board
 adapters → shared SystemC/TLM RTL peripherals → one unchanged Zephyr ELF.
-QEMU or gem5 owns CPU/RAM for a run. Both Chipyard GCD and OpenTitan GPIO coexist
+QEMU or gem5 owns CPU/RAM for these ISS profiles. The additional actual RTL CPU
+master path owns instruction execution in SystemC/Verilator, with memory/devices
+in the selected engine; see rtl-cpu-adapters.md for its RV32 bare-metal scope. Both Chipyard GCD and OpenTitan GPIO coexist
 in that running guest. These are actual RTL models, not host algorithms.
 
 ```mermaid

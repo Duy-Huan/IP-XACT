@@ -61,7 +61,9 @@ AtomicSimple run selected bare-metal, FreeRTOS, Zephyr and Linux/boot workloads.
 The source-IP board now boots Linux under gem5 with actual MMU/FDT/firmware/OS
 handoff and clean poweroff. Native gem5 CPI/IPC and QEMU event-count cost estimates
 remain distinct. See cpu-platforms.md and software-layers-performance.md.
-Chipyard/custom RTL CPU-master and cross-ISS adapters remain unimplemented.
+Pinned Chipyard Ibex and normalized custom RTL masters support RV32 bare-metal
+on both memory engines; see rtl-cpu-adapters.md. Rocket/BOOM, other protocols/ISA/
+MMU, RTL OS ports and cross-ISS remain open.
 
 The owner research direction and nine-paper ledger are in research-direction.md
 and ref/. Paper retrieval is currently blocked; novelty claims await a direct

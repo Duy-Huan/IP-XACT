@@ -22,7 +22,7 @@ usp = "socsim.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-socsim = ["templates/*.in", "resources/freertos/*", "resources/ipblocks/*", "resources/asic/*", "resources/noc/*", "resources/testchip/*", "resources/unified/*", "resources/performance/*", "resources/layers/*", "schemas/*.json", "schemas/*.md", "schemas/1685-2022/*.xsd"]
+socsim = ["templates/*.in", "resources/freertos/*", "resources/ipblocks/*", "resources/asic/*", "resources/noc/*", "resources/testchip/*", "resources/unified/*", "resources/rtl_cpu/*", "resources/performance/*", "resources/layers/*", "schemas/*.json", "schemas/*.md", "schemas/1685-2022/*.xsd"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

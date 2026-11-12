@@ -96,3 +96,6 @@ adapters are original; public Accellera schemas retain their Apache-2.0 notices
 and checksums under src/socsim/schemas. Referenced upstream source licenses remain
 in their external checkouts. Choose project-wide redistribution terms before a
 public binary release; per-file SPDX identifiers apply to the indicated files.
+
+Actual Chipyard Ibex and normalized custom RTL CPUs run bare-metal with QEMU or
+gem5 memory/peripherals. See [the adapter guide](docs/rtl-cpu-adapters.md).

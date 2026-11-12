@@ -1,0 +1,9 @@
+{
+  "schema_version": "1",
+  "interface": "obi-rvfi32-v1",
+  "kind": "chipyard-ibex",
+  "model": "Ibex",
+  "writeback": false,
+  "branch_target_alu": false,
+  "files": []
+}

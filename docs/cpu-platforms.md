@@ -33,17 +33,12 @@ multi-hart, cache/coherence and microarchitecture contracts require actual adapt
 and tests. Available models may expose extra ISA features; workloads are restricted
 to their declared IR/software ISA and context contract.
 
-Chipyard Rocket/BOOM and custom RTL CPU requests are recognized as NEEDS_ADAPTER.
-They are not silently replaced by an ISS. A CPU RTL adapter needs actual source
-pins/ports, clock/reset, instruction/data bus-master protocol, IRQ/debug and memory
-ownership contracts, plus counter/retirement observability. That is different from
-the existing SystemC MMIO target bridge for peripheral RTL. QEMU-CPU-in-gem5 and
-gem5-CPU-in-QEMU also need explicit cross-ISS adapters; none is claimed implemented.
-
-The separate Ibex RTL test chips prove direct RTL firmware execution and physical
-flow; they do not yet implement an external RTL CPU bus-master into these engines.
-The platform architecture permits additional registered adapters; configuration
-does not manufacture missing CPU semantics or interfaces.
+Chipyard Ibex and normalized custom RTL masters now execute RV32 bare-metal
+against QEMU qtest or gem5's atomic memory engine, with both SystemC IP families.
+See [rtl-cpu-adapters.md](rtl-cpu-adapters.md) for source pins, boot/ABI constraints,
+actual RTL CPI/IPC, commands and native tests. Rocket/BOOM, missing RTL interfaces,
+other ISA/MMU contracts and cross-ISS combinations still need adapters and fail
+without substitution. The separate RTL/GDS test chips retain their own scope.
 
 ## Configure a run
 
@@ -73,15 +68,16 @@ the verified native plugin. qemu_cost_model supplies explicit base_cpi and
 memory_extra_cycles. It cannot override gem5 native statistics. QEMU clock_hz is
 a target reference parameter, not a claim that TCG models physical CPU cycles.
 
-Planning Chipyard/custom RTL profiles emits the unresolved combination and exits
-nonzero. Execution refuses it before starting a model or creating a successful run.
+Unsupported CPU profiles emit unresolved-adapter diagnostics. A valid RTL manifest
+selects actual RTL execution, requiring --rtl-cpu-build and a separate gem5 master
+--bridge. Configuration never creates missing CPU behavior.
 Unknown model strings are identifiers, never Python imports, shell commands or
 automatic downloads. The schema rejects unknown fields and duplicate workloads.
 
 Reference applications are optional. An artifacts mapping can bind a selected
 workload to an external ELF: supply elf, sha256 and expected_markers, plus dtb and
 dtb_sha256 when needed. Paths are relative to the configuration file or absolute.
-The loader checks hashes, ELF64/little-endian/RISC-V container, declared reset entry
+The ISS loader checks hashes, ELF64/little-endian/RISC-V container, declared reset entry
 and physical load bounds against owned ROM/RAM. It does not statically prove every
 instruction's ISA legality. Compile for the IR ISA/context/boot contract.
 
@@ -91,7 +87,7 @@ OS internals are claimed exercised just because an external image completes.
 Firmware/DTB copies and their identities remain in ignored local result bundles,
 not public source or CI uploads. platform verify checks the portable evidence.
 
-The immutable execution plan records one CPU engine owning ROM/RAM, each model's
+The immutable execution plan records one executing CPU and the memory engine owning ROM/RAM, each model's
 source/domain, routed addresses/IRQs and independent time-domain meanings. Actual
 IPC traces are checked for sequence, address/width/IRQ and monotonic annotated
 time. This does not claim asynchronous global time synchronization. The richer

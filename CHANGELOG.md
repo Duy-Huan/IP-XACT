@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+Added source-backed Chipyard Ibex and custom RTL CPU masters through SystemC/TLM,
+QEMU qtest and an out-of-tree gem5 atomic master. Explicit target IR and CPU/boot/
+IRQ ownership prevent ISS substitution. Native RTL clocks/RVFI provide CPI/IPC;
+gem5's passive IRQ context must show zero ISS execution. Added normalized HDL ABI,
+source/build/artifact validation, deterministic RV32 firmware and a native matrix
+across three I/O maps, with mandatory promotion checks and public-source setup.
+Rocket/BOOM, other protocols/MMU, RTL OS ports and calibrated timing remain open.
+
 Pinned ELF inspection is now a core dependency so minimal installations can
 validate/run external firmware artifacts without the optional source-build SDK.
 

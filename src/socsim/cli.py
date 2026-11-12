@@ -19,6 +19,10 @@ def main(argv=None) -> int:
     argv = [argument for argument in argv if argument != "--json"]
     if argv[:2] == ["ipxact", "validate"]:
         argv = argv[1:]
+    if argv and argv[0] == "rtlcpu":
+        from .rtl_cpu import main as rtl_cpu_main
+
+        return rtl_cpu_main(argv[1:])
     if argv and argv[0] == "platform":
         from .cpu_platform import main as platform_main
 
@@ -64,6 +68,7 @@ def main(argv=None) -> int:
     commands.add_parser(
         "platform", help="select CPU provider, engine and software workloads; use --help"
     )
+    commands.add_parser("rtlcpu", help="actual RTL CPU/SystemC master adapters; use --help")
     commands.add_parser("layers", help="software integration matrix and CPU metrics; use --help")
     commands.add_parser("unified", help="one SoC/ELF with SystemC IPs on QEMU or gem5; use --help")
     commands.add_parser("backends", help="show implemented and planned capabilities")

@@ -237,8 +237,9 @@ arbitrary supported workload subsets. Both alternate models passed every layer.
 QEMU uses actual instruction/data event counts with an explicitly uncalibrated
 uniform-memory cost estimate. Gem5 uses its native committed-instruction/cycle
 statistics. Whole-run CPI includes boot and idle; no ROI/silicon calibration or
-cross-engine hardware timing equivalence is claimed. Unsupported Chipyard/custom
-RTL CPU and cross-ISS combinations report NEEDS_ADAPTER and cannot execute.
+cross-engine hardware timing equivalence is claimed. Pinned Chipyard Ibex and normalized custom RTL CPU masters support RV32 bare-metal
+on both memory engines; see rtl-cpu-adapters.md. Other CPU interfaces, Rocket/BOOM
+and cross-ISS combinations still require adapters.
 
 The full native gate passed 267 tests without skips in 512.44 seconds before the
 additional immutable-plan checks were added. That gate included all software-layer

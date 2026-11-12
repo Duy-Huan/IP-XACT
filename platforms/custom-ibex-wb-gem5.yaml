@@ -1,0 +1,13 @@
+{
+  "schema_version": "1",
+  "engine": "gem5",
+  "cpu": {
+    "provider": "custom-rtl",
+    "model": "ibex-wb-custom",
+    "clock_hz": 50000000,
+    "rtl_manifest": "../models/cpus/custom-ibex-wb.yaml"
+  },
+  "workloads": [
+    "baremetal"
+  ]
+}
