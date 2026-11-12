@@ -17,7 +17,8 @@ broader feature completion are tracked separately.
 - [x] Offline official 2022 XSD, safe XML/YAML intake and typed immutable IR.
 - [x] Deterministic serialization, overlap/overflow/path/model/IRQ diagnostics.
 - [x] Working validate/elaborate CLI and positive/negative compiler tests.
-- [ ] Recursive component hierarchy and designConfiguration elaboration.
+- [x] Bounded recursive structural hierarchy and designConfiguration view selection.
+- [ ] Wrapper parameter propagation, physical views and general hierarchical bus semantics.
 - [x] Bounded unsigned component parameters, instance overrides and cycle diagnostics.
 - [ ] General signed/string/vector parameters and full expression/assertion semantics.
 - [ ] Initiator-specific translations and general bus/clock/reset graphs.
@@ -72,7 +73,7 @@ The selected-IP hybrid exit is verified. Full SoCs are not implied by that exit.
 ## Phase 7: maturity
 
 - [x] Multiple explicit SoC profiles, source/dependency locks and capability guide.
-- [x] Multi-SoC acceptance workspace with seven actual execution targets.
+- [x] Multi-SoC acceptance workspace with eight actual execution targets.
 - [x] Evidence aggregation, artifact hash verification and machine-readable open scope.
 - [x] CLI, development/release scripts and native regression workflow definitions.
 - [ ] Observe hosted required CI checks and verify repository protection settings.
@@ -87,8 +88,8 @@ usp workspace test workspace.yaml --out results/acceptance-001
 usp workspace verify results/acceptance-001
 ```
 
-This runs base Zephyr, FreeRTOS, Linux, gem5 SE, FIFO TLM, FIFO RTL and the dual
-Chipyard/OpenTitan profile sequentially using their real existing runners. Missing
+This runs hierarchy Zephyr, base Zephyr, FreeRTOS, Linux, gem5 SE, FIFO TLM/RTL
+and the dual Chipyard/OpenTitan profile through their real existing runners. Missing
 builds are ERROR, never SKIPPED. One failure does not hide the remaining targets.
 Every target retains its own original report/logs. The aggregate hashes every
 target artifact, records the workspace/source/runtime identity and distinguishes
@@ -98,6 +99,6 @@ they are not a digital signature or external certification.
 Output paths must be new. Workspace inputs accept only supported target kinds,
 unique safe names and relative paths confined to the workspace root, including
 resolved symlinks. They cannot specify shell commands. Custom configurations may
-select fewer targets; only the checked-in seven-target matrix is the full current
+select fewer targets; only the checked-in eight-target matrix is the full current
 supported-profile gate. It is mandatory in local promotion. Hosted full-matrix
 execution is an explicit expensive workflow-dispatch job, not a claimed past run.

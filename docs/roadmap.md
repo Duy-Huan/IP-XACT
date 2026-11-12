@@ -7,7 +7,7 @@ Detailed observed status and evidence are maintained in verification-status.md.
 | Phase | Acceptance target | Current boundary |
 |---|---|---|
 | 0 | Audited, pinned QEMU/Zephyr combination and reproducible setup | Source-pinned reference builds and real guest tests |
-| 1 | Safe IP-XACT/XSD, typed deterministic IR and semantic diagnostics | Flat subset with bounded component parameters/instance overrides and CPU/IRQ overlays; generic hierarchy/bus/register features still unsupported |
+| 1 | Safe IP-XACT/XSD, typed deterministic IR and semantic diagnostics | Bounded structural hierarchy/configured views, component parameters and CPU/IRQ overlays; general bus/register/translation semantics still unsupported |
 | 2 | Strict catalog/lock and generated compiled custom QEMU machine | Seven-role base, eight-role FIFO and nine-role Chipyard/OpenTitan profiles |
 | 3 | Generated Zephyr BSP, real build, UART and IRQ | CLINT timer ISR and UART→PLIC ISR; original guest conformance application |
 | 4 | Linux userspace and Yocto BSP/image | Direct OpenSBI/Linux path and generated layer; Yocto image fetch policy remains a prerequisite |

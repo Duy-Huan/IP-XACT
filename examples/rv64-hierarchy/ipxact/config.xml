@@ -1,0 +1,12 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<designConfiguration xmlns="http://www.accellera.org/XMLSchema/IPXACT/1685-2022">
+  <vendor>socsim.example</vendor>
+  <library>hierarchy</library>
+  <name>reference_config</name>
+  <version>1.0</version>
+  <designRef vendor="socsim.example" library="reference" name="usp_rv64" version="1.0"/>
+  <viewConfiguration>
+    <instanceName>serial</instanceName>
+    <view viewRef="rtl"/>
+  </viewConfiguration>
+</designConfiguration>

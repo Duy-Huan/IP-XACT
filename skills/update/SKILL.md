@@ -5,13 +5,18 @@ description: Update platform dependencies and model profiles with reproducible r
 
 # Update workflow
 
+Structural hierarchy changes must preserve full leaf paths and explicit aliases,
+reject cycle/view/reference/placement ambiguity, and pass the configured hierarchy
+native Zephyr boot in the eight-target workspace. See docs/examples/rv64-hierarchy.md
+for the bounded subset; do not infer parent address translations or wiring.
+
 Parameter compiler changes affect generation identity. Read docs/parameters.md,
 test XSD-valid declarations/overrides and negative expression/graph constraints,
 then regenerate and explicitly rebuild the affected native profiles. Keep the
 supported unsigned subset distinct from full IEEE expression semantics.
 
 For full supported-profile acceptance, also run the checked-in workspace.yaml
-through usp workspace test/verify. Local promotion requires the real seven-target
+through usp workspace test/verify. Local promotion requires the real eight-target
 workspace test. Consult docs/milestone-checklist.md; never translate selected
 matrix success into full master completion or close unimplemented deliverables.
 

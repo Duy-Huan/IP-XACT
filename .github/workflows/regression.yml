@@ -91,6 +91,7 @@ jobs:
           bash scripts/hybrid_bringup.sh
           bash scripts/setup_chipyard_tools.sh
           bash scripts/source_ips_bringup.sh
+          bash scripts/hierarchy_bringup.sh
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
@@ -145,6 +146,7 @@ jobs:
           bash scripts/hybrid_bringup.sh
           bash scripts/setup_chipyard_tools.sh
           bash scripts/source_ips_bringup.sh
+          bash scripts/hierarchy_bringup.sh
           USP_REQUIRE_WORKSPACE=1 .venv/bin/python -m pytest tests/test_workspace.py -v --junitxml=build/workspace-junit.xml
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()

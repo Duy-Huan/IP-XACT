@@ -1,5 +1,9 @@
 schema_version: '1'
 targets:
+  - name: hierarchy
+    kind: zephyr
+    project: examples/rv64-hierarchy
+    generated: build/rv64-hierarchy
   - name: zephyr
     kind: zephyr
     project: examples/rv64-minimal
