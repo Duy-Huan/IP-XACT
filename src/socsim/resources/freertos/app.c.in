@@ -1,0 +1,149 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Original acceptance application, not a general FreeRTOS driver library. */
+#include <stdint.h>
+#include "FreeRTOS.h"
+#include "task.h"
+#include "soc.h"
+
+#define UART_REG(n) (*(volatile uint8_t *)(USP_UART_BASE + (n)))
+#define PLIC_REG(n) (*(volatile uint32_t *)(USP_PLIC_BASE + (n)))
+#define UART_SOURCE $uart_irq
+
+static StaticTask_t tcbs[4];
+static StackType_t stacks[4][512];
+static TaskHandle_t supervisor_handle;
+static volatile unsigned long timer_irqs, bad_timer_irqs, switches, uart_irqs;
+struct worker_state { volatile unsigned long loops; unsigned long seed; };
+static struct worker_state workers[2] = {{0, 0x12340000}, {0, 0x56780000}};
+void usp_register_worker(void *arg);
+
+static void puts_uart(const char *s)
+{
+    while (*s) {
+        while (!(UART_REG(5) & 0x20)) {}
+        UART_REG(0) = (uint8_t)*s++;
+    }
+}
+
+static void number(unsigned long n)
+{
+    char digits[24];
+    unsigned i = 0;
+    do { digits[i++] = (char)('0' + n % 10); n /= 10; } while (n);
+    while (i) { char text[2] = {digits[--i], 0}; puts_uart(text); }
+}
+
+static void finish(uint32_t code) __attribute__((noreturn));
+static void finish(uint32_t code)
+{
+    __asm volatile ("csrci mstatus, 8" ::: "memory");
+    while (!(UART_REG(5) & 0x40)) {}
+    *(volatile uint32_t *)USP_FINISHER_BASE = code;
+    for (;;) __asm volatile ("wfi");
+}
+
+void usp_fail(void)
+{
+    __asm volatile ("csrci mstatus, 8" ::: "memory");
+    puts_uart("USP_FREERTOS_FAIL\n");
+    finish(0x13333);
+}
+
+void usp_switched_in(void) { ++switches; }
+
+void vApplicationTickHook(void)
+{
+    unsigned long cause;
+    __asm volatile ("csrr %0, mcause" : "=r"(cause));
+    ++timer_irqs;
+    if (cause != ((1UL << 63) | 7)) ++bad_timer_irqs;
+}
+
+void vApplicationStackOverflowHook(TaskHandle_t task, char *name)
+{
+    (void)task; (void)name; usp_fail();
+}
+
+void vApplicationGetIdleTaskMemory(StaticTask_t **tcb, StackType_t **stack,
+                                 configSTACK_DEPTH_TYPE *depth)
+{
+    *tcb = &tcbs[3]; *stack = stacks[3]; *depth = 512;
+}
+
+void freertos_risc_v_application_exception_handler(void) { usp_fail(); }
+
+void freertos_risc_v_application_interrupt_handler(void)
+{
+    unsigned long cause;
+    BaseType_t wake = pdFALSE;
+    __asm volatile ("csrr %0, mcause" : "=r"(cause));
+    if (cause != ((1UL << 63) | 11)) usp_fail();
+    uint32_t claim = PLIC_REG(0x200004);
+    if (claim != UART_SOURCE || (UART_REG(2) & 15) != 2) usp_fail();
+    UART_REG(1) = 0;
+    ++uart_irqs;
+    PLIC_REG(0x200004) = claim;
+    vTaskNotifyGiveFromISR(supervisor_handle, &wake);
+    portYIELD_FROM_ISR(wake);
+}
+
+static void supervisor(void *arg)
+{
+    (void)arg;
+    vTaskDelay(30);
+    taskENTER_CRITICAL();
+    unsigned long ticks = xTaskGetTickCount();
+    unsigned long irqs = timer_irqs, context_switches = switches;
+    unsigned long first = workers[0].loops, second = workers[1].loops;
+    if (ticks < 30 || irqs < 30 || bad_timer_irqs || context_switches < 10 ||
+        !first || !second) usp_fail();
+    puts_uart("USP_FREERTOS_TIMER_IRQ_OK\nUSP_FREERTOS_PREEMPTION_OK\n");
+    taskEXIT_CRITICAL();
+#if USP_TEST_CASE == 1
+    configASSERT(0);
+#endif
+    PLIC_REG(UART_SOURCE * 4) = 1;
+    PLIC_REG(0x2000) = 1U << UART_SOURCE;
+    PLIC_REG(0x200000) = 0;
+    UART_REG(1) = 2;
+    if (ulTaskNotifyTake(pdTRUE, 20) != 1 || uart_irqs != 1) usp_fail();
+    taskENTER_CRITICAL();
+    if ((PLIC_REG(0x1000) & (1U << UART_SOURCE)) || (UART_REG(2) & 1) == 0) usp_fail();
+    puts_uart("USP_FREERTOS_UART_PLIC_IRQ_OK\nUSP_FREERTOS_METRICS ticks=");
+    number(ticks); puts_uart(" timer_irqs="); number(irqs);
+    puts_uart(" switches="); number(context_switches);
+    puts_uart(" worker0="); number(first); puts_uart(" worker1="); number(second);
+    puts_uart(" uart_irqs="); number(uart_irqs);
+    puts_uart("\nUSP_TEST_PASS\n");
+    finish(0x5555);
+}
+
+#if USP_TEST_CASE == 2
+/* Deliberate negative fixture: suppress ticks explicitly. MTIMECMP reset is
+ * unspecified, so leaving it untouched could take an interrupt via a null
+ * upstream timer-state pointer instead of testing a scheduler with no tick. */
+void vPortSetupTimerInterrupt(void)
+{
+    *(volatile uint64_t *)configMTIMECMP_BASE_ADDRESS = UINT64_MAX;
+}
+#endif
+
+int main(void)
+{
+    UART_REG(1) = 0;
+    UART_REG(3) = 0x80;
+    UART_REG(0) = 2;
+    UART_REG(1) = 0;
+    UART_REG(3) = 3;
+    UART_REG(2) = 1;
+    puts_uart("USP_FREERTOS_BOOT_OK\n");
+    supervisor_handle = xTaskCreateStatic(supervisor, "supervisor", 512, 0, 2,
+                                          stacks[0], &tcbs[0]);
+    configASSERT(supervisor_handle);
+    for (unsigned i = 0; i < 2; ++i) {
+        configASSERT(xTaskCreateStatic(usp_register_worker, "registers", 512,
+                     &workers[i], 1, stacks[i + 1], &tcbs[i + 1]));
+    }
+    vTaskStartScheduler();
+    usp_fail();
+}

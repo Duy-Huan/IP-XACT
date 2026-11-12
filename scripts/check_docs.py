@@ -6,6 +6,7 @@ root = Path(__file__).resolve().parents[1]
 required = [
     "docs/verification-status.md",
     "docs/build-reproducibility.md",
+    "docs/freertos.md",
     "agent.md",
     "AGENTS.md",
     "README.md",

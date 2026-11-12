@@ -44,10 +44,23 @@ Build the reference firmware with `bash scripts/build_firmware.sh`; execute it
 with `socsim run examples/riscv-virt --firmware build/firmware/boot.elf --out
 results/<new-id>`. Keep proprietary inputs and run bundles local.
 
-The environment draft API returned INVALID_ARGUMENT when attempting to save the
-install/start fields in this session. Persistence and snapshot publication are
-unconfirmed. This document retains the tested instructions in Git; it does not
-claim they were registered in cloud settings or tested in a fresh cloud task.
+The earlier environment draft API failure (INVALID_ARGUMENT) was resolved on
+2026-11-12. A restricted-network draft adding downloads.yoctoproject.org and
+download.savannah.gnu.org was saved and read back, preserving package-manager
+presets. Saving a draft does not apply it to the current runtime or publish a
+snapshot. Current policy still reports revision 1 without custom domains; Yocto
+downloads remain blocked pending review/Save/Publish in environment settings.
+
+The draft now also contains install_script and start_skill, both read back to
+confirm their exact saved contents. The installation refresh was executed in this
+prepared workspace: frozen dev/bringup/model dependencies, existing signed
+rootless tools, exact public QEMU/Zephyr/FreeRTOS source checks, doctor, custom
+project validation and ten real legacy runtime/cancellation tests passed. Missing
+tool prefixes are handled by the documented signed APT extraction helpers. The
+saved startup activates the prepared paths, requires the existing checkout and
+dev branch, documents optional native builds and mandatory promotion flags, and
+starts no persistent service. This is current-instance evidence, not a fresh
+snapshot restore. Hosted CI and environment publication are still unverified.
 
 ## Current native development startup
 
@@ -65,10 +78,11 @@ bash scripts/setup_user_tools.sh
 USP_INSTALL_MODELS=1 bash scripts/setup_bringup_tools.sh
 source "$SOCSIM_TOOLS_DIR/env_bringup.sh"
 export USP_UPSTREAM_ROOT=/workspace/.cache/usp-upstream
-USP_FETCH_LINUX=1 USP_FETCH_MODELS=1 bash scripts/fetch_upstreams.sh
+USP_FETCH_LINUX=1 USP_FETCH_MODELS=1 USP_FETCH_FREERTOS=1 bash scripts/fetch_upstreams.sh
 export CROSS_COMPILE="$SOCSIM_TOOLS_DIR/usr/bin/riscv64-unknown-elf-"
 export CROSS_COMPILE_LINUX="$SOCSIM_TOOLS_DIR/usr/bin/riscv64-linux-gnu-"
 bash scripts/bringup.sh
+bash scripts/freertos_bringup.sh
 bash scripts/linux_bringup.sh
 bash scripts/hybrid_bringup.sh
 bash scripts/gem5_bringup.sh

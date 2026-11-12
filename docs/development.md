@@ -52,6 +52,12 @@ individual developer suites may still skip optional source builds. The source pa
 and native model build prerequisites are in the example/reproducibility guides.
 Missing required artifacts must fail the selected gate.
 
+FreeRTOS acceptance is also mandatory for promotion. Build it with
+scripts/freertos_bringup.sh and export USP_FREERTOS_SOURCE to the exact clean kernel
+checkout; regression compiles real assertion-failure and tick-disabled guests.
+The custom-zephyr hosted job now builds and runs this additional BSP with the
+pinned kernel, preserving separate JUnit results.
+
 The expensive gem5 source-build job is available through workflow_dispatch; it is
 not silently reported as executed by the quick push/PR jobs. Local promotion still
 requires its actual shared-workload integration test with a verified build.

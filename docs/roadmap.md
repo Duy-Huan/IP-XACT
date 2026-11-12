@@ -21,8 +21,10 @@ abstraction definitions, views/fileSets, designConfiguration and recursive hiera
 Each extension needs positive/negative fixtures and a compatible executable model.
 Do not infer behavior from XML names or add unsupported metadata as ignored fields.
 
-Beyond the proven profile, add a specific FreeRTOS port and clarify the requested
-µC/OS product/license; then real BSP/tick/context-switch tests. Chipyard requires a
+The selected FreeRTOS GCC RV64 port now has a generated static-allocation BSP,
+real timer preemption/register checks and UART/PLIC FromISR notification on the
+non-hybrid profile; see freertos.md for its limits. Broader FreeRTOS drivers and
+the requested µC/OS product/license remain separate work. Chipyard requires a
 pinned Chisel/CIRCT/submodule configuration and actual generated RTL verification.
 OpenTitan currently supplies a FIFO primitive only, not a complete secure SoC.
 Hybrid expansion requires reset/error/backpressure/width/ordering tests, then DMA

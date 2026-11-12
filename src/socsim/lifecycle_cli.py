@@ -28,23 +28,27 @@ def main(argv):
             sub.add_argument("--jobs", type=int, choices=range(1, 9), default=4)
         if name in {"run", "test"}:
             sub.add_argument("--out", type=Path, required=True)
-            sub.add_argument("--os", choices=["zephyr", "linux"], default="zephyr")
+            sub.add_argument("--os", choices=["zephyr", "linux", "freertos"], default="zephyr")
             sub.add_argument("--timeout", type=float, default=20)
             sub.add_argument("--bridge-models", type=Path)
             sub.add_argument("--bridge-mode", choices=["tlm", "rtl"], default="tlm")
         if name == "test":
             sub.add_argument(
-                "--suite", choices=["zephyr-boot", "linux-boot"], default="zephyr-boot"
+                "--suite", choices=["zephyr-boot", "linux-boot", "freertos-boot"], default=None
             )
     software = commands.add_parser("software").add_subparsers(dest="action", required=True)
     build = software.add_parser("build")
     build.add_argument("project", type=Path)
-    build.add_argument("--os", choices=["zephyr", "linux"], required=True)
+    build.add_argument("--os", choices=["zephyr", "linux", "freertos"], required=True)
     build.add_argument("--generated", type=Path, required=True)
     build.add_argument("--jobs", type=int, choices=range(1, 9), default=4)
     build.add_argument("--source-zephyr", type=Path)
     build.add_argument("--source-linux", type=Path)
     build.add_argument("--source-opensbi", type=Path)
+    build.add_argument("--source-freertos", type=Path)
+    build.add_argument(
+        "--test-case", choices=["smoke", "assert-failure", "tick-disabled"], default="smoke"
+    )
     build.add_argument("--cross-compile", default=os.environ.get("CROSS_COMPILE"), required=False)
     models = commands.add_parser("models").add_subparsers(dest="action", required=True)
     for action in ("resolve", "list", "explain"):
@@ -107,7 +111,23 @@ def main(argv):
         elif args.command == "software":
             if not args.cross_compile:
                 raise ContractError("--cross-compile or CROSS_COMPILE is required")
-            if args.os == "zephyr":
+            if args.test_case != "smoke" and args.os != "freertos":
+                raise ContractError(
+                    "--test-case applies only to the FreeRTOS acceptance application"
+                )
+            if args.os == "freertos":
+                from .freertos import build_freertos
+
+                if not args.source_freertos:
+                    raise ContractError("--source-freertos is required")
+                elf = build_freertos(
+                    project,
+                    args.generated.resolve(),
+                    args.source_freertos,
+                    args.cross_compile,
+                    args.test_case,
+                )
+            elif args.os == "zephyr":
                 if not args.source_zephyr:
                     raise ContractError("--source-zephyr is required")
                 elf = build_zephyr(
@@ -143,8 +163,8 @@ def main(argv):
                 "reason": "Exact VLNV/implementation match and validated hardware/IRQ contract",
             }
         else:
-            if args.command == "test" and args.suite == "linux-boot":
-                args.os = "linux"
+            if args.command == "test" and args.suite:
+                args.os = args.suite.removesuffix("-boot")
             if args.bridge_models:
                 from .hybrid import run_hybrid
 
@@ -157,6 +177,12 @@ def main(argv):
                     args.out.resolve(),
                     args.bridge_mode,
                     args.timeout,
+                )
+            elif args.os == "freertos":
+                from .freertos import run_freertos
+
+                result = run_freertos(
+                    project, args.generated.resolve(), args.out.resolve(), args.timeout
                 )
             else:
                 if project.manifest["profile"] == "usp-rv64-hybrid-v1":

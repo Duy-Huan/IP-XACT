@@ -45,3 +45,10 @@ shared gem5 SE workload and TLM/RTL bridge each have independent acceptance scop
 Report SE as SE, transport time as annotated, and unsupported generic hierarchy or
 security semantics as unsupported. Keep external source licenses and clean tracked
 upstream state. Raw attached company objectives must not be copied into public Git.
+
+FreeRTOS has a separate software adapter/resource identity; changes there require
+rebuilding its software rather than regenerating unrelated hardware outputs. Pin
+the clean kernel commit, preserve its MIT notice and rerun real preemption/IRQ,
+assertion-failure and tick-disabled acceptance before promotion. The selected
+GCC RISC-V port does not save FPU/vector state; do not expand ISA/context claims
+without an appropriate port and executable regression.

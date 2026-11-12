@@ -77,12 +77,14 @@ jobs:
           USP_JOBS: '2'
           USP_FETCH_LINUX: '1'
           USP_FETCH_MODELS: '1'
+          USP_FETCH_FREERTOS: '1'
           CROSS_COMPILE_LINUX: riscv64-linux-gnu-
         run: |
           uv python install 3.12.14
           uv sync --frozen --python 3.12.14 --extra dev --extra bringup
           bash scripts/fetch_upstreams.sh
           bash scripts/bringup.sh
+          bash scripts/freertos_bringup.sh
           bash scripts/linux_bringup.sh
           bash scripts/hybrid_bringup.sh
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -93,6 +95,7 @@ jobs:
             build/custom-junit.xml
             build/linux-junit.xml
             build/hybrid-junit.xml
+            build/freertos-junit.xml
           if-no-files-found: ignore
           retention-days: 7
 
