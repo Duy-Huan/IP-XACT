@@ -5,6 +5,11 @@ description: Update platform dependencies and model profiles with reproducible r
 
 # Update workflow
 
+Parameter compiler changes affect generation identity. Read docs/parameters.md,
+test XSD-valid declarations/overrides and negative expression/graph constraints,
+then regenerate and explicitly rebuild the affected native profiles. Keep the
+supported unsigned subset distinct from full IEEE expression semantics.
+
 For full supported-profile acceptance, also run the checked-in workspace.yaml
 through usp workspace test/verify. Local promotion requires the real seven-target
 workspace test. Consult docs/milestone-checklist.md; never translate selected

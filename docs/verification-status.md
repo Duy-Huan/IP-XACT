@@ -7,7 +7,7 @@ not a claim that every future standard/backend feature is implemented.
 | Phase | Status | Actual evidence / remaining boundary |
 |---|---|---|
 | 0 feasibility | Verified selected profile | Exact public QEMU/Zephyr source audit, real generated machine, guest timer/UART/PLIC |
-| 1 compiler/IR | Verified MVP subset; broader requirements partial | Official 2022 XSD; typed flat IR and strict CPU/boot/IRQ/address-space contracts; generic hierarchy, translations, buses, views, parameters and register semantics remain unsupported |
+| 1 compiler/IR | Verified MVP subset; broader requirements partial | Official 2022 XSD; typed flat IR, bounded component parameters/instance overrides and CPU/IRQ contracts; general hierarchy, translations, buses, views and register semantics remain unsupported |
 | 2 models/QEMU | Verified selected profiles | Versioned exact catalog/lock; compiled C machine; ROM/ELF reset and relocated UART; separate FIFO and nine-role source IP profiles |
 | 3 Zephyr MVP and FreeRTOS extension | Verified selected profiles | Generated Zephyr board/DTS with real timer/PLIC ISR; FreeRTOS static BSP with tick preemption, saved registers and UART/PLIC notification |
 | 4 Linux/Yocto | Direct Linux verified; Yocto image blocked | OpenSBI + Linux boot to original userspace; generated meta-usp parsed successfully (924 recipes, MACHINE=usp-rv64); upstream dependency fetch rejected by proxy |
@@ -26,12 +26,21 @@ QEMU/Linux and gem5 SE with the same hash; the acceptance scopes remain distinct
 SystemC and RTL hybrid runs additionally require USP_TLM_RTL_IRQ_OK and independently
 verify trace write/readback/IRQ state transitions. Repeated RTL traces matched.
 
-Observed full local gate on 2026-11-12: **132 tests passed, zero failed/skipped**, including the
+Observed full local gate on 2026-11-12: **164 tests passed, zero failed/skipped**, including the
 shared QEMU/Linux and gem5 ELF test, both TLM/RTL modes, and real CLI SIGTERM
 cleanup of its owned guest process. Raw gem5 observations
 include simInsts=3012 and simTicks=80400000 under explicitly uncalibrated assumptions;
 these are simulator outputs, not estimates or silicon measurements. The required
 native/source tests remain independent of hosted CI availability.
+
+Component unsigned-longint parameters now elaborate through a bounded expression
+interpreter, dependency graph and per-instance overrides with resolve/bounds checks.
+The rv64-minimal UART's SPAN*UNIT window requires an actual override from 128 to
+256 bytes. Its resolved values are retained in immutable IR. All three generated
+machines and affected firmware were regenerated/rebuilt explicitly; native Zephyr,
+FreeRTOS, Linux, gem5 and hybrid/workspace gates passed. The 32 new parameter tests
+include invalid input, cycles and instance isolation. General parameter types,
+full expression semantics, hierarchy and translations are still incomplete.
 
 The checked-in workspace.yaml now executes seven actual targets across three SoC
 profiles: Zephyr, FreeRTOS, Linux, gem5 SE, FIFO TLM, FIFO RTL and source IP RTL.

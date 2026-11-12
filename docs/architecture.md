@@ -24,14 +24,15 @@ argument arrays with timeouts, process-group cleanup, logs and content hashes.
 
 Top-level component and design VLNVs; componentInstances/instanceName/componentRef;
 memoryMaps/memoryMap/name/addressBlock/name/baseAddress/range/width/usage;
-addressUnitBits=8. Numeric values are decimal or hex literals, never evaluated
-Python/SystemVerilog expressions. The source catalog is `ipxact/**/*.xml`.
+addressUnitBits=8. Component numeric fields now accept the bounded unsigned integer
+expression subset documented in parameters.md; no input code is executed. The
+source catalog is `ipxact/**/*.xml`.
 All instance placements must be explicitly listed in the simulation manifest.
 The XML baseAddress is component-local; supplemental placement adds its offset.
 Overlaps and unsigned 64-bit overflow are rejected; aliases are not implemented.
 
 Everything outside the accepted child/attribute sets is rejected, including
-parameters, registers/fields, busInterfaces, interconnections, views, fileSets,
+general parameter types/expressions, registers/fields, busInterfaces, views, fileSets,
 designConfiguration, hierarchy and vendor extensions. This is **not complete
 IEEE 1685 semantic compliance**. XSD validity is necessary but insufficient.
 `socsim validate` checks this metadata subset; `socsim plan` additionally checks

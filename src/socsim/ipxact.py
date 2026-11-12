@@ -8,6 +8,7 @@ from pathlib import Path
 from lxml import etree
 
 from .domain import ContractError, Instance, SoCIR, Window
+from .parameters import expression, resolve_parameters
 
 NS = "http://www.accellera.org/XMLSchema/IPXACT/1685-2022"
 PREFIX = f"{{{NS}}}"
@@ -70,13 +71,17 @@ def identity(node: etree._Element) -> str:
 
 # Every accepted child/attribute is listed; no ignored functional semantics.
 CHILDREN = {
-    "component": {"vendor", "library", "name", "version", "memoryMaps"},
+    "component": {"vendor", "library", "name", "version", "memoryMaps", "parameters"},
     "design": {"vendor", "library", "name", "version", "componentInstances"},
     "componentInstances": {"componentInstance"},
     "componentInstance": {"instanceName", "componentRef"},
     "memoryMaps": {"memoryMap"},
     "memoryMap": {"name", "addressBlock", "addressUnitBits"},
     "addressBlock": {"name", "baseAddress", "range", "width", "usage"},
+    "parameters": {"parameter"},
+    "parameter": {"name", "value"},
+    "componentRef": {"configurableElementValues"},
+    "configurableElementValues": {"configurableElementValue"},
 }
 LEAVES = {
     "vendor",
@@ -90,6 +95,8 @@ LEAVES = {
     "width",
     "usage",
     "addressUnitBits",
+    "value",
+    "configurableElementValue",
 }
 
 
@@ -103,6 +110,10 @@ def check_subset(root: etree._Element, source: str) -> None:
         allowed_attributes = (
             {"vendor", "library", "name", "version"} if tag == "componentRef" else set()
         )
+        if tag == "parameter":
+            allowed_attributes = {"parameterId", "type", "sign", "resolve", "minimum", "maximum"}
+        if tag == "configurableElementValue":
+            allowed_attributes = {"referenceId"}
         for attribute in node.attrib:
             if attribute not in allowed_attributes:
                 raise ContractError(
@@ -117,12 +128,22 @@ def check_subset(root: etree._Element, source: str) -> None:
                 )
 
 
-def component_windows(root: etree._Element) -> tuple[Window, ...]:
+def component_windows(root: etree._Element, parameters=None) -> tuple[Window, ...]:
+    parameters = resolve_parameters(root) if parameters is None else parameters
+
+    def number(value, label):
+        def lookup(key):
+            if key not in parameters:
+                raise ContractError(f"{label}: E_PARAMETER_UNRESOLVED {key}")
+            return parameters[key]
+
+        return expression(value, lookup, label)
+
     windows = []
     names = set()
     for memory_map in root.findall(f"{PREFIX}memoryMaps/{PREFIX}memoryMap"):
         units = memory_map.findtext(PREFIX + "addressUnitBits", "8")
-        if integer(units, "addressUnitBits") != 8:
+        if number(units, "addressUnitBits") != 8:
             raise ContractError("UNSUPPORTED non-byte addressUnitBits")
         for block in memory_map.findall(PREFIX + "addressBlock"):
             name = f"{text(memory_map, 'name')}.{text(block, 'name')}"
@@ -132,9 +153,9 @@ def component_windows(root: etree._Element) -> tuple[Window, ...]:
             usage = block.findtext(PREFIX + "usage", "memory")
             if usage not in {"memory", "register"}:
                 raise ContractError(f"UNSUPPORTED address block usage: {usage}")
-            base = integer(text(block, "baseAddress"), name)
-            size = integer(text(block, "range"), name)
-            width = integer(text(block, "width"), name)
+            base = number(text(block, "baseAddress"), name)
+            size = number(text(block, "range"), name)
+            width = number(text(block, "width"), name)
             if size == 0 or width not in {8, 16, 32, 64} or base + size > 2**64:
                 raise ContractError(f"{name}: invalid range/width")
             windows.append(Window(name, base, size, width))
@@ -170,10 +191,12 @@ def elaborate(project: Path, placements: dict, design_path: Path) -> SoCIR:
         if component is None or component.tag != PREFIX + "component":
             raise ContractError(f"{name}: unresolved component VLNV {vlnv}")
         offset = integer(placements.get(name, 0), f"placement {name}")
+        parameters = resolve_parameters(component, ref)
         windows = tuple(
-            Window(w.name, offset + w.base, w.size, w.width) for w in component_windows(component)
+            Window(w.name, offset + w.base, w.size, w.width)
+            for w in component_windows(component, parameters)
         )
-        instances.append(Instance(name, vlnv, windows))
+        instances.append(Instance(name, vlnv, windows, tuple(sorted(parameters.items()))))
     if not instances:
         raise ContractError("design has no component instances")
     if set(placements) != seen:

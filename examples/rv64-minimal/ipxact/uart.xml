@@ -10,11 +10,11 @@
       <addressBlock>
         <name>window</name>
         <baseAddress>0</baseAddress>
-        <range>0x100</range>
-        <width>8</width>
+        <range>SPAN * UNIT</range>
+        <width>BITS</width>
         <usage>register</usage>
       </addressBlock>
       <addressUnitBits>8</addressUnitBits>
     </memoryMap>
   </memoryMaps>
-</component>
+<parameters><parameter parameterId="UNIT" type="longint" sign="unsigned" resolve="immediate"><name>UNIT</name><value>128</value></parameter><parameter parameterId="SPAN" type="longint" sign="unsigned" resolve="user" minimum="1" maximum="8"><name>SPAN</name><value>1</value></parameter><parameter parameterId="BITS" type="longint" sign="unsigned" resolve="immediate"><name>BITS</name><value>8</value></parameter></parameters></component>
