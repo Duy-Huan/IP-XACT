@@ -60,6 +60,11 @@ Generated SimObjects bind their C++ headers to their actual extension directory.
 The extension removes only its own globally added include paths, preserving base
 compilation signatures. SCons still verifies source/header dependencies; extension
 objects and generated parameters compile normally without rebuilding unrelated IP.
+Native SCons builds receive SIGTERM on timeout/cancellation and have ten seconds
+to write their incremental database before remaining processes are killed.
+Interrupted builds remain failures; command records retain the actual return code
+and timeout/interruption status. Resume through the builder, using a fresh output
+directory for failed extensions. Never edit saved build identities.
 scripts/rtl_cpu_bringup.sh acquires the two pinned public CPU repositories, builds
 the masters and runs the native acceptance matrix. It expects the existing
 generated rv64-ips and AI_SOC/AIZ_SOC bring-up machines and source-IP models.

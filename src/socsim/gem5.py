@@ -9,6 +9,7 @@ from pathlib import Path
 from string import Template
 
 from .domain import ContractError
+from .execution import execute_build
 from .ipxact import digest
 from .pipeline import execute, identity, verify_generated, verify_source
 from .runner import write_json
@@ -84,7 +85,7 @@ def build_gem5(out, source, jobs=4):
     config = Path(sys.base_prefix) / "bin/python3-config"
     if config.exists():
         command.append("PYTHON_CONFIG=" + str(config))
-    execute(
+    execute_build(
         command,
         source,
         out / "gem5-build.log",

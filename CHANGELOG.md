@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+Native gem5/Garnet/RTL-master builds now allow a bounded graceful shutdown before
+hard termination, preserving SCons' completed-object database after a timeout.
+Actual timeout/return-code evidence remains a failure. Real subprocess tests cover
+checkpoint preservation and termination of an unresponsive build.
+
 Added source-backed Chipyard Ibex and custom RTL CPU masters through SystemC/TLM,
 QEMU qtest and an out-of-tree gem5 atomic master. Explicit target IR and CPU/boot/
 IRQ ownership prevent ISS substitution. Native RTL clocks/RVFI provide CPI/IPC;

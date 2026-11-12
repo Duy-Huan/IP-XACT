@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 
 from .domain import ContractError
-from .execution import cleanup_on_termination
+from .execution import cleanup_on_termination, execute_build
 from .gem5 import (
     GEM5_SHA,
     configure_external_systemc,
@@ -26,7 +26,7 @@ from .gem5 import (
 )
 from .ipblocks import run_ipblocks, verify_models
 from .ipxact import digest
-from .pipeline import execute, identity, resolve, verify_generated, verify_source
+from .pipeline import identity, resolve, verify_generated, verify_source
 from .project import inside, load_project
 from .runner import write_json
 
@@ -90,7 +90,7 @@ def build_bridge(source, out, jobs=2):
         if config.exists():
             command.append("PYTHON_CONFIG=" + str(config))
         try:
-            execute(command, source, out / "build.log", 3600, python_environment())
+            execute_build(command, source, out / "build.log", 7200, python_environment())
             shutil.copy2(binary, out / "gem5.opt")
         finally:
             if old_sha:

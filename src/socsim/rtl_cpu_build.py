@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 from .domain import ContractError
-from .execution import cleanup_on_termination
+from .execution import cleanup_on_termination, execute_build
 from .gem5 import (
     GEM5_SHA,
     configure_external_systemc,
@@ -299,7 +299,7 @@ def build_engine(source, out, jobs=2):
         if config.exists():
             command.append("PYTHON_CONFIG=" + str(config))
         try:
-            execute(command, source, out / "build.log", 3600, python_environment())
+            execute_build(command, source, out / "build.log", 7200, python_environment())
             shutil.copy2(binary, out / "gem5.opt")
         finally:
             shutil.copy2(backup, binary)

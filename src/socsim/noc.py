@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .domain import ContractError
+from .execution import execute_build
 from .gem5 import (
     GEM5_SHA,
     configure_external_systemc,
@@ -100,7 +101,7 @@ def build_noc(source, out, jobs=4):
     try:
         execute(["git", "apply", "--check", str(PATCH)], source, out / "patch-check.log")
         protocol.write_bytes(original.replace(before, after))
-        execute(command, source, out / "build.log", 7200, python_environment())
+        execute_build(command, source, out / "build.log", 7200, python_environment())
     finally:
         protocol.write_bytes(original)
     verify_source(source, GEM5_SHA)
