@@ -40,6 +40,10 @@ def test_rtl_plan_has_one_actual_cpu_and_engine_memory(engine, model):
     assert all(r["initiator"] == "cpu" for r in plan["address_routes"])
     assert all(r["line"] in {3, 7, 11} for r in plan["interrupt_routes"] if r["target"] == "cpu")
     assert not plan["dma_supported"] and not plan["coherence_supported"]
+    if engine == "gem5":
+        assert next(b for b in plan["bindings"] if b["instance"] == "rom")["implementation"] == (
+            "SimpleMemory.zero-filled-unused-rom-v1"
+        )
 
 
 @pytest.mark.parametrize("case", ["kind", "model", "interface", "os", "cost"])

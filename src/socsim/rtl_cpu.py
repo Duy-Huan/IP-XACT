@@ -479,6 +479,7 @@ def run_cpu(
             "atomic physical bus; fixed one-cycle RTL responses",
             "bounded IRQ sampling; transaction-driven peripheral RTL time; no timing correlation",
             "engine CPU is passive IRQ sink; no ISS fallback",
+            "ROM payload is engine-specific and unused by the direct RAM reset contract",
             "no DMA/coherence/checkpoint",
         ],
         "files": {
@@ -507,6 +508,11 @@ def platform_plan(project, config, selected, base):
 
     ir = target_ir(project, Path(selected["rtl_manifest"]))
     engine = config["engine"]
+    actual_bindings = [dict(b) for b in base["bindings"]]
+    if engine == "gem5":
+        next(b for b in actual_bindings if b["instance"] == "rom")["implementation"] = (
+            "SimpleMemory.zero-filled-unused-rom-v1"
+        )
     bindings = tuple(
         ModelBinding(
             i.name,
@@ -518,7 +524,7 @@ def platform_plan(project, config, selected, base):
         if i.name == "cpu"
         else ModelBinding(i.name, i.vlnv, b["owner"], b["implementation"], b["source_commit"])
         for i in ir.instances
-        for b in base["bindings"]
+        for b in actual_bindings
         if b["instance"] == ("rv64" if i.name == "cpu" else i.name)
     )
     plan = ExecutionPlan(
@@ -565,7 +571,7 @@ def platform_plan(project, config, selected, base):
         "ir_sha256": plan.soc_ir_sha256,
         "base_io_ir_sha256": base["ir_sha256"],
         "board": base["board"],
-        "peripheral_bindings": [b for b in base["bindings"] if b["instance"] != "rv64"],
+        "peripheral_bindings": [b for b in actual_bindings if b["instance"] != "rv64"],
         "workloads": config["workloads"],
         "requested_configuration": config,
         "execution_plan": plan.to_dict(),

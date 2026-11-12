@@ -125,3 +125,8 @@ Kconfig snapshot and the executable's actual --build-info output; both are
 verified, including the compiled setting. Preexisting pinned engine binaries
 remain supported under their recorded identities. Embedded gem5 SystemC modules
 are outside this profile.
+
+RTL reset enters RAM directly. The unused ROM payload is engine-specific: gem5
+uses zero-filled read-only SimpleMemory, and QEMU retains its native reset stub.
+The execution plan labels these actual implementations. Identical ROM bytes are
+not part of this profile's software contract.
