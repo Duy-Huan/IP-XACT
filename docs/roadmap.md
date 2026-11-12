@@ -13,7 +13,7 @@ Detailed observed status and evidence are maintained in verification-status.md.
 | 4 | Linux userspace and Yocto BSP/image | Direct OpenSBI/Linux path and generated layer; Yocto image fetch policy remains a prerequisite |
 | 5 | Pinned gem5 workload/statistics and cross-engine behavior | Explicit SE workload adapter; not a full-system SoC board |
 | 6 | Real SystemC/RTL MMIO/IRQ bridge with time contract | FIFO plus actual Chipyard GCD generation and OpenTitan GPIO/TL-UL; deterministic replay; no DMA/coherence |
-| 7 | Versioned release, support matrix, regression and repeatable evidence | CLI, native CI and development workflow; no industrial/universal support claim |
+| 7 | Versioned release, support matrix, regression and repeatable evidence | Multi-SoC workspace, evidence integrity, CLI/native CI; release and optional API/IDE still open |
 
 Extend the parser deliberately: IP-XACT addressSpaces per initiator, bridge
 translations, registers/fields/access policies, parameter constraints, bus and

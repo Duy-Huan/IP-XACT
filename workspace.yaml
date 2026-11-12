@@ -1,0 +1,34 @@
+schema_version: '1'
+targets:
+  - name: zephyr
+    kind: zephyr
+    project: examples/rv64-minimal
+    generated: build/rv64-minimal
+  - name: freertos
+    kind: freertos
+    project: examples/rv64-minimal
+    generated: build/rv64-minimal
+  - name: linux
+    kind: linux
+    project: examples/rv64-minimal
+    generated: build/rv64-minimal
+  - name: gem5-se
+    kind: gem5-se
+    project: examples/rv64-minimal
+    generated: build/rv64-minimal
+    models: build/gem5
+  - name: fifo-tlm
+    kind: fifo-tlm
+    project: examples/rv64-hybrid
+    generated: build/rv64-hybrid
+    models: build/fifo-models
+  - name: fifo-rtl
+    kind: fifo-rtl
+    project: examples/rv64-hybrid
+    generated: build/rv64-hybrid
+    models: build/fifo-models
+  - name: source-ips
+    kind: source-ips
+    project: examples/rv64-ips
+    generated: build/rv64-ips
+    models: build/source-ip-models

@@ -56,6 +56,7 @@ old evidence is not overwritten. Failed guests/timeouts remain failed results.
 ## Guides and status
 
 - [Verification status and phase exits](docs/verification-status.md)
+- [Milestone checklist and multi-SoC acceptance](docs/milestone-checklist.md)
 - [Architecture and supported IP-XACT subset](docs/architecture.md)
 - [Create a SoC](docs/creating-soc.md)
 - [Generated QEMU/Zephyr reference](docs/examples/rv64-minimal.md)

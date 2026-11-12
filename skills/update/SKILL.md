@@ -5,6 +5,11 @@ description: Update platform dependencies and model profiles with reproducible r
 
 # Update workflow
 
+For full supported-profile acceptance, also run the checked-in workspace.yaml
+through usp workspace test/verify. Local promotion requires the real seven-target
+workspace test. Consult docs/milestone-checklist.md; never translate selected
+matrix success into full master completion or close unimplemented deliverables.
+
 Implements agent.md §§3–6. Read agent.md, docs/roadmap.md and the compatibility
 boundary first. Work on `dev`, preserve user changes, and use the existing checkout.
 No automatic updates, pushes, releases, or company data uploads.

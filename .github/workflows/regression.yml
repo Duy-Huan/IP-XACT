@@ -110,12 +110,13 @@ jobs:
     container: debian:trixie-slim
     timeout-minutes: 120
     steps:
-      - name: Install architectural source-build prerequisites
+      - name: Install full acceptance source-build prerequisites
         run: |
           apt-get update
           apt-get install -y --no-install-recommends git ca-certificates python3 python3-venv \
             gcc g++ make pkg-config libglib2.0-dev libpixman-1-dev zlib1g-dev libfdt-dev \
             device-tree-compiler flex bison bc m4 gcc-riscv64-linux-gnu \
+            libsystemc-dev verilator curl openjdk-21-jdk-headless \
             binutils-riscv64-linux-gnu gcc-riscv64-unknown-elf=14.2.0+19 \
             binutils-riscv64-unknown-elf=2.44-3+7+b1
           python3 -m venv /opt/ci-uv
@@ -124,13 +125,15 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - name: Build and compare the same actual ELF on QEMU/Linux and gem5 SE
+      - name: Build and compare the full supported acceptance matrix
         env:
           CROSS_COMPILE: riscv64-unknown-elf-
           CROSS_COMPILE_LINUX: riscv64-linux-gnu-
           USP_FETCH_LINUX: '1'
           USP_FETCH_MODELS: '1'
           USP_JOBS: '2'
+          USP_FETCH_CHIPYARD: '1'
+          USP_FETCH_FREERTOS: '1'
         run: |
           uv python install 3.12.14
           uv sync --frozen --python 3.12.14 --extra dev --extra bringup --extra models
@@ -138,10 +141,17 @@ jobs:
           bash scripts/bringup.sh
           bash scripts/linux_bringup.sh
           bash scripts/gem5_bringup.sh
+          bash scripts/freertos_bringup.sh
+          bash scripts/hybrid_bringup.sh
+          bash scripts/setup_chipyard_tools.sh
+          bash scripts/source_ips_bringup.sh
+          USP_REQUIRE_WORKSPACE=1 .venv/bin/python -m pytest tests/test_workspace.py -v --junitxml=build/workspace-junit.xml
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
           name: gem5-se-junit
-          path: build/gem5-junit.xml
+          path: |
+            build/gem5-junit.xml
+            build/workspace-junit.xml
           if-no-files-found: ignore
           retention-days: 7

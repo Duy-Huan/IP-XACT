@@ -13,7 +13,7 @@ not a claim that every future standard/backend feature is implemented.
 | 4 Linux/Yocto | Direct Linux verified; Yocto image blocked | OpenSBI + Linux boot to original userspace; generated meta-usp parsed successfully (924 recipes, MACHINE=usp-rv64); upstream dependency fetch rejected by proxy |
 | 5 gem5 | Verified SE workload subset | Same exact RV64 ELF executed under QEMU/Linux and gem5; guest exit zero and real raw stats; full-system board remains unsupported |
 | 6 SystemC/RTL/hybrid | Verified selected IPs | FIFO TLM/RTL, actual Chipyard GCD Chisel generation, complete OpenTitan GPIO/TL-UL peripheral, guest PLIC IRQ and deterministic replay; no full Rocket/Earlgrey/DMA/coherence claim |
-| 7 maturity | Partial foundation | Version, rules, native CI, reports and support docs; no universal industrial release or IDE claim |
+| 7 maturity | Partial; multi-SoC gate verified | Seven-target workspace execution and artifact-integrity verification, native CI and support docs; release/hosted checks/IDE still open |
 
 The actual initial MVP sequence is IP-XACT → typed IR → exact binding → generated
 QEMU C → compiled usp-rv64 → generated Zephyr board/DTS → west ELF → real UART,
@@ -26,12 +26,20 @@ QEMU/Linux and gem5 SE with the same hash; the acceptance scopes remain distinct
 SystemC and RTL hybrid runs additionally require USP_TLM_RTL_IRQ_OK and independently
 verify trace write/readback/IRQ state transitions. Repeated RTL traces matched.
 
-Observed full local gate on 2026-11-12: **125 tests passed, zero failed/skipped**, including the
+Observed full local gate on 2026-11-12: **132 tests passed, zero failed/skipped**, including the
 shared QEMU/Linux and gem5 ELF test, both TLM/RTL modes, and real CLI SIGTERM
 cleanup of its owned guest process. Raw gem5 observations
 include simInsts=3012 and simTicks=80400000 under explicitly uncalibrated assumptions;
 these are simulator outputs, not estimates or silicon measurements. The required
 native/source tests remain independent of hosted CI availability.
+
+The checked-in workspace.yaml now executes seven actual targets across three SoC
+profiles: Zephyr, FreeRTOS, Linux, gem5 SE, FIFO TLM, FIFO RTL and source IP RTL.
+All seven passed in one workspace acceptance run. Aggregate evidence hashes every
+retained target artifact; modified raw logs and false full-completion claims are
+rejected. Missing builds are ERROR rather than skipped. Local promotion requires
+the full matrix. See milestone-checklist.md for the item-level open/verified ledger;
+selected-workspace success does not close the remaining master requirements.
 
 The nine-role source IP profile additionally generates the actual selected
 Chipyard 1.13.0 GCD classes using Chisel 6.5.0/Scala 2.13.12/CIRCT 1.62.0, then
