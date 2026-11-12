@@ -88,7 +88,7 @@ def build_gem5(out, source, jobs=4):
         command,
         source,
         out / "gem5-build.log",
-        3600,
+        7200,
         python_environment(),
     )
     binary = source / "build/RISCV/gem5.opt"
