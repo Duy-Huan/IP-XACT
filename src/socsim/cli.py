@@ -23,6 +23,10 @@ def main(argv=None) -> int:
         from .noc import main as noc_main
 
         return noc_main(argv[1:])
+    if argv and argv[0] == "chip":
+        from .testchip import main as chip_main
+
+        return chip_main(argv[1:])
     if argv and argv[0] == "asic":
         from .asic import main as asic_main
 
@@ -51,6 +55,7 @@ def main(argv=None) -> int:
     commands.add_parser("system", help="validate/plan/test AI_SOC and AIZ_SOC; use --help")
     commands.add_parser("noc", help="build pinned Garnet network tools; use --help")
     commands.add_parser("asic", help="build/verify reference RTL-to-GDS flow; use --help")
+    commands.add_parser("chip", help="build/run CPU-owned RTL test chips; use --help")
     for extra in ("generate", "build", "software", "test", "report", "models", "gem5", "ipblocks"):
         commands.add_parser(extra, help="custom QEMU/Zephyr lifecycle; use --help")
     for name in ("validate", "elaborate", "plan", "run"):

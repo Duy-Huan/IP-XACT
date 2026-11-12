@@ -113,9 +113,19 @@ execution is an explicit expensive workflow-dispatch job, not a claimed past run
 - [x] Actual GCD generic synthesis and formal equivalence.
 - [x] Actual GCD Nangate45 mapping/place/CTS/route/GDS with timing/router-DRC checks.
 - [x] Generic self-contained RTL/SDC path exercised through GDS on a public counter fixture.
+- [x] Separate nine-component RTL test-chip profiles with actual Ibex-owned firmware execution.
+- [x] Whole test-chip synthesis/place/CTS/route/GDS for both AI_SOC and AIZ_SOC.
+- [x] Both reference layouts pass setup/hold timing and detailed-router DRC checks.
+- [x] Both RTL and post-route binaries boot twice with identical UART, actual IRQ/memory tests and cycle-limit rejection.
+- [x] Portable whole-test-chip evidence verification rejects modified logs and false full-architecture claims.
 - [ ] Full heterogeneous CPU/cache/accelerator/fabric/controller execution.
 - [ ] Live CPU/RTL traffic through Garnet and a verified synthesizable NoC counterpart.
 - [ ] Complete SoC RTL synthesis, PDK mapping and physical/signoff acceptance.
 
 Independent mesh and synthesis acceptance belongs to the scoped system reports,
 not proof that the complete 46/37-instance architectures execute. See dual-soc.md.
+
+The separate rtl-testchip profiles are explicit functional flow fixtures. Their
+reference layout acceptance does not require electrical/signoff closure; final
+STA still reports 14/11 max-capacitance violations. See rtl-testchips.md for the
+actual result table and mapped firmware acceptance contract.

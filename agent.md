@@ -154,3 +154,10 @@ OpenROAD-flow-scripts with pinned public tool/technology inputs, actual layout a
 timing/routing evidence. Reference-library GDS is a supported engineering result;
 production/foundry signoff and full heterogeneous SoC completion require separate
 acceptance and must not be inferred from a successful leaf implementation.
+
+The separate systems/NAME/rtl-testchip profiles are functional flow fixtures with
+nine fully bound components. Keep their real CPU/firmware, complete-top GDS and
+mapped-netlist acceptance distinct from the larger requested architectures. Local
+promotion requires both test-chip native/physical/mapped builds and their actual
+acceptance tests; see docs/rtl-testchips.md for the exact supported contract and
+remaining electrical/signoff limitations.

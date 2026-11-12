@@ -1,0 +1,70 @@
+// SPDX-License-Identifier: Apache-2.0
+#include <stdint.h>
+#include "chip.h"
+static inline void wr(uint32_t a,uint32_t v) { *(volatile uint32_t*)a=v; }
+static inline uint32_t rd(uint32_t a) { return *(volatile uint32_t*)a; }
+static volatile uint32_t timer_hits, gpio_hits, gcd_hits, fault_hits, last_gcd;
+static void puts_uart(const char *s) {
+  while (*s) { while(rd(UART_BASE+0x14)&1){} wr(UART_BASE+0x1c,(unsigned char)*s++); }
+}
+static void finish(uint32_t code) {
+  while(!(rd(UART_BASE+0x14)&8)){}
+  wr(FINISH_BASE,code);
+  for(;;){}
+}
+static void fail(void) { puts_uart("CHIP_FAIL\n"); finish(0xdead); }
+void trap_handler(void) {
+  uint32_t cause;
+  __asm__ volatile("csrr %0,mcause":"=r"(cause));
+  if(cause==0x80000007u) {
+    wr(TIMER_BASE,0); wr(TIMER_BASE+0x118,1); ++timer_hits;
+  } else if(cause==0x8000000bu) {
+    uint32_t pending=rd(GPIO_BASE);
+    if(pending) { wr(GPIO_BASE,pending); ++gpio_hits; }
+    if(rd(GCD_BASE)&1) { last_gcd=rd(GCD_BASE+12); ++gcd_hits; }
+  } else if(cause==5) {
+    uint32_t epc;
+    __asm__ volatile("csrr %0,mepc":"=r"(epc));
+    epc+=4;
+    __asm__ volatile("csrw mepc,%0"::"r"(epc)); ++fault_hits;
+  } else fail();
+}
+static void wait_for(volatile uint32_t *value,uint32_t wanted) {
+  for(uint32_t i=0;i<200000 && *value<wanted;i++){}
+  if(*value!=wanted) fail();
+}
+int main(void) {
+  wr(UART_BASE+0x10,0x80000001u); // TX, NCO=32768: one serial bit per 32 clocks.
+  puts_uart("@NAME@ CPU_BOOT_OK\n");
+  volatile uint32_t *mem=(volatile uint32_t*)(RAM_BASE+128);
+  for(unsigned i=0;i<32;i++) mem[i]=0x12345678u^i;
+  for(unsigned i=0;i<32;i++) if(mem[i]!=(0x12345678u^i)) fail();
+  *(volatile uint8_t*)mem=0xab;
+  if(mem[0]!=0x123456abu) fail();
+  puts_uart("SRAM_BYTE_OK\n");
+  __asm__ volatile("li t1,0x70000000; .option push; .option norvc; lw t0,0(t1); .option pop":::"t0","t1","memory");
+  if(fault_hits!=1) fail();
+  puts_uart("BUS_FAULT_OK\n");
+  __asm__ volatile("csrw mie,%0"::"r"((1u<<7)|(1u<<11)));
+  __asm__ volatile("csrsi mstatus,8");
+  wr(TIMER_BASE+0x100,1u<<16);
+  wr(TIMER_BASE+0x104,0); wr(TIMER_BASE+0x108,0);
+  wr(TIMER_BASE+0x10c,5000); wr(TIMER_BASE+0x110,0);
+  wr(TIMER_BASE+0x114,1); wr(TIMER_BASE,1);
+  wait_for(&timer_hits,1); puts_uart("TIMER_IRQ_OK\n");
+  wr(GPIO_BASE+0x20,1); wr(GPIO_BASE+0x2c,1);
+  wr(GPIO_BASE+4,1); wr(GPIO_BASE+0x14,1);
+  wait_for(&gpio_hits,1);
+  if(rd(GPIO_BASE)||rd(GPIO_BASE+0x10)!=1) fail();
+  puts_uart("GPIO_IRQ_OK\n");
+  static const uint32_t vectors[4][3]={{48,18,6},{270,192,6},{65535,255,255},{1,1,1}};
+  for(unsigned v=0;v<4;v++) {
+    if(rd(GCD_BASE)!=2) fail();
+    wr(GCD_BASE+4,vectors[v][0]); wr(GCD_BASE+8,vectors[v][1]);
+    wait_for(&gcd_hits,v+1);
+    if(last_gcd!=vectors[v][2]) fail();
+  }
+  puts_uart("GCD_IRQ_OK\n@NAME@ CHIP_PASS\n");
+  finish(0x5555);
+  return 0;
+}

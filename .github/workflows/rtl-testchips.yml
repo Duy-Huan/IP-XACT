@@ -1,0 +1,39 @@
+name: Complete functional RTL test-chip flows
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  two-testchips:
+    # Requires the documented Debian/EDA runner and local Docker socket.
+    # A workflow definition does not provision that runner or prove a hosted run.
+    runs-on: [self-hosted, linux, x64, soc-eda]
+    timeout-minutes: 180
+    env:
+      USP_TOOLCHAIN_ENV: ${{ vars.USP_TOOLCHAIN_ENV }}
+      USP_JOBS: '2'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Activate provisioned tools and frozen Python dependencies
+        run: |
+          test -n "$USP_TOOLCHAIN_ENV"
+          source "$USP_TOOLCHAIN_ENV"
+          uv sync --frozen --extra dev --extra bringup --extra models
+      - name: Build and verify both public functional test-chip configurations
+        run: |
+          source "$USP_TOOLCHAIN_ENV"
+          export USP_CHIP_RESULTS="$PWD/results/rtl-testchips-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          bash scripts/rtl_testchip_flow.sh
+      - name: Upload synthetic test results only
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: rtl-testchips-junit
+          path: build/rtl-testchips-junit.xml
+          if-no-files-found: ignore
+          retention-days: 7

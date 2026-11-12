@@ -4,6 +4,10 @@ from .domain import ContractError
 from .project import Project, keys
 
 CAPABILITIES = {
+    "rtl-testchip": {
+        "status": "implemented-reference",
+        "scope": "RV32 test-chip configurations; full top to GDS and mapped firmware tests",
+    },
     "qemu": {
         "status": "implemented",
         "fidelity": "functional",

@@ -1,0 +1,49 @@
+// SPDX-License-Identifier: Apache-2.0
+#include "V@NAME@.h"
+#include "verilated.h"
+#include <cstdlib>
+#include <iostream>
+#include <string>
+int main(int argc,char **argv) {
+  VerilatedContext context;
+  context.commandArgs(argc,argv);
+  V@NAME@ chip{&context};
+  chip.clk_i=0; chip.rst_ni=1; chip.uart_rx_i=1; chip.eval();
+  chip.rst_ni=0; chip.eval(); // Explicit assertion edge for asynchronous core reset.
+  const unsigned limit=argc>1?std::strtoul(argv[1],nullptr,10):500000;
+  const unsigned boots=argc>2?std::strtoul(argv[2],nullptr,10):1;
+  unsigned total=0;
+  for(unsigned boot=0;boot<boots;boot++) {
+    int countdown=-1,bit=0; unsigned byte=0; bool previous=true;
+    bool complete=false; int drain=-1;
+    for(unsigned cycle=0;cycle<limit;cycle++,total++) {
+      chip.rst_ni=cycle>=12; chip.uart_rx_i=1;
+      chip.clk_i=0; chip.eval(); context.timeInc(@HALF_TICKS@);
+      chip.clk_i=1; chip.eval(); context.timeInc(@HALF_TICKS@);
+      bool tx=chip.uart_tx_o;
+      if(!chip.rst_ni) {countdown=-1;previous=true;continue;}
+      if(chip.fault_o) {std::cerr<<"HOST_CHIP_ALERT\n";return 2;}
+      if(countdown<0) {
+        if(previous && !tx) {countdown=48;bit=0;byte=0;}
+      } else if(--countdown==0) {
+        if(bit<8) {byte|=unsigned(tx)<<bit++;countdown=32;}
+        else {
+          if(!tx) {std::cerr<<"HOST_UART_FRAMING_ERROR\n";return 3;}
+          std::cout<<char(byte)<<std::flush; countdown=-1;
+        }
+      }
+      previous=tx;
+      if(chip.done_o) {
+        if(!chip.success_o || chip.signature_o!=0x5555) {
+          std::cerr<<"HOST_BAD_SIGNATURE "<<chip.signature_o<<"\n";return 4;
+        }
+        if(drain<0) drain=64;
+        if(drain--==0) {complete=true;break;}
+      }
+    }
+    if(!complete) {std::cerr<<"HOST_CYCLE_LIMIT\n";return 5;}
+  }
+  chip.final();
+  std::cerr<<"HOST_BOOTS="<<boots<<" HOST_CYCLES="<<total<<"\n";
+  return 0;
+}

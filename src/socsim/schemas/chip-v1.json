@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1"
+    },
+    "name": {
+      "enum": [
+        "AI_SOC",
+        "AIZ_SOC"
+      ]
+    },
+    "scope": {
+      "const": "functional-rtl-testchip"
+    },
+    "isa": {
+      "const": "rv32imc_zicsr_zifencei"
+    },
+    "privilege": {
+      "const": "M"
+    },
+    "clock_hz": {
+      "const": 50000000,
+      "type": "integer"
+    },
+    "writeback_stage": {
+      "type": "boolean"
+    },
+    "branch_target_alu": {
+      "type": "boolean"
+    },
+    "opentitan_commit": {
+      "const": "ed044fc9760bdf9fc075d0015ba1db07fa075355"
+    },
+    "chipyard_commit": {
+      "const": "69eba860a352343e4ac6b6df0f3638a79a86ec78"
+    }
+  },
+  "required": [
+    "schema_version",
+    "name",
+    "scope",
+    "isa",
+    "privilege",
+    "clock_hz",
+    "writeback_stage",
+    "branch_target_alu",
+    "opentitan_commit",
+    "chipyard_commit"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,29 @@
+schema_version: '1'
+bindings:
+- vlnv: lowrisc:ibex:ibex_top:silver-v5
+  backend: rtl
+  implementation: opentitan.ibex-v1
+- vlnv: socsim.public:rtl:rom:1.0
+  backend: rtl
+  implementation: usp.rom-case-v1
+- vlnv: socsim.public:rtl:sram:1.0
+  backend: rtl
+  implementation: usp.sram-byte-v1
+- vlnv: lowrisc:ip:uart:silver-v5
+  backend: rtl
+  implementation: opentitan.uart-v1
+- vlnv: lowrisc:ip:gpio:silver-v5
+  backend: rtl
+  implementation: opentitan.gpio-v1
+- vlnv: ucb-bar:chipyard:gcd:1.13.0
+  backend: rtl
+  implementation: chipyard.gcd-v1
+- vlnv: lowrisc:ip:rv_timer:silver-v5
+  backend: rtl
+  implementation: opentitan.rv-timer-v1
+- vlnv: socsim.public:rtl:finisher:1.0
+  backend: rtl
+  implementation: usp.finisher-v1
+- vlnv: socsim.public:rtl:obi_tlul:1.0
+  backend: rtl
+  implementation: usp.obi-tlul-v1

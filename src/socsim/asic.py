@@ -85,7 +85,20 @@ def run_container(image, mounts, command, cwd, log, timeout=1800):
         )
 
 
-def build_asic(toolchain, out, rtl=None, top=None, sdc=None, models=None):
+def build_asic(
+    toolchain,
+    out,
+    rtl=None,
+    top=None,
+    sdc=None,
+    models=None,
+    frontend="verilog",
+    memory_limit_bits=4096,
+):
+    if frontend not in {"verilog", "slang"}:
+        raise ContractError("unsupported HDL frontend")
+    if type(memory_limit_bits) is not int or memory_limit_bits not in {4096, 8192, 16384}:
+        raise ContractError("unsupported explicit flip-flop memory budget")
     model = None
     if models is not None:
         if any(v is not None for v in (rtl, top, sdc)):
@@ -120,8 +133,12 @@ export GPL_PLACE_IOS = 1
 export ADDER_MAP_FILE :=
 export PDN_TCL = $(DESIGN_HOME)/nangate45/gcd/grid_strategy-M1-M4-M7.tcl
 export NUM_CORES = 2
+export SYNTH_MEMORY_MAX_BITS = {memory_limit_bits}
 """
     (out / "config.mk").write_text(config)
+    if frontend == "slang":
+        with (out / "config.mk").open("a") as stream:
+            stream.write("export SYNTH_HDL_FRONTEND = slang\n")
     run_container(
         image,
         [(out, "/work")],
@@ -153,6 +170,8 @@ export NUM_CORES = 2
         "status": "IMPLEMENTED_REFERENCE_LAYOUT",
         "scope": "provided RTL top on reference Nangate45",
         "top": top,
+        "frontend": frontend,
+        "memory_limit_bits": memory_limit_bits,
         "pdk": "nangate45",
         "source_image": SOURCE_IMAGE,
         "flat_image_id": image,
@@ -265,13 +284,24 @@ def main(argv):
     for arg in ("rtl", "sdc", "models"):
         build.add_argument("--" + arg, type=Path)
     build.add_argument("--top")
+    build.add_argument("--frontend", choices=("verilog", "slang"), default="verilog")
+    build.add_argument("--memory-limit-bits", type=int, choices=(4096, 8192, 16384), default=4096)
     sub.add_parser("verify").add_argument("run_dir", type=Path)
     args = parser.parse_args(argv)
     try:
         result = (
             verify_asic(args.run_dir)
             if args.command == "verify"
-            else build_asic(args.toolchain, args.out, args.rtl, args.top, args.sdc, args.models)
+            else build_asic(
+                args.toolchain,
+                args.out,
+                args.rtl,
+                args.top,
+                args.sdc,
+                args.models,
+                args.frontend,
+                args.memory_limit_bits,
+            )
         )
         print(json.dumps(result, indent=2))
         return 0

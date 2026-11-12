@@ -40,3 +40,10 @@ bring-up configurations. Their supported flow includes independent Garnet mesh
 experiments, GCD generic synthesis/equivalence and a reference Nangate45
 OpenROAD RTL-to-GDS result. See dual-soc.md and openroad.md; this does not close
 the complete heterogeneous CPU/IP/NoC/RTL/ASIC architecture targets.
+
+Separate nine-component functional RTL test-chip profiles now integrate an actual
+Ibex CPU, ROM/SRAM, OpenTitan UART/GPIO/timer, Chipyard GCD and original fabric.
+Both complete test-chip tops reach Nangate45 GDS with zero router DRC and passing
+reference setup/hold timing. Same-firmware RTL/mapped-netlist acceptance is a
+separate required gate. See rtl-testchips.md; this does not change the larger
+architecture inventory or close its remaining heterogeneous/signoff requirements.
