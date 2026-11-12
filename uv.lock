@@ -612,6 +612,7 @@ source = { editable = "." }
 dependencies = [
     { name = "jsonschema" },
     { name = "lxml" },
+    { name = "pyelftools" },
     { name = "pyyaml" },
 ]
 
@@ -621,7 +622,6 @@ bringup = [
     { name = "meson" },
     { name = "ninja" },
     { name = "packaging" },
-    { name = "pyelftools" },
     { name = "pykwalify" },
     { name = "west" },
 ]
@@ -646,7 +646,7 @@ requires-dist = [
     { name = "mypy", marker = "extra == 'dev'", specifier = "==1.18.2" },
     { name = "ninja", marker = "extra == 'bringup'", specifier = "==1.11.1.4" },
     { name = "packaging", marker = "extra == 'bringup'", specifier = "==26.3" },
-    { name = "pyelftools", marker = "extra == 'bringup'", specifier = "==0.32" },
+    { name = "pyelftools", specifier = "==0.32" },
     { name = "pykwalify", marker = "extra == 'bringup'", specifier = "==1.8.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = "==9.0.2" },
     { name = "pyyaml", specifier = "==6.0.3" },

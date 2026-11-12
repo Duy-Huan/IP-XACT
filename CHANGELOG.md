@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+Pinned ELF inspection is now a core dependency so minimal installations can
+validate/run external firmware artifacts without the optional source-build SDK.
+
 Added configurable CPU provider/model/engine/workload profiles, immutable execution
 plans with explicit ownership/routing/time domains and real bridge-trace checks.
 Native adapters select QEMU rv64/max and gem5 TimingSimple/AtomicSimple; unresolved

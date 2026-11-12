@@ -26,7 +26,8 @@ QEMU/Linux and gem5 SE with the same hash; the acceptance scopes remain distinct
 SystemC and RTL hybrid runs additionally require USP_TLM_RTL_IRQ_OK and independently
 verify trace write/readback/IRQ state transitions. Repeated RTL traces matched.
 
-Observed full local gate on 2026-11-12: **234 tests passed, zero failed/skipped**, including the
+Before the execution-plan additions, the full local gate on 2026-11-12 passed
+**267 tests, zero failed/skipped**, including the
 shared QEMU/Linux and gem5 ELF test, both TLM/RTL modes, and real CLI SIGTERM
 cleanup of its owned guest process. Raw gem5 observations
 include simInsts=3012 and simTicks=80400000 under explicitly uncalibrated assumptions;
@@ -250,3 +251,9 @@ by the proxy at CONNECT 403; none was downloaded/read. A network draft adding th
 five source domains was saved, preserving prior domains. User Review/Save/Publish
 and fresh successful requests remain prerequisites. No paper conclusions or
 scholarly novelty claims are inferred from this blocked retrieval.
+
+The isolated installed core wheel (without west/source-build Python extras) also
+executed and verified the actual QEMU rv64 and gem5 Atomic bare-metal runs. ELF
+inspection is pinned in core dependencies. The additional pure contract tests
+passed separately; clean-commit promotion runs the current complete suite and
+retains its actual latest result in build/junit.xml and the promotion log.
