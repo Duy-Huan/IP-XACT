@@ -8,7 +8,7 @@ an ISS for the requested RTL CPU.
 
 | CPU | Memory engine | Software | Performance |
 |---|---|---|---|
-| Chipyard Ibex blackbox and pinned upstream core | QEMU qtest or gem5 atomic master | RV32IMC bare-metal | Actual RTL clocks/RVFI |
+| Chipyard Ibex blackbox and pinned upstream core | QEMU qtest or gem5 atomic master | RV32IMC bare-metal and dedicated RTOS profiles | Actual RTL clocks/RVFI |
 | Custom RTL with normalized obi-rvfi32-v1 top | Either memory engine | Same RV32 contract | Actual RTL clocks/RVFI |
 | Rocket/BOOM, arbitrary AXI/TileLink, other ISA/MMU | Needs separate adapter | Unsupported here | No substitute results |
 
@@ -94,7 +94,10 @@ supported contract is little-endian RV32IMC plus Zicsr/Zifencei, M-mode, no FPU 
 MMU. ELF entry is RAM base for image loading; Ibex first fetch is RAM+0x80. The
 firmware includes an explicit entry/reset trampoline and eight reset cycles.
 RV64/float ABI images fail before launch. Runtime reset/checkpoint, other boot
-layouts, RTOS/Zephyr ports and Linux-capable RTL CPU models require separate work.
+layouts, Zephyr ports and Linux-capable RTL CPU models require separate work.
+Dedicated source-built FreeRTOS/µC/OS-II/III profiles now verify actual scheduling,
+context and interrupts on both CPU/memory-engine combinations; see [rtl-os.md](rtl-os.md).
+The general platform YAML RTL workload selector remains bare-metal only.
 
 QEMU uses its native qtest accelerator, which creates dummy CPU threads instead
 of executing TCG instructions. Actual physical read/write/clock_step requests and

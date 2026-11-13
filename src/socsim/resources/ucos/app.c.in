@@ -1,0 +1,150 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+#include <stdint.h>
+#include "soc.h"
+#if USP_UCOS == 2
+#include "ucos_ii.h"
+typedef OS_STK stack_t;
+#else
+#include "os.h"
+typedef CPU_STK stack_t;
+static OS_TCB tcbs[2];
+#endif
+#define R32(a) (*(volatile uint32_t *)(a))
+#define UART(n) (*(volatile uint8_t *)(USP_UART_BASE+(n)))
+#define PLIC(n) R32(USP_PLIC_BASE+(n))
+static stack_t stacks[2][1024] __attribute__((aligned(16)));
+static volatile uint32_t ticks, switches, wakes, uart_irqs, gcd_irqs, gpio_irqs, gcd_result;
+static struct { volatile uint32_t loops; uint32_t seed; } worker = {0, 0x12340000};
+static uint64_t deadline;
+void usp_register_worker(void *);
+void SysTick_Handler(void);
+
+static void puts_uart(const char *s) {
+    while (*s) { while (!(UART(5)&0x20)) {} UART(0)=*s++; }
+}
+static void number(uint32_t n) {
+    char d[12]; unsigned i=0;
+    do { d[i++]=(char)('0'+n%10); n/=10; } while (n);
+    while (i) { char s[2]={d[--i],0}; puts_uart(s); }
+}
+static void finish(uint32_t code) __attribute__((noreturn));
+static void finish(uint32_t code) {
+    __asm volatile("csrci mstatus,8" ::: "memory");
+    while (!(UART(5)&0x40)) {} R32(USP_FINISHER_BASE)=code;
+    for (;;) __asm volatile("wfi");
+}
+void usp_fail(void) { puts_uart("USP_UCOS_FAIL\n"); finish(0x13333); }
+static uint64_t mtime(void) {
+    uint32_t hi,lo,again;
+    do { hi=R32(USP_CLINT_BASE+0xbffc); lo=R32(USP_CLINT_BASE+0xbff8);
+         again=R32(USP_CLINT_BASE+0xbffc); } while (hi!=again);
+    return ((uint64_t)hi<<32)|lo;
+}
+static void compare(uint64_t n) {
+    R32(USP_CLINT_BASE+0x4004)=0xffffffff;
+    R32(USP_CLINT_BASE+0x4000)=(uint32_t)n;
+    R32(USP_CLINT_BASE+0x4004)=(uint32_t)(n>>32);
+}
+void usp_interrupt(uint32_t cause) {
+    if (cause==0x80000007U) {
+        deadline += $timer_ticks; compare(deadline); ++ticks;
+        SysTick_Handler();
+    } else if (cause==0x8000000bU) {
+        uint32_t claim=PLIC(0x200004);
+        if (claim==$uart_irq) {
+            if ((UART(2)&15)!=2) usp_fail();
+            UART(1)=0; ++uart_irqs;
+        } else if (claim==$gcd_irq) {
+            gcd_result=R32(USP_CYGCD_BASE+12); ++gcd_irqs;
+        } else if (claim==$gpio_irq) {
+            uint32_t pending=R32(USP_OTGPIO_BASE);
+            if (!pending) usp_fail();
+            R32(USP_OTGPIO_BASE)=pending; ++gpio_irqs;
+        } else usp_fail();
+        PLIC(0x200004)=claim;
+    } else usp_fail();
+}
+
+#if USP_UCOS == 2
+void App_TaskCreateHook(OS_TCB *t) { (void)t; }
+void App_TaskDelHook(OS_TCB *t) { (void)t; }
+void App_TaskIdleHook(void) {}
+void App_TaskReturnHook(OS_TCB *t) { (void)t; usp_fail(); }
+void App_TaskStatHook(void) {}
+void App_TaskSwHook(void) { ++switches; }
+void App_TCBInitHook(OS_TCB *t) { (void)t; }
+void App_TimeTickHook(void) {}
+static void delay(void) { OSTimeDly(1); }
+#else
+static void switched(void) { ++switches; }
+static void delay(void) {
+    OS_ERR err; OSTimeDly(1,OS_OPT_TIME_DLY,&err);
+    if (err!=OS_ERR_NONE) usp_fail();
+}
+#endif
+
+static void supervisor(void *arg) {
+    (void)arg;
+    for (unsigned i=0;i<30;i++) { delay(); ++wakes; }
+    if (ticks<30 || switches<30 || !worker.loops || wakes!=30) usp_fail();
+    puts_uart("USP_UCOS_TIMER_PREEMPTION_REGISTERS_OK\n");
+#if USP_TEST_CASE == 1
+    usp_fail();
+#endif
+    PLIC($uart_irq*4)=1; PLIC($gcd_irq*4)=1; PLIC($gpio_irq*4)=1;
+    PLIC(0x2000)=(1u<<$uart_irq)|(1u<<$gcd_irq)|(1u<<$gpio_irq);
+    PLIC(0x200000)=0;
+    UART(1)=2;
+    for (unsigned n=0;!uart_irqs && n<1000;n++) (void)UART(5);
+    if (uart_irqs!=1 || !(UART(2)&1)) usp_fail();
+    puts_uart("USP_UCOS_UART_PLIC_IRQ_OK\n");
+    const uint32_t vectors[4][3]={{48,18,6},{270,192,6},{65535,255,255},{1,1,1}};
+    for (unsigned v=0;v<4;v++) {
+        if (R32(USP_CYGCD_BASE)!=2) usp_fail();
+        R32(USP_CYGCD_BASE+4)=vectors[v][0]; R32(USP_CYGCD_BASE+8)=vectors[v][1];
+        for (unsigned n=0;gcd_irqs<v+1 && n<2000;n++) (void)R32(USP_CYGCD_BASE);
+        if (gcd_irqs!=v+1 || gcd_result!=vectors[v][2]) usp_fail();
+    }
+    puts_uart("USP_CHIPYARD_GCD_IRQ_OK\n");
+    R32(USP_OTGPIO_BASE+0x20)=1; R32(USP_OTGPIO_BASE+0x2c)=1;
+    R32(USP_OTGPIO_BASE+4)=1; R32(USP_OTGPIO_BASE+0x14)=1;
+    for (unsigned n=0;!gpio_irqs && n<2000;n++) (void)R32(USP_OTGPIO_BASE+0x10);
+    if (gpio_irqs!=1 || R32(USP_OTGPIO_BASE) || R32(USP_OTGPIO_BASE+0x10)!=1) usp_fail();
+    puts_uart("USP_OPENTITAN_GPIO_IRQ_OK\nUSP_UCOS_METRICS ticks="); number(ticks);
+    puts_uart(" switches="); number(switches); puts_uart(" wakes="); number(wakes);
+    puts_uart(" worker="); number(worker.loops); puts_uart(" uart_irqs="); number(uart_irqs);
+    puts_uart(" gcd_irqs="); number(gcd_irqs); puts_uart(" gpio_irqs="); number(gpio_irqs);
+    puts_uart("\nUSP_TEST_PASS\n"); finish(0x5555);
+}
+
+int main(void) {
+    UART(1)=0; UART(3)=0x80; UART(0)=2; UART(1)=0; UART(3)=3; UART(2)=1;
+    puts_uart("USP_UCOS_BOOT_OK\n");
+#if USP_UCOS == 2
+    OSInit();
+    if (OSTaskCreate(supervisor,0,&stacks[0][1023],2)!=OS_ERR_NONE ||
+        OSTaskCreate(usp_register_worker,&worker,&stacks[1][1023],4)!=OS_ERR_NONE) usp_fail();
+#else
+    OS_ERR err;
+    OSInit(&err); if (err!=OS_ERR_NONE) usp_fail();
+    OS_AppTaskSwHookPtr=switched;
+    OSTaskCreate(&tcbs[0],"supervisor",supervisor,0,2,stacks[0],64,1024,0,0,0,0,&err);
+    if (err!=OS_ERR_NONE) usp_fail();
+    OSTaskCreate(&tcbs[1],"registers",usp_register_worker,&worker,4,stacks[1],64,1024,0,0,0,0,&err);
+    if (err!=OS_ERR_NONE) usp_fail();
+#endif
+    R32(USP_CLINT_BASE)=0;
+    deadline=mtime()+$timer_ticks;
+#if USP_TEST_CASE == 2
+    compare(UINT64_MAX);
+#else
+    compare(deadline);
+#endif
+    __asm volatile("csrw mie,%0" :: "r"((1u<<3)|(1u<<7)|(1u<<11)));
+#if USP_UCOS == 2
+    OSStart();
+#else
+    OSStart(&err);
+#endif
+    usp_fail();
+}

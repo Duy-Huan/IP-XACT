@@ -1,5 +1,30 @@
 # Master-spec phase status
 
+## RTOS and live-network update, 2026-11-13
+
+The source-built RTOS matrix passed 42 actual tests in 466.83 seconds: FreeRTOS,
+µC/OS-II and µC/OS-III on both supported real RTL CPU masters, both memory
+engines and three maps, including guest-failure/disabled-tick negative cases.
+The µC/OS task also exercises actual Chipyard GCD and OpenTitan GPIO results/IRQs.
+Both public SiliconLabs kernels/dependencies retain Apache-2.0 notices; the
+upstream checkouts remain clean. See rtl-os.md. This supersedes earlier statements
+that no RTOS can run on the supported RTL masters. It does not establish RTL
+Zephyr/Linux, MMU, arbitrary CPU protocols or general YAML RTOS workload support.
+
+The native gem5 unified Zephyr/SystemC SoC additionally passed three actual
+live Ruby/Garnet tests, including CPU cache-port/ROM/RAM ownership verification
+and modified-configuration rejection. The four-router reference observed 608
+packets and 1,824 flits on rv64-ips. See live-garnet.md. This supersedes the earlier
+standalone-only Garnet boundary for this explicit native gem5 profile. Native
+PIO bypasses Garnet; device DMA, multihart coherence, QEMU/RTL-master Garnet and
+global cycle correlation remain open. Final promotion repeats these new gates
+with the complete required suite and retains its actual result in build/junit.xml.
+
+The owner selected public-PDK ASIC evaluation, with production foundry signoff
+outside that acceptance scope. Both existing complete nine-component test-chip
+layouts remain public-library evaluation results; their electrical/PVT limits
+and the unimplemented larger 46/37-instance architectures remain explicit.
+
 The owner objective is incorporated into agent.md; the raw attached master document
 is not published. Statuses are scoped to the selected reference and real acceptance,
 not a claim that every future standard/backend feature is implemented.

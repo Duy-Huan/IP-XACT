@@ -12,6 +12,8 @@ export USP_REQUIRE_TESTCHIP=1
 export USP_REQUIRE_UNIFIED=1
 export USP_REQUIRE_SW_LAYERS=1
 export USP_REQUIRE_RTL_CPU=1
+export USP_REQUIRE_RTL_OS=1 USP_REQUIRE_UCOS=1
+export USP_REQUIRE_LIVE_GARNET=1
 : "${USP_GENERATED_DIR:?Promotion requires the verified custom QEMU/Zephyr build directory}"
 : "${USP_MODEL_DIR:?Promotion requires the TLM/RTL model build}"
 : "${USP_HYBRID_GENERATED_DIR:?Promotion requires the generated hybrid machine}"
@@ -30,6 +32,9 @@ export USP_REQUIRE_RTL_CPU=1
 : "${USP_RTL_CPU_IBEX_BUILD:?Promotion requires the actual pinned Chipyard Ibex CPU}"
 : "${USP_RTL_CPU_CUSTOM_BUILD:?Promotion requires the actual custom RTL CPU}"
 : "${USP_RTL_MASTER_BUILD:?Promotion requires the actual gem5 RTL bus master}"
+: "${USP_RTL_OS_ROOT:?Promotion requires all actual RV32 FreeRTOS conformance builds}"
+: "${USP_UCOS_ROOT:?Promotion requires both actual µC/OS-II and µC/OS-III conformance builds}"
+: "${USP_GEM5_SOURCE:?Promotion requires the pinned Ruby/Garnet configuration sources}"
 bash scripts/regression.sh
 [[ "$(git rev-parse HEAD)" == "$candidate" && -z "$(git status --porcelain)" ]] || exit 1
 if git show-ref --verify --quiet refs/heads/main; then

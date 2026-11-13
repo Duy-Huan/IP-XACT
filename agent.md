@@ -217,3 +217,18 @@ contracts and derived target IR. See docs/rtl-cpu-adapters.md. Scope is Chipyard
 Ibex or custom obi-rvfi32-v1 RV32IMC M-mode HDL; Rocket/BOOM and arbitrary bus/MMU/OS
 conversion are not implied. Promotion requires both verified CPU builds and the
 gem5 master with native tests on all three mapped I/O profiles.
+
+## 12. Owner RTOS and public-PDK clarification, 2026-11-13
+
+Integrate both µC/OS-II and µC/OS-III. Their selected public SiliconLabs sources
+have Apache-2.0 licenses; retain immutable pins and notices rather than assuming
+a proprietary license blocker. Require actual scheduler/preemption, saved-context,
+timer and peripheral-interrupt acceptance on each supported execution path.
+See docs/rtl-os.md for the source-built RV32 profiles and mandatory promotion gate.
+Do not infer a generic RTL OS/MMU port from these explicitly scoped profiles.
+
+ASIC is an evaluation flow using a public PDK, as explicitly clarified by the
+owner. Continue synthesis/place/route, reference timing/electrical/DRC evaluation
+and reproducible layout evidence without waiting for a production foundry PDK.
+Foundry manufacturing signoff is outside this clarified acceptance scope;
+full architectural implementation and honest PVT/library limits still apply.
