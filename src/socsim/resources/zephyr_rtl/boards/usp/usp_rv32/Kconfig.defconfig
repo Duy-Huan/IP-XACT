@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+if BOARD_USP_RV32
+config BOARD
+	default "usp_rv32"
+endif

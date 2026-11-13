@@ -41,7 +41,8 @@ The selected flat-subset exit is verified. General IP-XACT semantics are incompl
 - [x] Guest failure, missing-tick timeout and modified-artifact negative checks.
 - [x] Both public Apache-2.0 µC/OS-II/III kernels: RV32 BSP, actual RTL scheduling/context and IP IRQ tests.
 - [x] FreeRTOS on both actual RV32 RTL CPU masters and both memory engines.
-- [ ] Zephyr/Linux on MMU/privilege-compatible RTL CPU profiles.
+- [x] Zephyr RV32 M-mode kernel, timer/UART and source-IP drivers on both RTL masters/engines.
+- [ ] Linux on MMU/privilege-compatible RTL CPU profiles.
 
 ## Phase 4: Linux and Yocto
 
@@ -150,5 +151,6 @@ actual result table and mapped firmware acceptance contract.
 - [ ] Complete direct related-work comparison and experimentally substantiate novelty.
 - [x] Actual Chipyard Ibex and normalized custom RTL masters on QEMU/gem5 (RV32 bare-metal).
 - [x] Actual FreeRTOS/µC/OS-II/III on both supported RTL CPU profiles across three maps and both engines.
-- [ ] Rocket/BOOM, other CPU bus/ISA/MMU, Zephyr/Linux RTL ports and cross-ISS adapters.
+- [x] Original out-of-tree RV32 Zephyr BSP; actual kernel/driver and missing-timer acceptance.
+- [ ] Rocket/BOOM, other CPU bus/ISA/MMU, Linux RTL ports and cross-ISS adapters.
 - [ ] Asynchronous global scheduling, actual DMA/coherence, checkpoint and broader live NoC integration.

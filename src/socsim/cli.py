@@ -17,6 +17,10 @@ def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     json_errors = "--json" in argv
     argv = [argument for argument in argv if argument != "--json"]
+    if argv and argv[0] == "rtl-zephyr":
+        from .rtl_zephyr import main as rtl_zephyr_main
+
+        return rtl_zephyr_main(argv[1:])
     if argv and argv[0] == "fabric":
         from .fabric import main as fabric_main
 
@@ -82,6 +86,9 @@ def main(argv=None) -> int:
     )
     commands.add_parser("rtlcpu", help="actual RTL CPU/SystemC master adapters; use --help")
     commands.add_parser("rtl-os", help="FreeRTOS on actual RV32 RTL CPU masters; use --help")
+    commands.add_parser(
+        "rtl-zephyr", help="source-built Zephyr on actual RV32 RTL masters; use --help"
+    )
     commands.add_parser("ucos", help="source-built µC/OS-II/III on RTL CPU masters; use --help")
     commands.add_parser("fabric", help="live Ruby/Garnet in unified gem5/SystemC SoC; use --help")
     commands.add_parser("layers", help="software integration matrix and CPU metrics; use --help")

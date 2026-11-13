@@ -24,12 +24,16 @@ jobs:
           source .venv/bin/activate
           export USP_RTL_OS_ROOT="$PWD/build/rtl-os-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           export USP_UCOS_ROOT="$PWD/build/ucos-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          export USP_RTL_ZEPHYR_ROOT="$PWD/build/rtl-zephyr-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           bash scripts/rtl_os_bringup.sh
+          bash scripts/rtl_zephyr_bringup.sh
       - name: Upload synthetic JUnit only
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: rtl-os-junit
-          path: build/rtl-os-junit.xml
+          path: |
+            build/rtl-os-junit.xml
+            build/rtl-zephyr-junit.xml
           if-no-files-found: ignore
           retention-days: 7

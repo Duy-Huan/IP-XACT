@@ -5,6 +5,12 @@ description: Update platform dependencies and model profiles with reproducible r
 
 # Update workflow
 
+RTL Zephyr changes require the original out-of-tree RV32 BSP, unchanged pinned
+kernel and actual reset/vector/ISA contract. Read docs/rtl-zephyr.md; rebuild all
+three maps and missing-timer firmware and execute both actual CPU/memory-engine
+combinations. Promotion requires USP_REQUIRE_RTL_ZEPHYR/USP_RTL_ZEPHYR_ROOT.
+Keep generic YAML and Linux/MMU limitations separate from this M-mode profile.
+
 Live Garnet changes must retain native CPU cache/memory traffic in the unified
 guest; read docs/live-garnet.md. Require real native packet/flit/hop statistics,
 CPU I/D port wiring, one RAM owner, boot-ROM directory and actual SystemC IP

@@ -265,6 +265,20 @@ def acceptance(out, engine, driver_rc, engine_rc, timed_out, markers, builtin, c
     return checks
 
 
+def wait_socket(path, proc, timeout):
+    """Bound startup separately from guest execution; never accept a dead server."""
+    end = time.monotonic() + timeout
+    while True:
+        rc = proc.poll()
+        if rc is not None:
+            raise ContractError(f"engine/model exited before opening its socket (code {rc})")
+        if path.is_socket():
+            return
+        if time.monotonic() >= end:
+            raise TimeoutError(f"engine/model socket startup deadline exceeded ({timeout:g}s)")
+        time.sleep(0.01)
+
+
 @cleanup_on_termination
 def run_cpu(
     project,
@@ -330,6 +344,7 @@ def run_cpu(
     timed_out = False
     driver = backend = None
     startup_error = None
+    startup_timeout = min(60.0, timeout)
 
     def start(command, log, env=None):
         commands.append(command)
@@ -341,13 +356,6 @@ def run_cpu(
         processes.append(p)
         return p
 
-    def wait_socket(path, proc):
-        end = time.monotonic() + 10
-        while not path.exists():
-            if proc.poll() is not None or time.monotonic() > end:
-                raise ContractError("engine/model did not open its socket")
-            time.sleep(0.01)
-
     with tempfile.TemporaryDirectory(prefix="usp-rtl-") as temp:
         directory = Path(temp)
         ip = directory / "ip.sock"
@@ -357,7 +365,7 @@ def run_cpu(
                 [str(models / "rtl/Vusp_ipblocks"), str(ip), str(out / "ip-trace.jsonl")],
                 "model.log",
             )
-            wait_socket(ip, model)
+            wait_socket(ip, model, startup_timeout)
             if engine == "qemu":
                 env = os.environ.copy()
                 env["USP_BRIDGE_SOCKET"] = str(ip)
@@ -403,7 +411,7 @@ def run_cpu(
                 ]
                 env = python_environment()
             backend = start(command, "engine.log", env)
-            wait_socket(bus, backend)
+            wait_socket(bus, backend, startup_timeout)
             driver = start(
                 [
                     str(cpu_build / "sim/Vusp_rtl_cpu"),
@@ -429,8 +437,9 @@ def run_cpu(
                     backend.wait(timeout=5)
                 except subprocess.TimeoutExpired:
                     timed_out = True
-        except ContractError as exc:
+        except (ContractError, TimeoutError) as exc:
             startup_error = str(exc)
+            timed_out = isinstance(exc, TimeoutError)
         finally:
             for p in reversed(processes):
                 if p.poll() is None:
@@ -474,6 +483,7 @@ def run_cpu(
         "builtin_acceptance": builtin,
         "timed_out": timed_out,
         "startup_error": startup_error,
+        "startup_timeout_seconds": startup_timeout,
         "driver_returncode": driver_rc,
         "engine_returncode": engine_rc,
         "clock_hz": clock_hz,

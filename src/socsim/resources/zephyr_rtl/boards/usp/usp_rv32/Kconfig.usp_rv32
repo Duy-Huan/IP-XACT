@@ -1,0 +1,3 @@
+# SPDX-License-Identifier: Apache-2.0
+config BOARD_USP_RV32
+	select SOC_USP_RV32

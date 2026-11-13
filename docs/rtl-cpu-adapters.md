@@ -87,6 +87,13 @@ alone do not imply the reference custom-IP drivers were exercised.
 
 ## Execution and timing contracts
 
+Model/engine startup uses a separate bounded wait for a live Unix socket, at most
+60 seconds and no longer than the requested guest runtime budget. Startup timeout
+and early process exit are distinguished in the report, with the actual budget
+recorded. A failed startup never starts an ISS or counts as a guest pass. This
+avoids the earlier fixed ten-second cold-start deadline observed under concurrent
+full-RTL load; guest cycle/IRQ/retirement requirements remain unchanged.
+
 Top usp_rtl_cpu has split instruction/data requests, grant, one-cycle responses,
 byte enables, initial active-low reset, boot address, MSIP/MTIP/MEIP pins, RVFI
 valid/trap/PC/instruction and fatal alert. See ibex.sv.in for exact ports. The
@@ -94,9 +101,11 @@ supported contract is little-endian RV32IMC plus Zicsr/Zifencei, M-mode, no FPU 
 MMU. ELF entry is RAM base for image loading; Ibex first fetch is RAM+0x80. The
 firmware includes an explicit entry/reset trampoline and eight reset cycles.
 RV64/float ABI images fail before launch. Runtime reset/checkpoint, other boot
-layouts, Zephyr ports and Linux-capable RTL CPU models require separate work.
+layouts and Linux-capable RTL CPU models require separate work.
 Dedicated source-built FreeRTOS/µC/OS-II/III profiles now verify actual scheduling,
 context and interrupts on both CPU/memory-engine combinations; see [rtl-os.md](rtl-os.md).
+Source-built M-mode Zephyr additionally runs kernel/driver acceptance on both
+RTL masters and all maps; see [rtl-zephyr.md](rtl-zephyr.md).
 The general platform YAML RTL workload selector remains bare-metal only.
 
 QEMU uses its native qtest accelerator, which creates dummy CPU threads instead

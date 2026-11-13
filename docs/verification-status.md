@@ -1,5 +1,29 @@
 # Master-spec phase status
 
+## Actual Zephyr RTL port, 2026-11-13
+
+The first expanded 384-test promotion attempt had one cold gem5 startup failure
+before the RTL driver launched: the engine had not opened its socket within the
+old ten-second deadline. It was retained as a failed gate, not promoted. The
+runner now records a bounded startup budget up to sixty seconds, distinguishes
+dead-server exits from startup timeout and retains cleanup. Three real native
+server lifecycle tests and the actual previously failing FreeRTOS case passed.
+The complete required suite is rerun after this fix before promotion.
+
+The original RV32 BSP passed 14 actual tests in 116.03 seconds: Chipyard Ibex and
+custom writeback/branch-target RTL CPUs, QEMU and gem5 memory engines, three maps
+and two deliberately disabled-timer runs. The unchanged source-pinned Zephyr
+kernel executes timer/UART semaphore wakeups and actual Chipyard GCD/OpenTitan
+GPIO drivers on the RTL CPU, with real RVFI/clocks and zero native gem5 ISS
+execution. See rtl-zephyr.md. This supersedes older statements that Zephyr on
+the supported RTL masters is unverified. Linux/MMU, broader CPU protocols and
+general platform YAML OS workload selection remain open.
+
+The preceding three-kernel/live-Garnet delivery passed all 370 required tests
+without skips in 1256.56 seconds and was promoted/pushed to main as cfd8707.
+Zephyr adds a further mandatory promotion gate; the latest complete result is
+retained in build/junit.xml rather than inferred from the isolated matrix.
+
 ## RTOS and live-network update, 2026-11-13
 
 The source-built RTOS matrix passed 42 actual tests in 466.83 seconds: FreeRTOS,

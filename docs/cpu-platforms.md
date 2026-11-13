@@ -42,6 +42,8 @@ without substitution. The separate RTL/GDS test chips retain their own scope.
 Dedicated `usp rtl-os` and `usp ucos` workflows additionally run real FreeRTOS
 and both µC/OS kernels on these RTL masters; see [rtl-os.md](rtl-os.md). Their
 support does not yet expand the general platform YAML RTL workload selector.
+The separate `usp rtl-zephyr` path runs source-built RV32 Zephyr with real
+kernel/source-IP driver acceptance on both RTL CPU masters; see rtl-zephyr.md.
 
 ## Configure a run
 

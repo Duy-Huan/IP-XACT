@@ -43,6 +43,8 @@ transaction-driven; global cycle correlation, DMA and coherence are not inferred
 No FPU/vector state, supervisor mode, MMU, Linux, SMP, Rocket/BOOM or arbitrary
 RTL protocol support is claimed. FreeRTOS custom-IP drivers are still separate;
 the µC/OS application currently exercises those devices directly from a task.
+Zephyr has its own verified source-built RV32 RTL BSP and driver acceptance;
+see [rtl-zephyr.md](rtl-zephyr.md).
 
 Use the previously verified CPU/model/generated directories described in
 [RTL CPU adapters](rtl-cpu-adapters.md). With GCC 14.2.0, the provisioned FreeRTOS
