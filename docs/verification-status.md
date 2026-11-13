@@ -2,6 +2,14 @@
 
 ## Actual Zephyr RTL port, 2026-11-13
 
+The first expanded 384-test promotion attempt had one cold gem5 startup failure
+before the RTL driver launched: the engine had not opened its socket within the
+old ten-second deadline. It was retained as a failed gate, not promoted. The
+runner now records a bounded startup budget up to sixty seconds, distinguishes
+dead-server exits from startup timeout and retains cleanup. Three real native
+server lifecycle tests and the actual previously failing FreeRTOS case passed.
+The complete required suite is rerun after this fix before promotion.
+
 The original RV32 BSP passed 14 actual tests in 116.03 seconds: Chipyard Ibex and
 custom writeback/branch-target RTL CPUs, QEMU and gem5 memory engines, three maps
 and two deliberately disabled-timer runs. The unchanged source-pinned Zephyr

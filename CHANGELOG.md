@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+RTL CPU startup now waits for a live Unix socket within an explicit budget of up
+to 60 seconds, separate from guest execution. Dead servers report their actual
+exit code; startup deadlines are recorded as timeouts and stop owned processes.
+This fixes a cold gem5 startup failure under concurrent full-RTL load. Real delayed,
+expired and exited server tests cover the lifecycle without changing guest checks.
+
 Added an original source-built RV32 Zephyr SoC/board for both real RTL CPU masters
 and both memory engines. An explicit Ibex reset shim and vectored IRQ contract
 retain unmodified upstream kernel scheduling and real timer/UART/GCD/GPIO drivers.

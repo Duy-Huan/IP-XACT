@@ -87,6 +87,13 @@ alone do not imply the reference custom-IP drivers were exercised.
 
 ## Execution and timing contracts
 
+Model/engine startup uses a separate bounded wait for a live Unix socket, at most
+60 seconds and no longer than the requested guest runtime budget. Startup timeout
+and early process exit are distinguished in the report, with the actual budget
+recorded. A failed startup never starts an ISS or counts as a guest pass. This
+avoids the earlier fixed ten-second cold-start deadline observed under concurrent
+full-RTL load; guest cycle/IRQ/retirement requirements remain unchanged.
+
 Top usp_rtl_cpu has split instruction/data requests, grant, one-cycle responses,
 byte enables, initial active-low reset, boot address, MSIP/MTIP/MEIP pins, RVFI
 valid/trap/PC/instruction and fatal alert. See ibex.sv.in for exact ports. The
