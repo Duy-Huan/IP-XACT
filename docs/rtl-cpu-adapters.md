@@ -94,9 +94,11 @@ supported contract is little-endian RV32IMC plus Zicsr/Zifencei, M-mode, no FPU 
 MMU. ELF entry is RAM base for image loading; Ibex first fetch is RAM+0x80. The
 firmware includes an explicit entry/reset trampoline and eight reset cycles.
 RV64/float ABI images fail before launch. Runtime reset/checkpoint, other boot
-layouts, Zephyr ports and Linux-capable RTL CPU models require separate work.
+layouts and Linux-capable RTL CPU models require separate work.
 Dedicated source-built FreeRTOS/µC/OS-II/III profiles now verify actual scheduling,
 context and interrupts on both CPU/memory-engine combinations; see [rtl-os.md](rtl-os.md).
+Source-built M-mode Zephyr additionally runs kernel/driver acceptance on both
+RTL masters and all maps; see [rtl-zephyr.md](rtl-zephyr.md).
 The general platform YAML RTL workload selector remains bare-metal only.
 
 QEMU uses its native qtest accelerator, which creates dummy CPU threads instead

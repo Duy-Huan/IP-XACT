@@ -17,8 +17,10 @@ OpenTitan's complete GPIO/TL-UL peripheral, connected to guest MMIO and distinct
 PLIC IRQs. It is a peripheral integration, not a Rocket/Earlgrey full-SoC build.
 
 Actual RV32 RTL CPU masters now run source-built FreeRTOS and both µC/OS-II/III
-kernels with QEMU or gem5 owning memory; see [RTL OS](docs/rtl-os.md). Native
-gem5 CPU cache/memory traffic can also use a live Ruby/Garnet network while the
+kernels with QEMU or gem5 owning memory; see [RTL OS](docs/rtl-os.md).
+RV32 Zephyr also runs on both RTL CPU masters with real kernel/source-IP IRQ
+acceptance; see [RTL Zephyr](docs/rtl-zephyr.md).
+Native gem5 CPU cache/memory traffic can also use a live Ruby/Garnet network while the
 same Zephyr guest exercises SystemC source IPs; see [live Garnet](docs/live-garnet.md).
 Both paths have mandatory native promotion gates and explicit remaining limits.
 

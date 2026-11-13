@@ -64,7 +64,9 @@ handoff and clean poweroff. Native gem5 CPI/IPC and QEMU event-count cost estima
 remain distinct. See cpu-platforms.md and software-layers-performance.md.
 Pinned Chipyard Ibex and normalized custom RTL masters support RV32 bare-metal
 and FreeRTOS/µC/OS-II/III on both memory engines; see rtl-cpu-adapters.md and rtl-os.md.
-Rocket/BOOM, other protocols/ISA/MMU, Zephyr/Linux RTL ports and cross-ISS remain open.
+Source-built M-mode Zephyr now also runs on both supported RTL masters and memory
+engines, with the real generated kernel/driver application; see rtl-zephyr.md.
+Rocket/BOOM, other protocols/ISA/MMU, Linux RTL ports and cross-ISS remain open.
 Native gem5 cache/memory traffic now crosses live Ruby/Garnet while the same
 Zephyr guest exercises SystemC IPs. This four-router reference is distinct from
 the independent 16/8-router mesh experiments and unimplemented device DMA.

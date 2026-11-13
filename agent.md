@@ -226,6 +226,9 @@ a proprietary license blocker. Require actual scheduler/preemption, saved-contex
 timer and peripheral-interrupt acceptance on each supported execution path.
 See docs/rtl-os.md for the source-built RV32 profiles and mandatory promotion gate.
 Do not infer a generic RTL OS/MMU port from these explicitly scoped profiles.
+The separate source-built Zephyr RV32 BSP must retain the actual reset/vector/ISA
+contract and kernel/source-IP interrupt tests on both RTL masters, both memory
+engines and all maps; see docs/rtl-zephyr.md. Linux/MMU support is not implied.
 
 ASIC is an evaluation flow using a public PDK, as explicitly clarified by the
 owner. Continue synthesis/place/route, reference timing/electrical/DRC evaluation
