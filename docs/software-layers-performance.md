@@ -1,5 +1,9 @@
 # Software layers and performance on the unified virtual SoC
 
+The five-layer software scope below applies to native RV64 ISS CPUs. External
+RV32 RTL masters currently support bare-metal, with actual clock/RVFI CPI/IPC.
+The passive gem5 IRQ context does not execute instructions. See rtl-cpu-adapters.md.
+
 The platform now supports independently selected bare-metal, FreeRTOS, Zephyr,
 Linux and boot-sequence workloads on QEMU or gem5. These are alternative software
 images, not an assertion that the kernels are stacked or run concurrently.

@@ -2,12 +2,14 @@
 
 import json
 import os
+import shutil
 import sys
 import time
 from pathlib import Path
 from string import Template
 
 from .domain import ContractError
+from .execution import execute_build
 from .ipxact import digest
 from .pipeline import execute, identity, verify_generated, verify_source
 from .runner import write_json
@@ -22,24 +24,84 @@ def python_environment():
     return env
 
 
+def configure_external_systemc(source, target, out):
+    """Use upstream Kconfig; SystemC executes in our separately built process."""
+    if target not in {"RISCV", "Garnet_standalone"}:
+        raise ContractError("unsupported gem5 configuration target")
+    command = ["scons", "setconfig", "build/" + target, "USE_SYSTEMC=n"]
+    config = Path(sys.base_prefix) / "bin/python3-config"
+    if config.exists():
+        command.append("PYTHON_CONFIG=" + str(config))
+    execute(command, source, out / "configure-external-systemc.log", 600, python_environment())
+    native = source / "build" / target / "gem5.build/config"
+    contents = native.read_text().splitlines()
+    required = ["# USE_SYSTEMC is not set"]
+    required += (
+        ["BUILD_ISA=y", "USE_RISCV_ISA=y"]
+        if target == "RISCV"
+        else ["RUBY_PROTOCOL_Garnet_standalone=y"]
+    )
+    if not set(required).issubset(contents):
+        raise ContractError("gem5 native Kconfig does not implement the selected profile")
+    shutil.copy2(native, out / "gem5.config")
+    return {
+        "embedded_systemc": False,
+        "kconfig_sha256": digest(out / "gem5.config"),
+        "adapter_sha256": digest(Path(__file__)),
+    }
+
+
+def record_gem5_configuration(out, binary, configuration):
+    if configuration["adapter_sha256"] != digest(Path(__file__)):
+        raise ContractError("gem5 build adapter changed during compilation")
+    execute([str(binary), "--build-info"], out, out / "build-info.log", 30, python_environment())
+    if "    USE_SYSTEMC = False" not in (out / "build-info.log").read_text().splitlines():
+        raise ContractError("compiled gem5 does not match external SystemC profile")
+    configuration["build_info_sha256"] = digest(out / "build-info.log")
+
+
+def verify_gem5_configuration(out, record):
+    # Retain preexisting source-pinned binaries; new records additionally bind
+    # native Kconfig and the executable's own build-info output.
+    c = record.get("configuration")
+    if c is None:
+        return
+    if (
+        c.get("embedded_systemc") is not False
+        or c.get("adapter_sha256") != digest(Path(__file__))
+        or c.get("kconfig_sha256") != digest(out / "gem5.config")
+        or c.get("build_info_sha256") != digest(out / "build-info.log")
+        or "# USE_SYSTEMC is not set" not in (out / "gem5.config").read_text().splitlines()
+        or "    USE_SYSTEMC = False" not in (out / "build-info.log").read_text().splitlines()
+    ):
+        raise ContractError("modified/stale gem5 configuration evidence")
+
+
 def build_gem5(out, source, jobs=4):
     source = verify_source(source, GEM5_SHA)
     out.mkdir(parents=True, exist_ok=True)
+    configuration = configure_external_systemc(source, "RISCV", out)
     command = ["scons", "build/RISCV/gem5.opt", "-j" + str(jobs), "--without-tcmalloc"]
     config = Path(sys.base_prefix) / "bin/python3-config"
     if config.exists():
         command.append("PYTHON_CONFIG=" + str(config))
-    execute(
+    execute_build(
         command,
         source,
         out / "gem5-build.log",
-        3600,
+        7200,
         python_environment(),
     )
     binary = source / "build/RISCV/gem5.opt"
+    record_gem5_configuration(out, binary, configuration)
     write_json(
         out / "gem5-build.json",
-        {"source_commit": GEM5_SHA, "binary_sha256": digest(binary), "binary": str(binary)},
+        {
+            "source_commit": GEM5_SHA,
+            "binary_sha256": digest(binary),
+            "binary": str(binary),
+            "configuration": configuration,
+        },
     )
     return binary
 
@@ -49,6 +111,7 @@ def run_gem5(project, generated, build_dir, result_dir):
     if project.manifest["profile"] != "usp-rv64-v1":
         raise ContractError("SE workload comparison requires the explicit non-hybrid profile")
     record = json.loads((build_dir / "gem5-build.json").read_text())
+    verify_gem5_configuration(build_dir, record)
     binary = Path(record["binary"])
     if record["source_commit"] != GEM5_SHA or digest(binary) != record["binary_sha256"]:
         raise ContractError("gem5 binary identity mismatch")

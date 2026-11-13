@@ -107,3 +107,15 @@ fixture and uploads only its JSON/Markdown summary; hosted execution is unobserv
 Local promotion requires USP_ASIC_BUILD_DIR and sets USP_REQUIRE_ASIC=1. The native
 test checks the actual GDS/timing and rejects evidence tampering. Hosted physical
 execution must be observed independently; no hosted success is claimed here.
+
+Incomplete native runs can be continued explicitly with `usp asic build` using
+`--resume --timeout 7200` and the same RTL/top/SDC/frontend/memory budget and
+immutable toolchain. The runner requires identical copied RTL, SDC, configuration,
+working directory and image identity, rejects completed outputs and confirms the
+previous container stopped. A per-output lock prevents concurrent writers. It
+retains prior command/log evidence, restores flow scripts from the pinned image
+and lets upstream Make reuse intermediate outputs. Timing/DRC/artifact acceptance
+is unchanged; a timeout or intermediate route is never a pass. Timeout values
+are bounded to 60–14400 seconds; the default is 3600. The full RTL test-chip
+script uses a 7200-second budget and accepts explicit USP_RESUME_ASIC=1 for
+matching incomplete outputs.

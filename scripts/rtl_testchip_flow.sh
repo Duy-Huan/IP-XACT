@@ -25,10 +25,14 @@ for soc in AI_SOC AIZ_SOC; do
     else
         usp chip verify "$rtl_root/$soc"
     fi
-    if [[ ! -e "$physical_root/$soc" ]]; then
+    if [[ ! -e "$physical_root/$soc" ||
+          ( ! -f "$physical_root/$soc/report.json" && "${USP_RESUME_ASIC:-0}" == 1 ) ]]; then
+        resume=()
+        if [[ -e "$physical_root/$soc" ]]; then resume+=(--resume); fi
         usp asic build --toolchain "$tools" --rtl "$rtl_root/$soc/consolidated.sv" \
             --top "$soc" --sdc "$rtl_root/$soc/chip.sdc" --frontend slang \
-            --memory-limit-bits 16384 --out "$physical_root/$soc"
+            --memory-limit-bits 16384 --out "$physical_root/$soc" \
+            --timeout "${USP_ASIC_TIMEOUT:-7200}" "${resume[@]}"
     else
         usp asic verify "$physical_root/$soc"
     fi

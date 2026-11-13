@@ -145,5 +145,6 @@ actual result table and mapped firmware acceptance contract.
 - [x] Original paper ledger and bounded HTTPS/PDF download tooling under ref/.
 - [ ] Retrieve/read the nine requested papers after network policy is applied.
 - [ ] Complete direct related-work comparison and experimentally substantiate novelty.
-- [ ] Actual Chipyard/custom RTL CPU-master and cross-ISS adapters.
+- [x] Actual Chipyard Ibex and normalized custom RTL masters on QEMU/gem5 (RV32 bare-metal).
+- [ ] Rocket/BOOM, other CPU bus/ISA/MMU, RTL OS ports and cross-ISS adapters.
 - [ ] Asynchronous global scheduling, DMA/coherence, checkpoint and live NoC integration.

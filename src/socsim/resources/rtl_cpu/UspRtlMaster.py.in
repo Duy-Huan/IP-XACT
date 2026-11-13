@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+from m5.SimObject import SimObject
+from m5.params import *
+
+class UspRtlMaster(SimObject):
+    type = 'UspRtlMaster'
+    cxx_class = 'gem5::UspRtlMaster'
+    cxx_header = 'usp_rtl_master.hh'
+    port = RequestPort('Actual external RTL CPU physical bus')
+    system = Param.System('Memory owner')
+    cpu = Param.BaseCPU('Halted IRQ sink; never executes instructions')
+    socket_path = Param.String('Owned local RTL CPU socket')

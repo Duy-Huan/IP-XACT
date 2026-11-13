@@ -1,0 +1,69 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+#include <stdint.h>
+#include "soc.h"
+#define R32(a) (*(volatile uint32_t *)(a))
+#define R64(a) (*(volatile uint64_t *)(a))
+#define UART(n) (*(volatile uint8_t *)(USP_UART_BASE+(n)))
+static volatile unsigned fault_expected,fault_hits;
+static volatile unsigned timer_hits,gpio_hits,gcd_hits,last_gcd;
+static void puts_uart(const char *s) {
+ while(*s) { while(!(UART(5)&0x20)){} UART(0)=*s++; }
+}
+static void finish(uint32_t code) {
+ while(!(UART(5)&0x40)){} R32(USP_FINISHER_BASE)=code;
+ for(;;) __asm__ volatile("wfi");
+}
+static void fail(void) { puts_uart("USP_BAREMETAL_FAIL\n"); finish(0x13333); }
+void trap_handler(void) __attribute__((interrupt("machine"),aligned(4)));
+void trap_handler(void) {
+ uint32_t cause; __asm__ volatile("csrr %0,mcause":"=r"(cause));
+ if(cause==0x80000007U) {
+  R32(USP_CLINT_BASE+0x4004)=0xffffffff; R32(USP_CLINT_BASE+0x4000)=0xffffffff; ++timer_hits;
+ } else if(cause==0x8000000bU) {
+  uint32_t source=R32(USP_PLIC_BASE+0x200004);
+  if(source==$gcd_irq) { last_gcd=R32(USP_CYGCD_BASE+12); ++gcd_hits; }
+  else if(source==$gpio_irq) { uint32_t pending=R32(USP_OTGPIO_BASE);
+   if(!pending) fail(); R32(USP_OTGPIO_BASE)=pending; ++gpio_hits; }
+  else fail();
+  R32(USP_PLIC_BASE+0x200004)=source;
+ } else if(cause==5 && fault_expected) {
+  fault_expected=0; ++fault_hits; __asm__ volatile("csrr t0,mepc; addi t0,t0,4; csrw mepc,t0":::"t0");
+ } else fail();
+}
+int main(void) {
+ UART(1)=0; UART(3)=0x80; UART(0)=2; UART(1)=0; UART(3)=3; UART(2)=1;
+ puts_uart("USP_BAREMETAL_BOOT_OK\n");
+ volatile uint32_t sum=0;
+ for(unsigned i=0;i<50;i++) sum+=i;
+ if(sum!=1225) fail();
+ volatile uint32_t bytes=0;
+ ((volatile uint8_t*)&bytes)[1]=0x5a; ((volatile uint16_t*)&bytes)[1]=0xbeef;
+ if(bytes!=0xbeef5a00) fail();
+ puts_uart("USP_BAREMETAL_MEMORY_OK\n");
+ fault_expected=1;
+ __asm__ volatile(".option push; .option norvc; lw zero,0(%0); .option pop"::"r"(USP_FAULT_ADDRESS):"memory");
+ if(fault_expected || fault_hits!=1) fail();
+ puts_uart("USP_RTL_BUS_FAULT_OK\n");
+ R32(USP_PLIC_BASE+$gcd_irq*4)=1; R32(USP_PLIC_BASE+$gpio_irq*4)=1;
+ R32(USP_PLIC_BASE+0x2000)=(1u<<$gcd_irq)|(1u<<$gpio_irq);
+ R32(USP_PLIC_BASE+0x200000)=0;
+ __asm__ volatile("csrw mie,%0"::"r"((1UL<<7)|(1UL<<11)));
+ R32(USP_CLINT_BASE+0x4004)=0; R32(USP_CLINT_BASE+0x4000)=R32(USP_CLINT_BASE+0xbff8)+$timer_ticks;
+ __asm__ volatile("csrsi mstatus,8");
+ while(!timer_hits) __asm__ volatile("wfi");
+ puts_uart("USP_TIMER_IRQ_OK\n");
+ const uint32_t vectors[4][3]={{48,18,6},{270,192,6},{65535,255,255},{1,1,1}};
+ for(unsigned v=0;v<4;v++) {
+  if(R32(USP_CYGCD_BASE)!=2) fail();
+  R32(USP_CYGCD_BASE+4)=vectors[v][0]; R32(USP_CYGCD_BASE+8)=vectors[v][1];
+  for(unsigned n=0;gcd_hits<v+1 && n<2000;n++) (void)R32(USP_CYGCD_BASE);
+  if(gcd_hits!=v+1 || last_gcd!=vectors[v][2]) fail();
+ }
+ puts_uart("USP_CHIPYARD_GCD_IRQ_OK\n");
+ R32(USP_OTGPIO_BASE+0x20)=1; R32(USP_OTGPIO_BASE+0x2c)=1;
+ R32(USP_OTGPIO_BASE+4)=1; R32(USP_OTGPIO_BASE+0x14)=1;
+ for(unsigned n=0;!gpio_hits && n<2000;n++) (void)R32(USP_OTGPIO_BASE+0x10);
+ if(gpio_hits!=1 || R32(USP_OTGPIO_BASE) || R32(USP_OTGPIO_BASE+0x10)!=1) fail();
+ puts_uart("USP_OPENTITAN_GPIO_IRQ_OK\nUSP_TEST_PASS\n"); finish(0x5555);
+ return 0;
+}

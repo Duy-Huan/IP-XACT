@@ -4,6 +4,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 required = [
+    "docs/rtl-cpu-adapters.md",
     "docs/software-layers-performance.md",
     "docs/cpu-platforms.md",
     "docs/research-direction.md",

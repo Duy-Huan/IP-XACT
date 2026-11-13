@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+Native gem5/Garnet/RTL-master builds now allow a bounded graceful shutdown before
+hard termination, preserving SCons' completed-object database after a timeout.
+Actual timeout/return-code evidence remains a failure. Real subprocess tests cover
+checkpoint preservation and termination of an unresponsive build.
+
+Added source-backed Chipyard Ibex and custom RTL CPU masters through SystemC/TLM,
+QEMU qtest and an out-of-tree gem5 atomic master. Explicit target IR and CPU/boot/
+IRQ ownership prevent ISS substitution. Native RTL clocks/RVFI provide CPI/IPC;
+gem5's passive IRQ context must show zero ISS execution. Added normalized HDL ABI,
+source/build/artifact validation, deterministic RV32 firmware and a native matrix
+across three I/O maps, with mandatory promotion checks and public-source setup.
+Rocket/BOOM, other protocols/MMU, RTL OS ports and calibrated timing remain open.
+
 Pinned ELF inspection is now a core dependency so minimal installations can
 validate/run external firmware artifacts without the optional source-build SDK.
 
@@ -100,3 +113,21 @@ docs/verification-status.md; no universal or industrial-completeness claim is ma
 
 Native process owners handle SIGTERM with scoped cleanup and restore the previous
 handler. A real CLI cancellation test verifies exit 143 and that its guest is reaped.
+
+Gem5 source builds now explicitly configure the external SystemC process profile
+through upstream Kconfig, retaining the native configuration and executable
+build-info evidence. Configuration tampering is rejected. This avoids building
+the unused embedded SystemC kernel; actual SystemC/TLM co-simulation remains in
+its existing source-built processes, with the original native engine binaries
+preserved by extension builds.
+
+OpenROAD jobs now support explicit continuation of matching incomplete outputs
+and bounded configurable timeouts. Resume validates RTL/SDC/configuration/image
+identity, confirms prior container shutdown, locks the output and retains prior
+attempt logs. Native Make continues from its checkpoints; final DRC/STA/GDS and
+mapped-firmware acceptance remain mandatory.
+
+The FreeRTOS preemption fixture now waits for observable progress from both
+workers within a bounded guest-tick interval. Delayed functional-emulator ticks
+can arrive in a burst before worker execution; the minimum timer/preemption,
+register preservation and IRQ acceptance requirements are unchanged.

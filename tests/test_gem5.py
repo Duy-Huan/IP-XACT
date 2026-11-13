@@ -4,9 +4,39 @@ from pathlib import Path
 
 import pytest
 
-from socsim.gem5 import run_gem5
+from socsim import gem5 as gem5_adapter
+from socsim.domain import ContractError
+from socsim.gem5 import run_gem5, verify_gem5_configuration
+from socsim.ipxact import digest
 from socsim.pipeline import run_custom
 from socsim.project import load_project
+
+
+@pytest.mark.parametrize("case", ["flag", "kconfig", "executable_info"])
+def test_configuration_provenance_rejects_semantic_mismatch(tmp_path, case):
+    config = tmp_path / "gem5.config"
+    info = tmp_path / "build-info.log"
+    config.write_text("# USE_SYSTEMC is not set\nUSE_RISCV_ISA=y\n")
+    info.write_text("    USE_SYSTEMC = False\n")
+    c = {
+        "embedded_systemc": False,
+        "adapter_sha256": digest(Path(gem5_adapter.__file__)),
+        "kconfig_sha256": digest(config),
+        "build_info_sha256": digest(info),
+    }
+    record = {"configuration": c}
+    verify_gem5_configuration(tmp_path, record)
+    if case == "flag":
+        c["embedded_systemc"] = True
+    if case == "kconfig":
+        config.write_text("USE_SYSTEMC=y\n")
+        c["kconfig_sha256"] = digest(config)
+    if case == "executable_info":
+        info.write_text("    USE_SYSTEMC = True\n")
+        c["build_info_sha256"] = digest(info)
+    with pytest.raises(ContractError, match="configuration"):
+        verify_gem5_configuration(tmp_path, record)
+
 
 ROOT = Path(__file__).resolve().parents[1]
 

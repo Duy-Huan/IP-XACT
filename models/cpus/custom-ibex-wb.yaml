@@ -1,0 +1,12 @@
+{
+  "schema_version": "1",
+  "interface": "obi-rvfi32-v1",
+  "kind": "custom-rtl",
+  "model": "ibex-wb-custom",
+  "files": [
+    {
+      "path": "custom-ibex-wb.sv",
+      "sha256": "dd3fed46fed91335e04d879ced1e4a30b48ee98e5dfabe0e58dbb004b0a6a2c2"
+    }
+  ]
+}

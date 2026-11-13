@@ -1,0 +1,35 @@
+// SPDX-License-Identifier: Apache-2.0
+// Original adapter around the unmodified Chipyard Ibex blackbox.
+module usp_rtl_cpu (
+ input logic clk_i, rst_ni, input logic [31:0] boot_i,
+ output logic i_req_o, output logic [31:0] i_addr_o,
+ input logic i_gnt_i, i_valid_i, i_error_i, input logic [31:0] i_data_i,
+ output logic d_req_o, d_write_o, output logic [3:0] d_be_o,
+ output logic [31:0] d_addr_o, d_data_o,
+ input logic d_gnt_i, d_valid_i, d_error_i, input logic [31:0] d_data_i,
+ input logic irq_sw_i, irq_timer_i, irq_ext_i,
+ output logic retired_o, trap_o, alert_o,
+ output logic [31:0] pc_o, instruction_o
+);
+ logic minor_alert, major_alert;
+ IbexCoreBlackbox #(.MHPM_COUNTER_WIDTH(40), .WB_STAGE(@WRITEBACK@),
+    .BRANCH_TARGET_ALU(@BRANCH@)) cpu (
+  .clk_i, .rst_ni, .test_en_i(1'b0),
+  .ram_cfg_i_ram_cfg_en(1'b0), .ram_cfg_i_ram_cfg(4'b0),
+  .ram_cfg_i_rf_cfg_en(1'b0), .ram_cfg_i_rf_cfg(4'b0),
+  .hart_id_i(32'b0), .boot_addr_i(boot_i),
+  .instr_req_o(i_req_o), .instr_addr_o(i_addr_o), .instr_gnt_i(i_gnt_i),
+  .instr_rvalid_i(i_valid_i), .instr_rdata_i(i_data_i), .instr_err_i(i_error_i),
+  .data_req_o(d_req_o), .data_we_o(d_write_o), .data_be_o(d_be_o),
+  .data_addr_o(d_addr_o), .data_wdata_o(d_data_o), .data_gnt_i(d_gnt_i),
+  .data_rvalid_i(d_valid_i), .data_rdata_i(d_data_i), .data_err_i(d_error_i),
+  .irq_software_i(irq_sw_i), .irq_timer_i, .irq_external_i(irq_ext_i),
+  .irq_fast_i(15'b0), .irq_nm_i(1'b0), .debug_req_i(1'b0), .fetch_enable_i(1'b1),
+  .alert_minor_o(minor_alert), .alert_major_o(major_alert), .scan_rst_ni(1'b1)
+ );
+ assign retired_o = cpu.i_ibex.rvfi_valid;
+ assign trap_o = cpu.i_ibex.rvfi_trap;
+ assign pc_o = cpu.i_ibex.rvfi_pc_rdata;
+ assign instruction_o = cpu.i_ibex.rvfi_insn;
+ assign alert_o = minor_alert | major_alert;
+endmodule

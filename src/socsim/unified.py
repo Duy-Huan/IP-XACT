@@ -16,11 +16,17 @@ import time
 from pathlib import Path
 
 from .domain import ContractError
-from .execution import cleanup_on_termination
-from .gem5 import GEM5_SHA, python_environment
+from .execution import cleanup_on_termination, execute_build
+from .gem5 import (
+    GEM5_SHA,
+    configure_external_systemc,
+    python_environment,
+    record_gem5_configuration,
+    verify_gem5_configuration,
+)
 from .ipblocks import run_ipblocks, verify_models
 from .ipxact import digest
-from .pipeline import execute, identity, resolve, verify_generated, verify_source
+from .pipeline import identity, resolve, verify_generated, verify_source
 from .project import inside, load_project
 from .runner import write_json
 
@@ -34,6 +40,24 @@ def native_identity():
     }
 
 
+def copy_extension(resources, names, extension):
+    """Bind generated SimObject headers without global EXTRAS include flags."""
+    headers = {"UspBridge.py": "usp_bridge.hh", "UspRtlMaster.py": "usp_rtl_master.hh"}
+    for name in names:
+        target = extension / name.removesuffix(".in")
+        if target.name in headers:
+            header = headers[target.name]
+            text = (resources / name).read_text()
+            original = "cxx_header = " + repr(header)
+            if text.count(original) != 1:
+                raise ContractError("unsupported gem5 extension header declaration")
+            target.write_text(
+                text.replace(original, "cxx_header = " + repr(str(extension / header)))
+            )
+        else:
+            shutil.copy2(resources / name, target)
+
+
 @cleanup_on_termination
 def build_bridge(source, out, jobs=2):
     source = verify_source(source, GEM5_SHA)
@@ -41,11 +65,11 @@ def build_bridge(source, out, jobs=2):
     if not 1 <= jobs <= 4:
         raise ContractError("unsupported gem5 build parallelism")
     out.mkdir(parents=True, exist_ok=False)
+    configuration = configure_external_systemc(source, "RISCV", out)
     native = native_identity()
     extension = out / "extension"
     extension.mkdir()
-    for name in native:
-        shutil.copy2(RESOURCES / name, extension / name.removesuffix(".in"))
+    copy_extension(RESOURCES, native, extension)
     binary = source / "build/RISCV/gem5.opt"
     # EXTRAS is an upstream-supported out-of-tree extension. Reuse object files,
     # but preserve the existing independently verified SE binary at its old path.
@@ -66,7 +90,7 @@ def build_bridge(source, out, jobs=2):
         if config.exists():
             command.append("PYTHON_CONFIG=" + str(config))
         try:
-            execute(command, source, out / "build.log", 3600, python_environment())
+            execute_build(command, source, out / "build.log", 7200, python_environment())
             shutil.copy2(binary, out / "gem5.opt")
         finally:
             if old_sha:
@@ -77,8 +101,10 @@ def build_bridge(source, out, jobs=2):
     if native != native_identity():
         raise ContractError("bridge source changed during compilation")
     shutil.copy2(source / "LICENSE", out / "gem5-LICENSE")
+    record_gem5_configuration(out, out / "gem5.opt", configuration)
     record = {
         "contract": "systemc-ips-gem5-v1",
+        "configuration": configuration,
         "source_commit": GEM5_SHA,
         "native_identity": native,
         "base_binary_sha256": old_sha,
@@ -92,6 +118,7 @@ def build_bridge(source, out, jobs=2):
 def verify_bridge(out):
     out = out.resolve()
     r = json.loads((out / "bridge-build.json").read_text())
+    verify_gem5_configuration(out, r)
     if (
         r["contract"] != "systemc-ips-gem5-v1"
         or r["source_commit"] != GEM5_SHA

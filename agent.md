@@ -40,7 +40,7 @@ board bring-up. These targets are a roadmap, not implemented capability claims.
    a correct UART, accelerator, CPU, DMA engine or security device.
 3. Bind exact VLNV and supported model/profile. Reject missing/ambiguous bindings,
    unsupported semantics, unresolved parameters, overlap, overflow and path escapes.
-4. QEMU owns CPU/RAM in functional mode; gem5 owns them in its own mode. Chipyard
+4. QEMU owns CPU/RAM in ISS functional mode; gem5 owns them in its ISS mode. Chipyard
    and OpenTitan supply source/generators, not interchangeable execution engines.
    SystemC is a modeling/time framework, not an automatic universal bridge.
 5. Custom maps require a custom machine/model adapter. Never launch `virt` and claim
@@ -205,3 +205,15 @@ hypotheses pending direct related-work comparison and measured evaluation.
 Prioritize explicit binding, CPU/memory/time ownership, synchronization contracts,
 software boot/driver acceptance, performance fidelity and reproducible end-to-end
 evidence. Independent demos or placeholder model success do not close this goal.
+
+## 11. Actual RTL CPU master ownership
+
+The owner requested resolving Chipyard/custom RTL NEEDS_ADAPTER without an ISS
+substitute. Supported RTL profiles assign instructions to actual SystemC/Verilator
+CPU RTL and physical memory/devices to QEMU qtest or gem5's external atomic master.
+Native engine CPU objects are passive IRQ contexts only. Require actual clock/
+RVFI counters, zero native gem5 ISS evidence, exact source and bus/reset/IRQ/boot
+contracts and derived target IR. See docs/rtl-cpu-adapters.md. Scope is Chipyard
+Ibex or custom obi-rvfi32-v1 RV32IMC M-mode HDL; Rocket/BOOM and arbitrary bus/MMU/OS
+conversion are not implied. Promotion requires both verified CPU builds and the
+gem5 master with native tests on all three mapped I/O profiles.

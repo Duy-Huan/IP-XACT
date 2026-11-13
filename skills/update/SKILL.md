@@ -5,6 +5,12 @@ description: Update platform dependencies and model profiles with reproducible r
 
 # Update workflow
 
+External RTL CPU changes must retain real instruction ownership without ISS
+fallback. Read docs/rtl-cpu-adapters.md; run both actual CPUs on both memory engines
+and all three maps, retaining fault/IRQ/RVFI and zero gem5 ISS counters. Promotion
+requires USP_REQUIRE_RTL_CPU, USP_RTL_CPU_IBEX_BUILD, USP_RTL_CPU_CUSTOM_BUILD and
+USP_RTL_MASTER_BUILD. Rebuild changed native identities; never rewrite hashes.
+
 CPU/software/performance changes must preserve explicit provider/model/engine
 selection and the immutable execution plan. Read docs/cpu-platforms.md and
 docs/software-layers-performance.md. Run all actual native software-layer/alternate

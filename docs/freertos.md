@@ -102,3 +102,9 @@ This is an executable acceptance BSP, not a general FreeRTOS driver SDK. RX,
 queue/semaphore APIs, dynamic allocation, tick wraparound, deep sleep, nested
 interrupts, full ISA/context stress, hybrid peripherals and other backends remain
 unverified. No µC/OS product or license is selected implicitly.
+
+The supervisor waits for both register-checking workers to make progress within
+200 guest ticks before collecting acceptance counters. This accommodates overdue
+functional-emulator ticks delivered in a burst under host load. Real worker
+progress, saved-register correctness, at least 30 timer IRQs, preemption and the
+UART/PLIC notification remain required; the no-tick negative still times out.

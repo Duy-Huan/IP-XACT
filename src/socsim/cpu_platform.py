@@ -53,6 +53,10 @@ def load_platform(path):
             if field in artifact:
                 candidate = Path(artifact[field])
                 artifact[field] = str((path.resolve().parent / candidate).resolve())
+    if "rtl_manifest" in config["cpu"]:
+        config["cpu"]["rtl_manifest"] = str(
+            (path.resolve().parent / config["cpu"]["rtl_manifest"]).resolve()
+        )
     return config
 
 
@@ -61,11 +65,30 @@ def cpu_selection(config, engine, require=True):
         raise ContractError("CPU configuration and execution engine differ")
     cpu = config["cpu"]
     adapter = ADAPTERS.get((cpu["provider"], cpu["model"], engine))
+    if cpu["provider"] in {"chipyard", "custom-rtl"} and "rtl_manifest" in cpu:
+        from .rtl_cpu_build import load_manifest
+
+        manifest = load_manifest(Path(cpu["rtl_manifest"]))
+        kind = "chipyard-ibex" if cpu["provider"] == "chipyard" else "custom-rtl"
+        if manifest["kind"] != kind or manifest["model"] != cpu["model"]:
+            raise ContractError("CPU selection does not match actual RTL source manifest")
+        if set(config.get("workloads", [])) - {"baremetal"}:
+            raise ContractError("RV32 M-mode RTL adapter supports baremetal; OS/MMU ports required")
+        if "qemu_cost_model" in config:
+            raise ContractError("RTL CPU uses native RTL counters, not QEMU estimates")
+        hz = cpu.get("clock_hz", 50000000)
+        if type(hz) is not int or not 100000 <= hz <= 500000000 or 1000000000 % hz:
+            raise ContractError("RTL clock requires an integral 2..10000ns period")
+        adapter = {
+            "adapter": "rtl-obi-rvfi32-" + engine + "-v1",
+            "performance": "native-rtl-counters",
+            "rtl_manifest": cpu["rtl_manifest"],
+        }
     result = {
         "engine": engine,
         "provider": cpu["provider"],
         "model": cpu["model"],
-        "clock_hz": cpu.get("clock_hz", 1000000000),
+        "clock_hz": cpu.get("clock_hz", 50000000 if "rtl_manifest" in cpu else 1000000000),
         "status": "AVAILABLE_ADAPTER" if adapter else "NEEDS_ADAPTER",
         "adapter": None,
         "performance": "native-gem5" if engine == "gem5" else "analytical-qemu",
@@ -89,6 +112,10 @@ def platform_plan(project, config):
 
     base = binding_plan(project, config["engine"])
     selected = cpu_selection(config, config["engine"], require=False)
+    if selected.get("rtl_manifest"):
+        from .rtl_cpu import platform_plan as rtl_plan
+
+        return rtl_plan(project, config, selected, base)
     execution = compile_execution_plan(project, config, selected, base["bindings"])
     return {
         "status": selected["status"],
@@ -102,11 +129,15 @@ def platform_plan(project, config):
     }
 
 
-def run_platform(project, config, generated, models, bridge, counter, out):
+def run_platform(project, config, generated, models, bridge, counter, out, rtl_cpu_build=None):
     from .layers import run_layer, software
     from .runner import write_json
 
     selection = cpu_selection(config, config["engine"])
+    if selection.get("rtl_manifest"):
+        from .rtl_cpu import run_platform as run_rtl
+
+        return run_rtl(project, config, generated, models, bridge, rtl_cpu_build, out)
     out = out.resolve()
     out.mkdir(parents=True, exist_ok=False)
     write_json(out / "plan.json", platform_plan(project, config))
@@ -156,6 +187,10 @@ def verify_platform(out):
 
     out = out.resolve()
     r = json.loads((out / "report.json").read_text())
+    if r.get("profile") == "rtl-cpu-platform-v1":
+        from .rtl_cpu import verify_platform as verify_rtl
+
+        return verify_rtl(out)
     if r["schema_version"] != "1" or r["full_architecture_complete"] is not False:
         raise ContractError("invalid CPU platform completion claim")
     required = {"plan.json", "soc-ir.json"}
@@ -215,8 +250,10 @@ def main(argv):
         p.add_argument("project", type=Path)
         p.add_argument("--config", type=Path, required=True)
         if name == "run":
-            for key in ("generated", "models", "out", "bridge", "counter"):
-                p.add_argument("--" + key, type=Path, required=key not in {"bridge", "counter"})
+            for key in ("generated", "models", "out", "bridge", "counter", "rtl-cpu-build"):
+                p.add_argument(
+                    "--" + key, type=Path, required=key in {"generated", "models", "out"}
+                )
     args = parser.parse_args(argv)
     try:
         if args.command == "verify":
@@ -228,7 +265,14 @@ def main(argv):
             platform_plan(project, config)
             if args.command == "plan"
             else run_platform(
-                project, config, args.generated, args.models, args.bridge, args.counter, args.out
+                project,
+                config,
+                args.generated,
+                args.models,
+                args.bridge,
+                args.counter,
+                args.out,
+                args.rtl_cpu_build,
             )
         )
         print(json.dumps(r, indent=2))

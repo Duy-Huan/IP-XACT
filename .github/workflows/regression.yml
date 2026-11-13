@@ -148,6 +148,7 @@ jobs:
           bash scripts/source_ips_bringup.sh
           bash scripts/hierarchy_bringup.sh
           bash scripts/dual_soc_bringup.sh
+          bash scripts/rtl_cpu_bringup.sh
           USP_REQUIRE_WORKSPACE=1 .venv/bin/python -m pytest tests/test_workspace.py -v --junitxml=build/workspace-junit.xml
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
@@ -157,5 +158,6 @@ jobs:
             build/gem5-junit.xml
             build/workspace-junit.xml
             build/dual-soc-junit.xml
+            build/rtl-cpu-junit.xml
           if-no-files-found: ignore
           retention-days: 7

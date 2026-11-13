@@ -90,7 +90,15 @@ void freertos_risc_v_application_interrupt_handler(void)
 static void supervisor(void *arg)
 {
     (void)arg;
+    TickType_t started = xTaskGetTickCount();
     vTaskDelay(30);
+    /* A delayed functional emulator can deliver many overdue ticks before
+     * either worker executes. Require actual worker progress, with a bounded
+     * guest-tick deadline, before checking preemption/register evidence. */
+    while ((!workers[0].loops || !workers[1].loops) &&
+           (TickType_t)(xTaskGetTickCount() - started) < 200) {
+        vTaskDelay(1);
+    }
     taskENTER_CRITICAL();
     unsigned long ticks = xTaskGetTickCount();
     unsigned long irqs = timer_irqs, context_switches = switches;

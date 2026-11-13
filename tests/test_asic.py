@@ -2,15 +2,87 @@ import json
 import os
 import shutil
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from socsim.asic import build_asic, verify_asic
+from socsim.asic import build_asic, require_inactive_container, validate_resume_inputs, verify_asic
 from socsim.domain import ContractError
 from socsim.ipblocks import verify_models
 from socsim.ipxact import digest
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.parametrize("state", ["missing", "stopped", "running", "offline"])
+def test_resume_requires_confirmed_container_shutdown(monkeypatch, state):
+    name = "usp-asic-" + "a" * 32
+    reply = SimpleNamespace(returncode=1, stdout="", stderr="error: no such object: " + name)
+    if state == "stopped":
+        reply = SimpleNamespace(returncode=0, stdout="false\n", stderr="")
+    if state == "running":
+        reply = SimpleNamespace(returncode=0, stdout="true\n", stderr="")
+    if state == "offline":
+        reply.stderr = "Cannot connect: no such file or directory"
+    monkeypatch.setattr("socsim.asic.subprocess.run", lambda *a, **k: reply)
+    if state in {"running", "offline"}:
+        with pytest.raises(ContractError):
+            require_inactive_container(["docker", "--name", name])
+    else:
+        require_inactive_container(["docker", "--name", name])
+
+
+@pytest.mark.parametrize("bad", [0, True, float("inf")])
+def test_invalid_asic_timeout_is_rejected_before_output(tmp_path, bad):
+    with pytest.raises(ContractError, match="timeout"):
+        build_asic(tmp_path / "missing-tools", tmp_path / "out", timeout=bad)
+    assert not (tmp_path / "out").exists()
+
+
+@pytest.mark.parametrize("changed", ["rtl", "sdc", "config", "image"])
+def test_asic_resume_cannot_reuse_different_inputs_or_tools(tmp_path, changed):
+    out = tmp_path / "run"
+    out.mkdir()
+    (out / "flow").mkdir()
+    rtl = tmp_path / "cpu.sv"
+    sdc = tmp_path / "cpu.sdc"
+    rtl.write_text("module cpu; endmodule\n")
+    sdc.write_text("create_clock -period 10\n")
+    shutil.copy2(rtl, out / "input.sv")
+    shutil.copy2(sdc, out / "constraints.sdc")
+    config = "export DESIGN_NAME = cpu\n"
+    (out / "config.mk").write_text(config)
+    image = "sha256:" + "a" * 64
+    (out / "flow.command.json").write_text(
+        json.dumps(
+            {
+                "cwd": str(out),
+                "argv": [
+                    "docker",
+                    "run",
+                    "--name",
+                    "usp-asic-" + "0" * 32,
+                    "--mount",
+                    f"type=bind,src={out},dst=/work",
+                    image,
+                    "/bin/bash",
+                    "-c",
+                    "original native flow",
+                ],
+            }
+        )
+    )
+    validate_resume_inputs(out, rtl, sdc, config, image)
+    if changed == "rtl":
+        rtl.write_text("module other; endmodule\n")
+    if changed == "sdc":
+        sdc.write_text("create_clock -period 20\n")
+    if changed == "config":
+        (out / "config.mk").write_text(config + "changed\n")
+    if changed == "image":
+        image = "sha256:" + "b" * 64
+    with pytest.raises(ContractError, match="resume"):
+        validate_resume_inputs(out, rtl, sdc, config, image)
 
 
 @pytest.mark.parametrize("top", ["bad;top", "$(touch owned)", "../other", ""])
