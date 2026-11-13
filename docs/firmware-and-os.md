@@ -34,16 +34,12 @@ and UART/PLIC notification from an ISR to a waiting task. Negative guests exerci
 assertion failure and disabled-timer timeout. See [FreeRTOS](freertos.md) for source
 and compiler pins, commands, evidence and unverified driver/context features.
 
-For `uOS`, the intended product (for example µC/OS-II or µC/OS-III), its version
-and license still need selection before an integration can be specified. It is not
-assumed to be compatible with Zephyr or freely redistributable. No such source is
-downloaded or runtime support claimed.
-
-An inspected public candidate is weston-embedded/uC-OS3 v3.08.02, commit
-93d6e79023f1031480c20f479ca7662f3f1c3c3a. Its kernel license is Apache-2.0 and
-os.h requires uC/CPU 1.31.00 or later. No candidate is bound as a supported runtime:
-the supplied template has target-specific placeholders, and this platform has no
-verified RV64 port for it. Public source inspection is not a BSP/boot acceptance.
+The owner selected both µC/OS-II and µC/OS-III. Public Apache-2.0 SiliconLabs
+sources now have actual source-built RV32 BSPs on both RTL CPU masters with
+QEMU/gem5 memory engines. FreeRTOS also has a separate actual RV32 RTL port.
+See [RTL OS acceptance](rtl-os.md) for exact pins, preemption/context and actual
+Chipyard GCD/OpenTitan GPIO IRQ tests, negative cases and scope. These M-mode
+profiles do not imply RV64, MMU/Linux or arbitrary RTL kernel support.
 
 ## Direct Linux/OpenSBI
 

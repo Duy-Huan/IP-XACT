@@ -5,6 +5,21 @@ description: Update platform dependencies and model profiles with reproducible r
 
 # Update workflow
 
+Live Garnet changes must retain native CPU cache/memory traffic in the unified
+guest; read docs/live-garnet.md. Require real native packet/flit/hop statistics,
+CPU I/D port wiring, one RAM owner, boot-ROM directory and actual SystemC IP
+results/IRQs on all three maps. Promotion requires USP_REQUIRE_LIVE_GARNET and
+USP_GEM5_SOURCE. PIO bypass, absent device DMA/multihart coherence and global
+timing limits must remain explicit; synthetic traffic does not close this gate.
+
+RTL RTOS changes must preserve actual instruction ownership. Read docs/rtl-os.md;
+build all three maps and both negative firmware cases for FreeRTOS, µC/OS-II and
+µC/OS-III. Run both real CPUs on both memory engines, retain kernel/port/license
+provenance and require USP_REQUIRE_RTL_OS/USP_REQUIRE_UCOS with verified build
+roots at promotion. Source or adapter identity changes require fresh builds.
+The owner selected both public Apache-2.0 µC/OS products and a public-PDK ASIC
+evaluation flow; production foundry licensing is not a prerequisite for that scope.
+
 External RTL CPU changes must retain real instruction ownership without ISS
 fallback. Read docs/rtl-cpu-adapters.md; run both actual CPUs on both memory engines
 and all three maps, retaining fault/IRQ/RVFI and zero gem5 ISS counters. Promotion

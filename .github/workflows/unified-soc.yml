@@ -27,8 +27,8 @@ jobs:
           : "${USP_GEM5_SOURCE:?Provide the pinned clean gem5 checkout}"
           export USP_UNIFIED_GEM5_BUILD="$PWD/build/unified-gem5-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           usp unified build-gem5 --source "$USP_GEM5_SOURCE" --out "$USP_UNIFIED_GEM5_BUILD" --jobs 2
-          export USP_REQUIRE_UNIFIED=1
-          python -m pytest tests/test_unified.py -v --junitxml=build/unified-junit.xml
+          export USP_REQUIRE_UNIFIED=1 USP_REQUIRE_LIVE_GARNET=1
+          python -m pytest tests/test_unified.py tests/test_live_fabric.py -v --junitxml=build/unified-junit.xml
       - name: Upload synthetic regression results
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

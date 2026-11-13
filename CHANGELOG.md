@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+Added source-built RV32 FreeRTOS, µC/OS-II and µC/OS-III on both actual RTL CPU
+masters with QEMU/gem5 memory engines. The new dedicated CLI/workflow binds
+generated maps, exact public kernel pins, reviewed port adaptations and preserved
+licenses. Native tests require preemption, saved registers and real timer/UART
+interrupts; µC/OS additionally exercises Chipyard GCD/OpenTitan GPIO IRQs. Both
+failure and disabled-tick firmware are rejected. Promotion now requires these
+three-kernel matrices. The owner clarified public-PDK ASIC evaluation scope.
+
+Added an actual live Ruby/MI_example/Garnet path for native gem5 CPU cache/memory
+transactions in the unified Zephyr/SystemC SoC. Four routers connect CPU cache,
+RAM directory, ROM directory and I/O controller; real packet/flit/hop counters,
+CPU port wiring and the single RAM owner are required at promotion. Native PIO
+still uses the Ruby sequencer's PIO path. QEMU/RTL-master Garnet, device DMA and
+multihart coherence remain separate work.
+
 Native gem5/Garnet/RTL-master builds now allow a bounded graceful shutdown before
 hard termination, preserving SCons' completed-object database after a timeout.
 Actual timeout/return-code evidence remains a failure. Real subprocess tests cover
@@ -13,7 +28,7 @@ IRQ ownership prevent ISS substitution. Native RTL clocks/RVFI provide CPI/IPC;
 gem5's passive IRQ context must show zero ISS execution. Added normalized HDL ABI,
 source/build/artifact validation, deterministic RV32 firmware and a native matrix
 across three I/O maps, with mandatory promotion checks and public-source setup.
-Rocket/BOOM, other protocols/MMU, RTL OS ports and calibrated timing remain open.
+Rocket/BOOM, other protocols/MMU, Zephyr/Linux RTL ports and calibrated timing remain open.
 
 Pinned ELF inspection is now a core dependency so minimal installations can
 validate/run external firmware artifacts without the optional source-build SDK.

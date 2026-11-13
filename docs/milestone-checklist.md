@@ -39,7 +39,9 @@ The selected flat-subset exit is verified. General IP-XACT semantics are incompl
 - [x] Generated Zephyr board/DTS/application, actual west build and boot/IRQ proof.
 - [x] FreeRTOS source-built BSP with preemption/register/FromISR tests.
 - [x] Guest failure, missing-tick timeout and modified-artifact negative checks.
-- [ ] Other RTOS products: select uC/OS version/license, then implement and verify BSP.
+- [x] Both public Apache-2.0 µC/OS-II/III kernels: RV32 BSP, actual RTL scheduling/context and IP IRQ tests.
+- [x] FreeRTOS on both actual RV32 RTL CPU masters and both memory engines.
+- [ ] Zephyr/Linux on MMU/privilege-compatible RTL CPU profiles.
 
 ## Phase 4: Linux and Yocto
 
@@ -125,8 +127,9 @@ execution is an explicit expensive workflow-dispatch job, not a claimed past run
 - [x] Both RTL and post-route binaries boot twice with identical UART, actual IRQ/memory tests and cycle-limit rejection.
 - [x] Portable whole-test-chip evidence verification rejects modified logs and false full-architecture claims.
 - [ ] Full heterogeneous CPU/cache/accelerator/fabric/controller execution.
-- [ ] Live CPU/RTL traffic through Garnet and a verified synthesizable NoC counterpart.
-- [ ] Complete SoC RTL synthesis, PDK mapping and physical/signoff acceptance.
+- [x] Native gem5 CPU cache/memory traffic through live Ruby/Garnet with the unified SystemC IP guest.
+- [ ] Live QEMU/RTL-master NoC path and a verified synthesizable counterpart for the full inventories.
+- [ ] Full-inventory RTL synthesis and public-PDK physical/electrical/PVT evaluation.
 
 Independent mesh and synthesis acceptance belongs to the scoped system reports,
 not proof that the complete 46/37-instance architectures execute. See dual-soc.md.
@@ -146,5 +149,6 @@ actual result table and mapped firmware acceptance contract.
 - [ ] Retrieve/read the nine requested papers after network policy is applied.
 - [ ] Complete direct related-work comparison and experimentally substantiate novelty.
 - [x] Actual Chipyard Ibex and normalized custom RTL masters on QEMU/gem5 (RV32 bare-metal).
-- [ ] Rocket/BOOM, other CPU bus/ISA/MMU, RTL OS ports and cross-ISS adapters.
-- [ ] Asynchronous global scheduling, DMA/coherence, checkpoint and live NoC integration.
+- [x] Actual FreeRTOS/µC/OS-II/III on both supported RTL CPU profiles across three maps and both engines.
+- [ ] Rocket/BOOM, other CPU bus/ISA/MMU, Zephyr/Linux RTL ports and cross-ISS adapters.
+- [ ] Asynchronous global scheduling, actual DMA/coherence, checkpoint and broader live NoC integration.

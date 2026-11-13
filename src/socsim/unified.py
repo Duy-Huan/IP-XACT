@@ -230,7 +230,16 @@ MARKERS = [
 
 
 @cleanup_on_termination
-def run_system(project, generated, models, bridge, out, timeout=30, max_ticks=2000000000000):
+def run_system(
+    project,
+    generated,
+    models,
+    bridge,
+    out,
+    timeout=30,
+    max_ticks=2000000000000,
+    garnet_source=None,
+):
     if not math.isfinite(timeout) or not 0 < timeout <= 300:
         raise ContractError("invalid unified runtime timeout")
     contract = board_contract(project, max_ticks)
@@ -244,6 +253,12 @@ def run_system(project, generated, models, bridge, out, timeout=30, max_ticks=20
     ):
         raise ContractError("stale or modified shared Zephyr firmware")
     out.mkdir(parents=True, exist_ok=False)
+    board_template = RESOURCES / "board.py.in"
+    if garnet_source is not None:
+        from .fabric import prepare
+
+        prepare(garnet_source, out, contract)
+        board_template = RESOURCES / "board-garnet.py.in"
     # Original RV64 reset trampoline: AUIPC t0; CSRRS a0,mhartid; a1=0;
     # LD t0,24(t0); JALR t0; NOP; 64-bit entry literal. Firmware owns RAM.
     rom = struct.pack(
@@ -262,7 +277,7 @@ def run_system(project, generated, models, bridge, out, timeout=30, max_ticks=20
     contract["rom_image"] = str(out / "rom.bin")
     write_json(out / "board.json", contract)
     write_json(out / "engine-bindings.json", binding_plan(project))
-    shutil.copy2(RESOURCES / "board.py.in", out / "board.py")
+    shutil.copy2(board_template, out / "board.py")
     timed_out = False
     with tempfile.TemporaryDirectory(prefix="usp-unified-") as name:
         sock = Path(name) / "bus.sock"
@@ -343,6 +358,12 @@ def run_system(project, generated, models, bridge, out, timeout=30, max_ticks=20
         "model_exit": model.returncode == 0,
         "actual_cpu_execution": stats.get("simInsts", 0) > 0,
     }
+    fabric = None
+    if garnet_source is not None:
+        from .fabric import inspect_fabric
+
+        fabric = inspect_fabric(out)
+        checks.update(fabric["checks"])
     report = {
         "status": "PASSED" if all(checks.values()) else "TIMED_OUT" if timed_out else "FAILED",
         "profile": "unified-systemc-gem5-v1",
@@ -358,7 +379,8 @@ def run_system(project, generated, models, bridge, out, timeout=30, max_ticks=20
         "statistics": stats,
         "model_process": {"pid": model.pid, "returncode": model.returncode},
         "adapter_sha256": digest(Path(__file__)),
-        "board_template_sha256": digest(RESOURCES / "board.py.in"),
+        "board_template_sha256": digest(board_template),
+        "fabric": fabric,
         "limitations": [
             "One gem5 TimingSimpleCPU hart owns RAM; QEMU is an alternative CPU engine",
             "SystemC TLM drives actual Chipyard GCD/OpenTitan GPIO RTL at transaction boundaries",
@@ -367,6 +389,14 @@ def run_system(project, generated, models, bridge, out, timeout=30, max_ticks=20
             "No live Garnet integration, checkpoint, full Rocket/Earlgrey or arbitrary-IP binding",
         ],
     }
+    if fabric is not None:
+        report["limitations"] = [
+            "One native gem5 TimingSimpleCPU; MI_example Ruby caches and live Garnet Pt2Pt",
+            "RAM and boot ROM are directory-owned; native PIO crosses Ruby to SystemC IPs",
+            "No coherent device DMA or multihart coherence acceptance yet",
+            "SystemC RTL advances at transaction boundaries; global timing is uncalibrated",
+            "QEMU live Garnet, full Rocket/Earlgrey and full architecture remain unimplemented",
+        ]
     shutil.copytree(models / "licenses", out / "licenses")
     write_json(out / "report.json", report)
     (out / "report.md").write_text(

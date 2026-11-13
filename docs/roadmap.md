@@ -23,8 +23,9 @@ Do not infer behavior from XML names or add unsupported metadata as ignored fiel
 
 The selected FreeRTOS GCC RV64 port now has a generated static-allocation BSP,
 real timer preemption/register checks and UART/PLIC FromISR notification on the
-non-hybrid profile; see freertos.md for its limits. Broader FreeRTOS drivers and
-the requested µC/OS product/license remain separate work. The selected Chipyard
+non-hybrid profile; see freertos.md for its limits. Separate source-built RV32
+FreeRTOS and both Apache-2.0 µC/OS-II/III kernels now run on actual RTL masters;
+see rtl-os.md. Broader FreeRTOS drivers remain separate work. The selected Chipyard
 GCD classes now compile with pinned Chisel/Scala/CIRCT and execute as real RTL;
 the full Rocket/submodule configuration remains unimplemented. OpenTitan supplies
 both FIFO and a complete GPIO/TL-UL peripheral, not the complete secure SoC.
@@ -62,8 +63,13 @@ The source-IP board now boots Linux under gem5 with actual MMU/FDT/firmware/OS
 handoff and clean poweroff. Native gem5 CPI/IPC and QEMU event-count cost estimates
 remain distinct. See cpu-platforms.md and software-layers-performance.md.
 Pinned Chipyard Ibex and normalized custom RTL masters support RV32 bare-metal
-on both memory engines; see rtl-cpu-adapters.md. Rocket/BOOM, other protocols/ISA/
-MMU, RTL OS ports and cross-ISS remain open.
+and FreeRTOS/µC/OS-II/III on both memory engines; see rtl-cpu-adapters.md and rtl-os.md.
+Rocket/BOOM, other protocols/ISA/MMU, Zephyr/Linux RTL ports and cross-ISS remain open.
+Native gem5 cache/memory traffic now crosses live Ruby/Garnet while the same
+Zephyr guest exercises SystemC IPs. This four-router reference is distinct from
+the independent 16/8-router mesh experiments and unimplemented device DMA.
+The owner selected public-PDK ASIC evaluation; production foundry signoff is not
+required for that clarified scope. Full-inventory implementation remains open.
 
 The owner research direction and nine-paper ledger are in research-direction.md
 and ref/. Paper retrieval is currently blocked; novelty claims await a direct

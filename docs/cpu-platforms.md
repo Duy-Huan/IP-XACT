@@ -39,6 +39,9 @@ See [rtl-cpu-adapters.md](rtl-cpu-adapters.md) for source pins, boot/ABI constra
 actual RTL CPI/IPC, commands and native tests. Rocket/BOOM, missing RTL interfaces,
 other ISA/MMU contracts and cross-ISS combinations still need adapters and fail
 without substitution. The separate RTL/GDS test chips retain their own scope.
+Dedicated `usp rtl-os` and `usp ucos` workflows additionally run real FreeRTOS
+and both µC/OS kernels on these RTL masters; see [rtl-os.md](rtl-os.md). Their
+support does not yet expand the general platform YAML RTL workload selector.
 
 ## Configure a run
 

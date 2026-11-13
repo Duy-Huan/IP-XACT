@@ -17,6 +17,18 @@ def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     json_errors = "--json" in argv
     argv = [argument for argument in argv if argument != "--json"]
+    if argv and argv[0] == "fabric":
+        from .fabric import main as fabric_main
+
+        return fabric_main(argv[1:])
+    if argv and argv[0] == "ucos":
+        from .ucos import main as ucos_main
+
+        return ucos_main(argv[1:])
+    if argv and argv[0] == "rtl-os":
+        from .rtl_os import main as rtl_os_main
+
+        return rtl_os_main(argv[1:])
     if argv[:2] == ["ipxact", "validate"]:
         argv = argv[1:]
     if argv and argv[0] == "rtlcpu":
@@ -69,6 +81,9 @@ def main(argv=None) -> int:
         "platform", help="select CPU provider, engine and software workloads; use --help"
     )
     commands.add_parser("rtlcpu", help="actual RTL CPU/SystemC master adapters; use --help")
+    commands.add_parser("rtl-os", help="FreeRTOS on actual RV32 RTL CPU masters; use --help")
+    commands.add_parser("ucos", help="source-built µC/OS-II/III on RTL CPU masters; use --help")
+    commands.add_parser("fabric", help="live Ruby/Garnet in unified gem5/SystemC SoC; use --help")
     commands.add_parser("layers", help="software integration matrix and CPU metrics; use --help")
     commands.add_parser("unified", help="one SoC/ELF with SystemC IPs on QEMU or gem5; use --help")
     commands.add_parser("backends", help="show implemented and planned capabilities")
