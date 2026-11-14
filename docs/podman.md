@@ -111,6 +111,7 @@ source .venv/bin/activate
 export USP_FETCH_LINUX=1 USP_FETCH_MODELS=1 USP_FETCH_FREERTOS=1 USP_FETCH_CHIPYARD=1
 bash scripts/fetch_upstreams.sh
 bash scripts/bringup.sh
+bash scripts/setup_chipyard_tools.sh
 bash scripts/source_ips_bringup.sh
 ```
 
@@ -137,5 +138,7 @@ when nested rootless user namespaces are unavailable. Set USP_DOCKER_HOST only
 to select an intentional Docker endpoint. This compatibility test is distinct
 from native Podman acceptance. Docker export is converted offline to a real OCI
 archive using bundled skopeo; it is not a Docker archive renamed to .oci.tar.
+If skopeo is installed on the host, Docker export uses it directly to avoid an
+additional SDK container copy on VFS storage drivers.
 Local compatibility tests never establish a hosted Podman success. Logs and exact
 tested revision must be reported separately, along with any release/API blocker.

@@ -10,20 +10,8 @@ COPY --from=uv /uv /uvx /usr/local/bin/
 COPY containers/with-trust.sh /usr/local/bin/with-trust
 ENV UV_PYTHON_INSTALL_DIR=/opt/python UV_LINK_MODE=copy UV_SYSTEM_CERTS=true
 WORKDIR /opt/socsim
-COPY pyproject.toml uv.lock ./
-COPY src/ src/
-COPY examples/ examples/
-COPY models/ models/
-COPY native/ native/
-COPY platforms/ platforms/
-COPY systems/ systems/
-COPY scripts/ scripts/
-COPY tests/ tests/
-COPY docs/ docs/
-COPY skills/ skills/
-COPY ref/README.md ref/papers.json ref/
-COPY containers/ containers/
-COPY README.md CHANGELOG.md agent.md AGENTS.md workspace.yaml ./
+# Both OCI clients apply the same allowlist; the wrapper uses git archive HEAD.
+COPY . .
 RUN --mount=type=secret,id=proxy_ca \
     with-trust sh -ec 'apt-get update; \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \

@@ -69,10 +69,14 @@ case "$command" in
             temporary=$(mktemp -d "$dest/.docker-export.XXXXXXXX")
             trap 'rm -rf -- "$temporary"' EXIT
             "${oci[@]}" save --output "$temporary/image.tar" "$image"
-            "${oci[@]}" run "${safe[@]}" "${user_args[@]}" --network=none \
-                --volume "$dest:/export" "$image" skopeo copy \
-                "docker-archive:/export/${temporary##*/}/image.tar" \
-                "oci-archive:/export/$archive:$image"
+            if command -v skopeo >/dev/null; then
+                skopeo copy "docker-archive:$temporary/image.tar" "oci-archive:$dest/$archive:$image"
+            else
+                "${oci[@]}" run "${safe[@]}" "${user_args[@]}" --network=none \
+                    --volume "$dest:/export" "$image" skopeo copy \
+                    "docker-archive:/export/${temporary##*/}/image.tar" \
+                    "oci-archive:/export/$archive:$image"
+            fi
         fi
         "${oci[@]}" image inspect "$image" > "$dest/image-inspect.json"
         (cd "$dest" && sha256sum "$archive" image-inspect.json > SHA256SUMS)
