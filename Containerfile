@@ -8,6 +8,22 @@ LABEL org.opencontainers.image.title="SoC co-design SDK" \
       org.opencontainers.image.version="0.2.0-r1"
 COPY --from=uv /uv /uvx /usr/local/bin/
 COPY containers/with-trust.sh /usr/local/bin/with-trust
+ENV UV_PYTHON_INSTALL_DIR=/opt/python UV_LINK_MODE=copy UV_SYSTEM_CERTS=true
+WORKDIR /opt/socsim
+COPY pyproject.toml uv.lock ./
+COPY src/ src/
+COPY examples/ examples/
+COPY models/ models/
+COPY native/ native/
+COPY platforms/ platforms/
+COPY systems/ systems/
+COPY scripts/ scripts/
+COPY tests/ tests/
+COPY docs/ docs/
+COPY skills/ skills/
+COPY ref/README.md ref/papers.json ref/
+COPY containers/ containers/
+COPY README.md CHANGELOG.md agent.md AGENTS.md workspace.yaml ./
 RUN --mount=type=secret,id=proxy_ca \
     with-trust sh -ec 'apt-get update; \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -23,29 +39,11 @@ RUN --mount=type=secret,id=proxy_ca \
       gcc-riscv64-unknown-elf=14.2.0+19 binutils-riscv64-unknown-elf=2.44-3+7+b1 \
       skopeo; \
     dpkg-query -W > /usr/local/share/sdk-packages.tsv; \
-    rm -rf /var/lib/apt/lists/*'
-ENV UV_PYTHON_INSTALL_DIR=/opt/python UV_LINK_MODE=copy UV_NATIVE_TLS=true
-RUN --mount=type=secret,id=proxy_ca \
-    with-trust uv python install 3.12.14
-WORKDIR /opt/socsim
-COPY pyproject.toml uv.lock ./
-COPY src/ src/
-RUN --mount=type=secret,id=proxy_ca \
+    rm -rf /var/lib/apt/lists/*' && \
+    with-trust uv python install 3.12.14 && \
     with-trust uv sync --frozen --all-extras --no-editable --python 3.12.14 && \
-    rm -rf /root/.cache/uv
-COPY examples/ examples/
-COPY models/ models/
-COPY native/ native/
-COPY platforms/ platforms/
-COPY systems/ systems/
-COPY scripts/ scripts/
-COPY tests/ tests/
-COPY docs/ docs/
-COPY skills/ skills/
-COPY ref/README.md ref/papers.json ref/
-COPY containers/ containers/
-COPY README.md CHANGELOG.md agent.md AGENTS.md workspace.yaml ./
-RUN cp containers/entrypoint.sh /usr/local/bin/socsim-entrypoint && \
+    rm -rf /root/.cache/uv && \
+    cp containers/entrypoint.sh /usr/local/bin/socsim-entrypoint && \
     chmod 755 /usr/local/bin/with-trust /usr/local/bin/socsim-entrypoint && \
     mkdir -p /workspace /cache && chmod 1777 /workspace /cache && \
     printf '%s\n' "${SOURCE_REVISION}" > /usr/local/share/socsim-revision && \
