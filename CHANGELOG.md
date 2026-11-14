@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+Added a Podman rootless SDK Containerfile, committed-source build context,
+UID/GID-preserving wrapper, isolated host caches, SELinux support and offline
+native QEMU smoke. A separate container-v0.2.0-r1 prerelease workflow builds,
+tests, exports/loads an OCI archive and publishes checksummed assets from main.
+Native Podman hosted acceptance remains distinct from local Docker-compatible
+validation; full model builds and the separate OpenROAD runtime are not bundled.
+
 Added an explicit two-hart native gem5/Ruby/Garnet profile with original timing
 DMA, per-initiator derived IR, dirty-cache data checks, actual PLIC interrupts and
 the existing SystemC Chipyard/OpenTitan IP guest. Native transaction checksums,

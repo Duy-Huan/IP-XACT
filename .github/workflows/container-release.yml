@@ -1,0 +1,73 @@
+name: Podman SDK and OCI release
+
+on:
+  push:
+    branches: [dev, main]
+    tags: ['container-v*']
+    paths: ['Containerfile', '.containerignore', '.dockerignore', 'containers/**', 'scripts/podman.sh', 'tests/test_container.py', '.github/workflows/container-release.yml']
+  pull_request:
+    paths: ['Containerfile', '.containerignore', '.dockerignore', 'containers/**', 'scripts/podman.sh', 'tests/test_container.py', '.github/workflows/container-release.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sdk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install rootless Podman
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman uidmap slirp4netns fuse-overlayfs
+          podman info
+      - name: Build and run actual offline native smoke
+        run: |
+          mkdir -p build/container-release
+          bash scripts/podman.sh build
+          bash scripts/podman.sh smoke | tee build/container-release/smoke.log
+      - name: Export and load OCI archive
+        run: |
+          bash scripts/podman.sh export build/container-release
+          podman load --input build/container-release/socsim-sdk-0.2.0-r1-linux-amd64.oci.tar
+          bash scripts/podman.sh smoke | tee build/container-release/loaded-smoke.log
+          (cd build/container-release && sha256sum smoke.log loaded-smoke.log >> SHA256SUMS)
+      - name: Publish container prerelease from a main commit
+        if: startsWith(github.ref, 'refs/tags/container-v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$GITHUB_REF_NAME" = container-v0.2.0-r1
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          cat > build/container-release/NOTES.md <<'EOF'
+          Podman rootless SDK for the 0.2.0 application, container packaging revision r1 (Linux amd64).
+
+          Contains the pinned Python environment, reference QEMU, RISC-V toolchains,
+          SystemC/Verilator and native source-build prerequisites. Offline acceptance
+          compiles real firmware and tests guest success, failure and timeout; it
+          validates/generates the selected IP-XACT designs. Both the built and OCI-loaded
+          image must pass before this release is published.
+
+          Verify SHA256SUMS, then podman load --input socsim-sdk-0.2.0-r1-linux-amd64.oci.tar.
+          See docs/podman.md. Large source models and generated firmware are built into
+          separate local volumes. This SDK release is not full master-spec or ASIC signoff.
+          EOF
+          gh release create "$GITHUB_REF_NAME" --verify-tag --prerelease \
+            --title 'Podman SDK 0.2.0-r1' --notes-file build/container-release/NOTES.md \
+            build/container-release/*.oci.tar build/container-release/SHA256SUMS \
+            build/container-release/image-inspect.json build/container-release/smoke.log \
+            build/container-release/loaded-smoke.log
+      - name: Retain smoke logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: podman-sdk-smoke
+          path: build/container-release/*.log
+          if-no-files-found: ignore
