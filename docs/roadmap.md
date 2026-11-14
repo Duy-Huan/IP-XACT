@@ -4,6 +4,13 @@ The objective in agent.md takes precedence over the original bare-metal-only
 baseline. Phase completion means executable acceptance, not directories or claims.
 Detailed observed status and evidence are maintained in verification-status.md.
 
+The next-version QA matrix is in next-version.md. Explicit native gem5 two-hart
+coherent DMA is implemented in a separate profile (coherent-dma.md); the original
+single-hart Zephyr reference keeps its prior boundary. Generic platform YAML now
+selects the four existing source-built RV32 kernels with strict build identities
+(rtl-software-platform.md). These updates supersede the older no-DMA and
+standalone-only RTL software boundaries below; broader master exits remain open.
+
 | Phase | Acceptance target | Current boundary |
 |---|---|---|
 | 0 | Audited, pinned QEMU/Zephyr combination and reproducible setup | Source-pinned reference builds and real guest tests |
@@ -12,7 +19,7 @@ Detailed observed status and evidence are maintained in verification-status.md.
 | 3 | Generated Zephyr BSP, real build, UART and IRQ | CLINT timer ISR and UART→PLIC ISR; original guest conformance application |
 | 4 | Linux userspace and Yocto BSP/image | Direct OpenSBI/Linux path and generated layer; Yocto image fetch policy remains a prerequisite |
 | 5 | Pinned gem5 workload/statistics and cross-engine behavior | SE workload and explicit full-system Zephyr/SystemC GCD/GPIO board; Linux full-system remains unverified |
-| 6 | Real SystemC/RTL MMIO/IRQ bridge with time contract | FIFO plus actual Chipyard GCD generation and OpenTitan GPIO/TL-UL; deterministic replay; no DMA/coherence |
+| 6 | Real SystemC/RTL MMIO/IRQ bridge with time contract | FIFO/GCD/GPIO and deterministic replay; separate two-hart native gem5 coherent DMA reference; broader timing/initiators open |
 | 7 | Versioned release, support matrix, regression and repeatable evidence | Multi-SoC workspace, evidence integrity, CLI/native CI; release and optional API/IDE still open |
 
 Extend the parser deliberately: IP-XACT addressSpaces per initiator, bridge

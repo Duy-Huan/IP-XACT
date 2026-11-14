@@ -18,11 +18,11 @@
     },
     "workloads": {
       "type": "array", "minItems": 1, "uniqueItems": true,
-      "items": {"enum": ["baremetal", "freertos", "zephyr", "linux", "boot-sequence"]}
+      "items": {"enum": ["baremetal", "freertos", "zephyr", "linux", "boot-sequence", "ucos2", "ucos3"]}
     },
     "artifacts": {
       "type": "object",
-      "propertyNames": {"enum": ["baremetal", "freertos", "zephyr", "linux", "boot-sequence"]},
+      "propertyNames": {"enum": ["baremetal", "freertos", "zephyr", "linux", "boot-sequence", "ucos2", "ucos3"]},
       "additionalProperties": {
         "type": "object", "additionalProperties": false,
         "required": ["elf", "sha256", "expected_markers"],
@@ -36,6 +36,11 @@
         },
         "dependentRequired": {"dtb": ["dtb_sha256"], "dtb_sha256": ["dtb"]}
       }
+    },
+    "software_builds": {
+      "type": "object",
+      "propertyNames": {"enum": ["freertos", "ucos2", "ucos3", "zephyr"]},
+      "additionalProperties": {"type": "string", "minLength": 1, "maxLength": 1000}
     },
     "qemu_cost_model": {
       "type": "object", "additionalProperties": false,

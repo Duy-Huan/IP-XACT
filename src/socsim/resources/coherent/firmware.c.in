@@ -1,0 +1,108 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+#include <stdint.h>
+#define R32(a) (*(volatile uint32_t *)(uintptr_t)(a))
+#define DMA(n) R32($dma_base+(n))
+#define PLIC(n) R32($plic_base+(n))
+#define UART(n) (*(volatile uint8_t *)(uintptr_t)($uart_base+(n)))
+#define GCD(n) R32($cygcd_base+(n))
+#define GPIO(n) R32($otgpio_base+(n))
+static volatile uint64_t ready __attribute__((aligned(64)));
+static volatile uint64_t request __attribute__((aligned(64)));
+static volatile uint64_t ack __attribute__((aligned(64)));
+static volatile uint64_t shared __attribute__((aligned(64)));
+static volatile uint64_t reply __attribute__((aligned(64)));
+static volatile uint64_t source[64] __attribute__((aligned(64)));
+static volatile uint64_t target[64] __attribute__((aligned(64)));
+static volatile unsigned dma_irqs, gcd_irqs, gpio_irqs;
+static volatile uint32_t gcd_value;
+static void fence(void) { __asm volatile("fence rw,rw" ::: "memory"); }
+static void puts_uart(const char *s) {
+ while(*s) { while(!(UART(5)&0x20)){} UART(0)=*s++; }
+}
+static void finish(uint32_t code) {
+ __asm volatile("csrci mstatus,8" ::: "memory");
+ while(!(UART(5)&0x40)){} R32($finisher_base)=code;
+ for(;;) __asm volatile("wfi");
+}
+static void fail(void) { puts_uart("USP_COHERENT_FAIL\n"); finish(0x13333); }
+static uint64_t pattern(unsigned i,unsigned round) {
+ return 0x12345678abc00000ULL ^ ((uint64_t)round<<32) ^ (i*0x12345ULL);
+}
+void trap_handler(void) __attribute__((interrupt("machine"),aligned(4)));
+void trap_handler(void) {
+ uint64_t cause; __asm volatile("csrr %0,mcause":"=r"(cause));
+ if(cause!=((1ULL<<63)|11)) fail();
+ uint32_t claim=PLIC(0x200004);
+ if(claim==$dma_irq) { ++dma_irqs; DMA(20)=0; }
+ else if(claim==$cygcd_irq) { gcd_value=GCD(12); ++gcd_irqs; }
+ else if(claim==$otgpio_irq) {
+  uint32_t pending=GPIO(0); if(!pending) fail(); GPIO(0)=pending; ++gpio_irqs;
+ } else fail();
+ PLIC(0x200004)=claim;
+}
+static void wait_equal(volatile uint64_t *value,uint64_t expected) {
+ for(unsigned i=0;i<1000000;i++) { fence(); if(*value==expected) return; }
+ fail();
+}
+static void descriptor(uint64_t a,uint64_t b,uint32_t size) {
+ DMA(0)=(uint32_t)a; DMA(4)=(uint32_t)(a>>32);
+ DMA(8)=(uint32_t)b; DMA(12)=(uint32_t)(b>>32); DMA(16)=size;
+ fence(); DMA(20)=1;
+}
+int main(unsigned long hart) {
+ if(hart) {
+  wait_equal(&ready,0xfeed1234);
+  for(unsigned round=1;round<=32;round++) {
+   wait_equal(&request,round);
+   if(shared!=pattern(0,round)) fail();
+   reply=pattern(1,round); fence(); ack=round;
+  }
+  for(;;) __asm volatile("wfi");
+ }
+ UART(1)=0; UART(3)=0x80; UART(0)=2; UART(1)=0; UART(3)=3; UART(2)=1;
+ puts_uart("USP_COHERENT_BOOT_OK\n");
+ fence(); ready=0xfeed1234;
+ for(unsigned round=1;round<=32;round++) {
+  shared=pattern(0,round); fence(); request=round;
+  wait_equal(&ack,round); if(reply!=pattern(1,round)) fail();
+ }
+ puts_uart("USP_MULTIHART_COHERENCE_OK\n");
+ PLIC($dma_irq*4)=1; PLIC($cygcd_irq*4)=1; PLIC($otgpio_irq*4)=1;
+ PLIC(0x2000)=(1u<<$dma_irq)|(1u<<$cygcd_irq)|(1u<<$otgpio_irq);
+ PLIC(0x200000)=0;
+ __asm volatile("csrw mie,%0; csrsi mstatus,8"::"r"(1UL<<11):"memory");
+ for(unsigned round=1;round<=4;round++) {
+  // Dirty source and dirty cached destination: no flush/invalidate instructions.
+  for(unsigned i=0;i<64;i++) { source[i]=pattern(i,round); target[i]=0xdeadbeef; }
+  fence(); descriptor((uintptr_t)source,(uintptr_t)target,sizeof(source));
+  for(unsigned i=0;dma_irqs<round && i<100000;i++) (void)DMA(20);
+  if(dma_irqs!=round || DMA(24)!=round || DMA(28)) fail();
+  for(unsigned i=0;i<64;i++) if(target[i]!=pattern(i,round)) fail();
+ }
+ puts_uart("USP_DIRTY_CACHE_DMA_READ_WRITE_OK\nUSP_DMA_PLIC_IRQ_OK\n");
+ // Aperture and zero-length errors must be rejected, without touching memory.
+ descriptor($rom_base,(uintptr_t)target,512);
+ for(unsigned i=0;dma_irqs<5 && i<100000;i++) (void)DMA(20);
+ if(dma_irqs!=5 || DMA(24)!=4 || DMA(28)!=1) fail();
+ descriptor((uintptr_t)source,(uintptr_t)target,0);
+ for(unsigned i=0;dma_irqs<6 && i<100000;i++) (void)DMA(20);
+ if(dma_irqs!=6 || DMA(24)!=4 || DMA(28)!=2) fail();
+ puts_uart("USP_DMA_RANGE_GUARD_OK\n");
+#if USP_COHERENT_NEGATIVE
+ target[0]^=1;
+ if(target[0]!=pattern(0,4)) fail();
+#endif
+ const uint32_t vectors[4][3]={{48,18,6},{270,192,6},{65535,255,255},{1,1,1}};
+ for(unsigned v=0;v<4;v++) {
+  if(GCD(0)!=2) fail();
+  GCD(4)=vectors[v][0]; GCD(8)=vectors[v][1];
+  for(unsigned i=0;gcd_irqs<v+1 && i<2000;i++) (void)GCD(0);
+  if(gcd_irqs!=v+1 || gcd_value!=vectors[v][2]) fail();
+ }
+ puts_uart("USP_CHIPYARD_GCD_IRQ_OK\n");
+ GPIO(0x20)=1; GPIO(0x2c)=1; GPIO(4)=1; GPIO(0x14)=1;
+ for(unsigned i=0;!gpio_irqs && i<2000;i++) (void)GPIO(0x10);
+ if(gpio_irqs!=1 || GPIO(0) || GPIO(0x10)!=1) fail();
+ puts_uart("USP_OPENTITAN_GPIO_IRQ_OK\nUSP_TEST_PASS\n"); finish(0x5555);
+ return 0;
+}

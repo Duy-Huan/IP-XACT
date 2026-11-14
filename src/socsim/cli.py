@@ -17,6 +17,10 @@ def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     json_errors = "--json" in argv
     argv = [argument for argument in argv if argument != "--json"]
+    if argv and argv[0] == "coherent":
+        from .coherent import main as coherent_main
+
+        return coherent_main(argv[1:])
     if argv and argv[0] == "rtl-zephyr":
         from .rtl_zephyr import main as rtl_zephyr_main
 
@@ -91,6 +95,7 @@ def main(argv=None) -> int:
     )
     commands.add_parser("ucos", help="source-built µC/OS-II/III on RTL CPU masters; use --help")
     commands.add_parser("fabric", help="live Ruby/Garnet in unified gem5/SystemC SoC; use --help")
+    commands.add_parser("coherent", help="two-hart coherent Garnet/DMA with source IPs; use --help")
     commands.add_parser("layers", help="software integration matrix and CPU metrics; use --help")
     commands.add_parser("unified", help="one SoC/ELF with SystemC IPs on QEMU or gem5; use --help")
     commands.add_parser("backends", help="show implemented and planned capabilities")

@@ -29,11 +29,20 @@ jobs:
           usp unified build-gem5 --source "$USP_GEM5_SOURCE" --out "$USP_UNIFIED_GEM5_BUILD" --jobs 2
           export USP_REQUIRE_UNIFIED=1 USP_REQUIRE_LIVE_GARNET=1
           python -m pytest tests/test_unified.py tests/test_live_fabric.py -v --junitxml=build/unified-junit.xml
+      - name: Build native coherent DMA engine and test the three mapped designs
+        run: |
+          source "$USP_TOOLCHAIN_ENV"
+          source .venv/bin/activate
+          export USP_COHERENT_BUILD="$PWD/build/coherent-gem5-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          usp coherent build-engine --source "$USP_GEM5_SOURCE" --out "$USP_COHERENT_BUILD" --jobs 2
+          USP_REQUIRE_COHERENT=1 python -m pytest tests/test_coherent.py -v --junitxml=build/coherent-junit.xml
       - name: Upload synthetic regression results
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: unified-soc-junit
-          path: build/unified-junit.xml
+          path: |
+            build/unified-junit.xml
+            build/coherent-junit.xml
           if-no-files-found: ignore
           retention-days: 7

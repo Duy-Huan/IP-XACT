@@ -1,0 +1,5 @@
+schema_version: coherent-garnet-v1
+harts: 2
+dma:
+  base: 0x18000000
+  irq: 18

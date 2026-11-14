@@ -1,0 +1,18 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+OUTPUT_ARCH(riscv)
+ENTRY(_start)
+MEMORY { RAM (rwx) : ORIGIN = $ram_base, LENGTH = $ram_size }
+SECTIONS {
+ . = ORIGIN(RAM);
+ .text : { KEEP(*(.text.init)) *(.text .text.*) } > RAM
+ .rodata : { *(.rodata .rodata.* .srodata.*) } > RAM
+ .data : { *(.data .data.* .sdata.*) } > RAM
+ .bss (NOLOAD) : {
+  . = ALIGN(64); __bss_start = .;
+  *(.bss .bss.* .sbss.*) *(COMMON)
+  . = ALIGN(64); __bss_end = .;
+ } > RAM
+ .stack (NOLOAD) : { . = ALIGN(64); . += 65536; __stack_top = .; } > RAM
+ /DISCARD/ : { *(.comment .note.* .eh_frame.*) }
+}
+ASSERT(__stack_top <= ORIGIN(RAM) + LENGTH(RAM), "coherent firmware exceeds RAM")

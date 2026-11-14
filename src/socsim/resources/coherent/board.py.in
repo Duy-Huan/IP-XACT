@@ -1,0 +1,76 @@
+# SPDX-License-Identifier: Apache-2.0
+# One instruction owner; Ruby owns the cache/memory path, including boot ROM.
+import argparse
+import json
+import sys
+import m5
+from m5.objects import (
+    AddrRange, Clint, HiFiveBase, PMAChecker, Plic, RiscvBareMetal, RiscvRTC,
+    RiscvTimingSimpleCPU, RiscvUart8250, Root, SimpleMemory, SrcClockDomain,
+    System, SystemXBar, Terminal, UspBridge, UspDma, VoltageDomain,
+)
+from m5.util import addToPath
+
+c = json.load(open(sys.argv[1]))
+addToPath(c['gem5_config_dir'])
+from common import Options
+from ruby import Ruby
+
+system = System()
+system.voltage_domain = VoltageDomain()
+system.clk_domain = SrcClockDomain(clock='1GHz', voltage_domain=system.voltage_domain)
+system.mem_mode = 'timing'
+system.mem_ranges = [AddrRange(c['ram_base'], size=c['ram_size'])]
+system.rom = SimpleMemory(range=AddrRange(c['rom_base'], size=c['rom_size']),
+                          latency='10ns', writeable=False, image_file=c['rom_image'])
+system.bus = SystemXBar()
+system.cpu = [RiscvTimingSimpleCPU(cpu_id=i, clk_domain=system.clk_domain) for i in range(2)]
+for cpu in system.cpu:
+    cpu.createInterruptController()
+    cpu.createThreads()
+system.platform = HiFiveBase(uart_int_id=c['uart_irq'])
+p = system.platform
+p.clint = Clint(pio_addr=c['clint_base'], num_threads=2,
+                reset_mtimecmp=True, mtimecmp_reset_value=0xffffffffffffffff)
+p.plic = Plic(pio_addr=c['plic_base'], n_src=c['plic_sources'], hart_config='MS,MS')
+p.rtc = RiscvRTC(frequency=str(c['timebase_hz'])+'Hz')
+p.clint.int_pin = p.rtc.int_pin
+p.terminal = Terminal(outfile='file')
+p.uart = RiscvUart8250(pio_addr=c['uart_base'], platform=p, device=p.terminal)
+system.bridge = UspBridge(socket_path=sys.argv[2], platform=p,
+                         gcd_base=c['cygcd_base'], gpio_base=c['otgpio_base'],
+                         finish_base=c['finisher_base'],
+                         gcd_irq=c['cygcd_irq'], gpio_irq=c['otgpio_irq'])
+system.dma = UspDma(base=c['dma_base'], ram_base=c['ram_base'], ram_size=c['ram_size'],
+                    platform=p, irq=c['dma_irq'], trace_file=c['dma_trace'])
+for device in (p.clint, p.plic, p.uart, system.bridge, system.dma):
+    device.pio = system.bus.mem_side_ports
+for cpu in system.cpu:
+    cpu.mmu.pma_checker = PMAChecker(uncacheable=[
+    AddrRange(c[k+'_base'], size=c[k+'_size'])
+    for k in ('clint', 'plic', 'uart', 'finisher', 'cygcd', 'otgpio', 'dma')])
+system.workload = RiscvBareMetal(bootloader=sys.argv[3], auto_reset_vect=False,
+                                reset_vect=c['reset_vector'])
+
+parser = argparse.ArgumentParser()
+Options.addCommonOptions(parser)
+Ruby.define_options(parser)
+options = parser.parse_args([
+    '--cpu-type=RiscvTimingSimpleCPU', '--num-cpus=2', '--num-dirs=1',
+    '--network=garnet', '--topology=Pt2Pt', '--mem-type=SimpleMemory',
+    '--l1d_size=32KiB', '--l1d_assoc=2', '--ruby-clock=1GHz',
+])
+# Boot ROM must have a directory: SimpleMemory participates in the physical
+# address map even when outside system.mem_ranges. Bypassing its directory
+# produces an invalid Ruby destination at the first instruction fetch.
+Ruby.create_system(options, True, system, system.bus, [system.dma.dma], system.rom)
+system.ruby.clk_domain = SrcClockDomain(clock='1GHz', voltage_domain=system.voltage_domain)
+system.bus.mem_side_ports = system.ruby._io_port.in_ports
+for i,cpu in enumerate(system.cpu):
+    system.ruby._cpu_ports[i].connectCpuPorts(cpu)
+root = Root(full_system=True, system=system)
+m5.instantiate()
+event = m5.simulate(c['max_ticks'])
+m5.stats.dump()
+json.dump({'cause': event.getCause(), 'code': event.getCode(), 'tick': m5.curTick()},
+          open(sys.argv[4], 'w'), indent=2)

@@ -24,6 +24,11 @@ Native gem5 CPU cache/memory traffic can also use a live Ruby/Garnet network whi
 same Zephyr guest exercises SystemC source IPs; see [live Garnet](docs/live-garnet.md).
 Both paths have mandatory native promotion gates and explicit remaining limits.
 
+The next increment adds [native coherent DMA and two-hart Garnet](docs/coherent-dma.md)
+and [one platform configuration for all four RTL kernels](docs/rtl-software-platform.md).
+The complete [QA remediation matrix](docs/next-version.md) records the remaining
+CPU/MMU, full-inventory, Yocto, timing, physical-evaluation and release work.
+
 ## Development setup
 
 Python 3.11+; use the pinned dependencies through uv. Native build prerequisites

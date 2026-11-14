@@ -5,6 +5,16 @@ description: Update platform dependencies and model profiles with reproducible r
 
 # Update workflow
 
+Next-version changes must preserve the QA boundaries in docs/next-version.md.
+Coherent DMA changes require docs/coherent-dma.md, a verified separate native
+build, all three mapped guests, corrupted-data negative execution and actual
+Ruby DMA/cache/Garnet wiring. Promotion requires USP_REQUIRE_COHERENT and
+USP_COHERENT_BUILD; QEMU/RTL-master DMA and global timing remain separate.
+Unified RTL software selection changes require docs/rtl-software-platform.md,
+correct source-built kernel/map/clock identities and actual five-layer platform
+acceptance on both CPU and engine choices. Require USP_REQUIRE_RTL_PLATFORM;
+retain all standalone kernel and negative tests. No Linux/MMU inference.
+
 RTL Zephyr changes require the original out-of-tree RV32 BSP, unchanged pinned
 kernel and actual reset/vector/ISA contract. Read docs/rtl-zephyr.md; rebuild all
 three maps and missing-timer firmware and execute both actual CPU/memory-engine
@@ -15,8 +25,8 @@ Live Garnet changes must retain native CPU cache/memory traffic in the unified
 guest; read docs/live-garnet.md. Require real native packet/flit/hop statistics,
 CPU I/D port wiring, one RAM owner, boot-ROM directory and actual SystemC IP
 results/IRQs on all three maps. Promotion requires USP_REQUIRE_LIVE_GARNET and
-USP_GEM5_SOURCE. PIO bypass, absent device DMA/multihart coherence and global
-timing limits must remain explicit; synthetic traffic does not close this gate.
+USP_GEM5_SOURCE. PIO bypass, the single-hart scope of this Zephyr profile and
+global timing limits must remain explicit; synthetic traffic does not close it.
 
 RTL RTOS changes must preserve actual instruction ownership. Read docs/rtl-os.md;
 build all three maps and both negative firmware cases for FreeRTOS, µC/OS-II and
