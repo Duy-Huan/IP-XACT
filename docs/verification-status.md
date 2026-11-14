@@ -1,5 +1,19 @@
 # Master-spec phase status
 
+## Next-version QA remediation, 2026-11-14
+
+The native coherent profile passed 18 tests: strict derived hardware contracts,
+actual two-hart/dirty-cache timing DMA on all three maps, native Garnet wiring,
+real PLIC/SystemC IP acceptance, an actually failing corrupted-data guest and
+artifact/inventory tamper rejection. See coherent-dma.md. This closes the native
+gem5 reference DMA/multihart gap, while PIO bypass, QEMU/RTL initiators and global
+timing remain open. Generic platform configuration additionally passed 15 tests,
+including five software layers on both CPU/engine choices across AI_SOC/AIZ_SOC,
+wrong-kernel/disabled-tick rejection and performance tampering. See
+rtl-software-platform.md. The complete QA scope is in next-version.md.
+Final complete regression results are recorded after the required promotion gate;
+these isolated results do not imply whole-master completion or hosted acceptance.
+
 ## Actual Zephyr RTL port, 2026-11-13
 
 The first expanded 384-test promotion attempt had one cold gem5 startup failure

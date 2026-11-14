@@ -75,7 +75,8 @@ The shared-workload exit is verified for SE; complete hardware equivalence is no
 - [x] Actual Chipyard GCD Chisel/CIRCT generation and RTL result/IRQ acceptance.
 - [x] Actual OpenTitan FIFO plus GPIO/TL-UL register peripheral and PLIC IRQ.
 - [x] Reset, malformed protocol, integrity fault, backpressure and deterministic replay.
-- [ ] DMA/coherent-memory expansion and independent asynchronous scheduling.
+- [x] Explicit native gem5 two-hart dirty-cache DMA, Ruby/Garnet and PLIC/source-IP acceptance.
+- [ ] Broader initiator/protocol DMA and independently synchronized global scheduling.
 - [ ] Full Rocket/Chipyard and Earlgrey SoCs remain separate profiles to implement.
 
 The selected-IP hybrid exit is verified. Full SoCs are not implied by that exit.
@@ -153,4 +154,6 @@ actual result table and mapped firmware acceptance contract.
 - [x] Actual FreeRTOS/µC/OS-II/III on both supported RTL CPU profiles across three maps and both engines.
 - [x] Original out-of-tree RV32 Zephyr BSP; actual kernel/driver and missing-timer acceptance.
 - [ ] Rocket/BOOM, other CPU bus/ISA/MMU, Linux RTL ports and cross-ISS adapters.
-- [ ] Asynchronous global scheduling, actual DMA/coherence, checkpoint and broader live NoC integration.
+- [x] Generic platform YAML selection of the four existing source-built RTL kernel/BSP profiles.
+- [x] Actual native gem5 coherent DMA and two-hart shared-memory acceptance in an explicit profile.
+- [ ] Asynchronous global scheduling, checkpoint, QEMU/RTL-master coherent DMA and broader live NoC integration.

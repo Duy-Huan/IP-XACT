@@ -1,0 +1,23 @@
+{
+  "schema_version": "1",
+  "engine": "gem5",
+  "cpu": {
+    "provider": "chipyard",
+    "model": "Ibex",
+    "clock_hz": 50000000,
+    "rtl_manifest": "../models/cpus/chipyard-ibex.yaml"
+  },
+  "workloads": [
+    "baremetal",
+    "freertos",
+    "ucos2",
+    "ucos3",
+    "zephyr"
+  ],
+  "software_builds": {
+    "freertos": "../build/rtl-os/rv64-ips",
+    "ucos2": "../build/ucos/ucos2/rv64-ips",
+    "ucos3": "../build/ucos/ucos3/rv64-ips",
+    "zephyr": "../build/rtl-zephyr/rv64-ips"
+  }
+}

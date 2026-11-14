@@ -27,6 +27,7 @@ jobs:
           export USP_RTL_ZEPHYR_ROOT="$PWD/build/rtl-zephyr-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           bash scripts/rtl_os_bringup.sh
           bash scripts/rtl_zephyr_bringup.sh
+          USP_REQUIRE_RTL_PLATFORM=1 python -m pytest tests/test_rtl_platform.py -v --junitxml=build/rtl-platform-junit.xml
       - name: Upload synthetic JUnit only
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -35,5 +36,6 @@ jobs:
           path: |
             build/rtl-os-junit.xml
             build/rtl-zephyr-junit.xml
+            build/rtl-platform-junit.xml
           if-no-files-found: ignore
           retention-days: 7

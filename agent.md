@@ -235,3 +235,20 @@ owner. Continue synthesis/place/route, reference timing/electrical/DRC evaluatio
 and reproducible layout evidence without waiting for a production foundry PDK.
 Foundry manufacturing signoff is outside this clarified acceptance scope;
 full architectural implementation and honest PVT/library limits still apply.
+
+## 13. Next-version QA remediation, 2026-11-14
+
+Track every outstanding QA area in docs/next-version.md. Close items only within
+their actual accepted scope; maintain the unsupported/unimplemented boundaries.
+The two-hart native gem5 coherent DMA profile has explicit derived IR and real
+Ruby/Garnet timing transactions, data/IRQ/negative acceptance; see
+docs/coherent-dma.md. Promotion requires USP_REQUIRE_COHERENT and
+USP_COHERENT_BUILD. This does not change QEMU/RTL-master timing or DMA capability.
+
+Generic platform configuration may select the four verified RV32 kernel/BSP
+profiles through explicit software_builds; see docs/rtl-software-platform.md.
+Require correct kernel/map/source identity, the verified BSP clock, positive
+firmware and real instruction ownership at every stage. Promotion requires
+USP_REQUIRE_RTL_PLATFORM. Existing standalone kernel and negative tests remain
+mandatory. Linux/MMU, arbitrary CPU buses, full inventories, public-library
+electrical/PVT closure, hosted acceptance and release remain separate exits.

@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+from m5.objects.Device import DmaDevice
+from m5.params import *
+
+class UspDma(DmaDevice):
+    type = 'UspDma'
+    cxx_class = 'gem5::UspDma'
+    cxx_header = 'usp_dma.hh'
+    base = Param.Addr('Explicit DMA register window')
+    ram_base = Param.Addr('Only permitted DMA memory aperture')
+    ram_size = Param.Addr('DMA memory aperture length')
+    platform = Param.Platform('Native PLIC delivery')
+    irq = Param.Unsigned('Explicit DMA PLIC source')
+    trace_file = Param.String('Native timing DMA transaction evidence')

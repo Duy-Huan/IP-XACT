@@ -4,6 +4,9 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 required = [
+    "docs/next-version.md",
+    "docs/coherent-dma.md",
+    "docs/rtl-software-platform.md",
     "docs/rtl-zephyr.md",
     "docs/live-garnet.md",
     "docs/rtl-os.md",

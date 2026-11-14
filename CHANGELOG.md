@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+Added an explicit two-hart native gem5/Ruby/Garnet profile with original timing
+DMA, per-initiator derived IR, dirty-cache data checks, actual PLIC interrupts and
+the existing SystemC Chipyard/OpenTitan IP guest. Native transaction checksums,
+port wiring, statistics, artifact inventory and deliberately corrupted firmware
+are regression gates on all three maps. QEMU/RTL-master DMA, PIO timing and the
+full architecture remain separate work.
+
+Unified platform YAML now selects the existing source-built RV32 FreeRTOS,
+µC/OS-II/III and Zephyr profiles alongside bare-metal on both actual RTL CPUs and
+memory engines. Strict kernel/map/clock identity, ownership, stage verification
+and aggregate performance prevent ISS substitution and mixed evidence. Both new
+native gates are required for promotion. Added the complete QA remediation matrix
+with explicit remaining CPU/MMU, compiler, full-SoC, Yocto, PVT and hosted exits.
+
 RTL CPU startup now waits for a live Unix socket within an explicit budget of up
 to 60 seconds, separate from guest execution. Dead servers report their actual
 exit code; startup deadlines are recorded as timeouts and stop owned processes.

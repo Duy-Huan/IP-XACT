@@ -1,5 +1,9 @@
 # Live Garnet in the unified gem5/SystemC SoC
 
+The separate two-hart/DMA reference is documented in coherent-dma.md. It adds
+actual dirty-cache DMA and multihart acceptance; the four-router Zephyr profile
+described here retains its single-hart/PIO contract.
+
 `usp fabric` executes the existing generated Zephyr ELF with actual Chipyard GCD
 and OpenTitan GPIO RTL in the shared SystemC process. Native gem5 TimingSimpleCPU
 instruction/data cache accesses use Ruby MI_example and Garnet; this workload

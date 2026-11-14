@@ -48,6 +48,10 @@ def load_platform(path):
         raise ContractError("RTL manifests require an explicit RTL CPU provider")
     if not set(config.get("artifacts", {})).issubset(config["workloads"]):
         raise ContractError("artifact does not belong to a selected workload")
+    for layer, directory in config.get("software_builds", {}).items():
+        if layer not in config["workloads"]:
+            raise ContractError("software build does not belong to a selected workload")
+        config["software_builds"][layer] = str((path.resolve().parent / directory).resolve())
     for artifact in config.get("artifacts", {}).values():
         for field in ("elf", "dtb"):
             if field in artifact:
@@ -72,18 +76,32 @@ def cpu_selection(config, engine, require=True):
         kind = "chipyard-ibex" if cpu["provider"] == "chipyard" else "custom-rtl"
         if manifest["kind"] != kind or manifest["model"] != cpu["model"]:
             raise ContractError("CPU selection does not match actual RTL source manifest")
-        if set(config.get("workloads", [])) - {"baremetal"}:
-            raise ContractError("RV32 M-mode RTL adapter supports baremetal; OS/MMU ports required")
+        workloads = set(config.get("workloads", []))
+        kernels = workloads - {"baremetal"}
+        if kernels - {"freertos", "ucos2", "ucos3", "zephyr"}:
+            raise ContractError("RV32 M-mode RTL OS/MMU port unavailable for selected workload")
+        if set(config.get("software_builds", {})) != kernels:
+            raise ContractError(
+                "each RTL OS requires an explicit source-built software_builds entry"
+            )
+        if set(config.get("artifacts", {})) - {"baremetal"}:
+            raise ContractError(
+                "RTL OS uses verified kernel/BSP builds, not unverified external ELF"
+            )
         if "qemu_cost_model" in config:
             raise ContractError("RTL CPU uses native RTL counters, not QEMU estimates")
         hz = cpu.get("clock_hz", 50000000)
         if type(hz) is not int or not 100000 <= hz <= 500000000 or 1000000000 % hz:
             raise ContractError("RTL clock requires an integral 2..10000ns period")
+        if kernels and hz != 50000000:
+            raise ContractError("source-built RTL OS BSP requires its verified 50MHz CPU clock")
         adapter = {
             "adapter": "rtl-obi-rvfi32-" + engine + "-v1",
             "performance": "native-rtl-counters",
             "rtl_manifest": cpu["rtl_manifest"],
         }
+    elif config.get("software_builds") or set(config.get("workloads", [])) & {"ucos2", "ucos3"}:
+        raise ContractError("these source-built software profiles require an actual RTL CPU")
     result = {
         "engine": engine,
         "provider": cpu["provider"],
@@ -135,6 +153,10 @@ def run_platform(project, config, generated, models, bridge, counter, out, rtl_c
 
     selection = cpu_selection(config, config["engine"])
     if selection.get("rtl_manifest"):
+        if set(config["workloads"]) - {"baremetal"}:
+            from .rtl_platform import run as run_rtl_software
+
+            return run_rtl_software(project, config, generated, models, bridge, rtl_cpu_build, out)
         from .rtl_cpu import run_platform as run_rtl
 
         return run_rtl(project, config, generated, models, bridge, rtl_cpu_build, out)
@@ -187,6 +209,10 @@ def verify_platform(out):
 
     out = out.resolve()
     r = json.loads((out / "report.json").read_text())
+    if r.get("profile") == "rtl-software-platform-v1":
+        from .rtl_platform import verify as verify_rtl_software
+
+        return verify_rtl_software(out)
     if r.get("profile") == "rtl-cpu-platform-v1":
         from .rtl_cpu import verify_platform as verify_rtl
 

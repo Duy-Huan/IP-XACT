@@ -15,6 +15,9 @@ export USP_REQUIRE_RTL_CPU=1
 export USP_REQUIRE_RTL_OS=1 USP_REQUIRE_UCOS=1
 export USP_REQUIRE_RTL_ZEPHYR=1
 export USP_REQUIRE_LIVE_GARNET=1
+export USP_REQUIRE_COHERENT=1
+export USP_REQUIRE_RTL_PLATFORM=1
+: "${USP_COHERENT_BUILD:?Promotion requires the verified native two-hart coherent DMA engine}"
 : "${USP_GENERATED_DIR:?Promotion requires the verified custom QEMU/Zephyr build directory}"
 : "${USP_MODEL_DIR:?Promotion requires the TLM/RTL model build}"
 : "${USP_HYBRID_GENERATED_DIR:?Promotion requires the generated hybrid machine}"
