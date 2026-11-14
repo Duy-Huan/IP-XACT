@@ -31,6 +31,9 @@ CPU/MMU, full-inventory, Yocto, timing, physical-evaluation and release work.
 
 ## Development setup
 
+Podman users on KDE Plasma can use the versioned SDK container and separate
+source/build caches; see [Podman SDK and OCI release](docs/podman.md).
+
 Python 3.11+; use the pinned dependencies through uv. Native build prerequisites
 and exact source pins are documented in [build reproducibility](docs/build-reproducibility.md).
 

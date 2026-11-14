@@ -14,3 +14,4 @@ results/
 .env
 
 .mypy_cache/
+.podman/
