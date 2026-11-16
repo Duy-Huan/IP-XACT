@@ -5,6 +5,14 @@ strict model binding → generated QEMU machine and software artifacts → real 
 execution with evidence. The master-spec objective and development rules are in
 [agent.md](agent.md).
 
+The first priority is now the [native SoC generator](docs/native-soc-generator.md):
+input spec + memory map/I/O → generated IP-XACT/IR → compiled custom hardware
+simulator + bare-metal BSP/firmware. See specs/AI_SOC-native.yaml and
+specs/AIZ_SOC-native.yaml for different counts/maps with multiple source-IP
+instances. `usp soc` provides generation, build, run and evidence verification.
+`usp soc accept` runs the generated machine/ELF on QEMU and native gem5 concurrently,
+with per-instance SystemC IPs and native gem5 counters. Generic OS lowering remains open.
+
 The implemented reference path generates and compiles an RV64 machine, generates
 an external Zephyr board, builds Zephyr and checks real CLINT timer and UART/PLIC
 interrupts. A FreeRTOS BSP verifies actual tick preemption, saved registers and

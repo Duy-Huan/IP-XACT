@@ -5,6 +5,17 @@ description: Update platform dependencies and model profiles with reproducible r
 
 # Update workflow
 
+The owner's first priority is native SoC generation, ahead of orchestration.
+Native frontend/backend changes require docs/native-soc-generator.md, multiple
+instances with independent identity/map/IRQ, source-built QEMU and native gem5,
+the same firmware/IR executing concurrently on both engines, actual MMIO/IRQ and
+gem5 counters, plus guest-failure/wrong-entry/timeout and artifact checks.
+Promotion requires USP_REQUIRE_NATIVE_SOC, USP_NATIVE_AI_SOC_BUILD,
+USP_NATIVE_AIZ_SOC_BUILD and USP_NATIVE_GEM5_BUILD. Old fixed-profile successes
+cannot qualify this new path. Preserve all failed build/guest evidence; regenerate
+identity-bound outputs and explicitly reuse a binary only with matching source/C
+and original manifest/build hashes. A new component model still needs behavior.
+
 Next-version changes must preserve the QA boundaries in docs/next-version.md.
 Coherent DMA changes require docs/coherent-dma.md, a verified separate native
 build, all three mapped guests, corrupted-data negative execution and actual

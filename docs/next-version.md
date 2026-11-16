@@ -9,6 +9,11 @@ complete. The previous baseline was main 0e2c187 with 387 required tests passed.
 Every material issue from the owner QA review is tracked below. “Delivered here”
 means the stated bounded executable scope; broader acceptance remains open.
 
+Owner priority update, 2026-11-16: first qualify the native spec-to-HW/SW compiler
+(native-soc-generator.md), with actual parallel QEMU/gem5 runs of variable-count
+IP designs. Keep that acceptance ahead of CHIA or other agent/orchestration work;
+the older CPU/MMU and full-top priorities below follow this generator milestone.
+
 | QA area | Delivered here / existing evidence | Remaining exit criterion |
 |---|---|---|
 | Compiler/IR | Explicit two-hart/cache/NoC/DMA derived IR with per-initiator visibility; strict new profile validation | General 2022 bus/abstraction/view and initiator translation semantics; positive/negative executable models for each supported feature |

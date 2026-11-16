@@ -4,6 +4,14 @@ Review date: 2026-11-16, Asia/Ho_Chi_Minh. Baseline source: main/dev 0375df2.
 The accompanying change makes AI_SOC/AIZ_SOC executable projects visible under
 examples/ without expanding supported hardware semantics.
 
+Subsequent owner priority update: native spec-to-HW/SW generation now comes first.
+The new `usp soc` frontend supports variable instance names/counts and qualified
+multiple UART/GCD/GPIO/RAM instances in generated QEMU/gem5 bare-metal machines; see
+[native-soc-generator.md](native-soc-generator.md). The fixed role-set and extra-IP
+rejection findings below describe the older `usp validate/generate` path at the
+baseline, not the new `usp soc` API. This increment does not close generic OS,
+arbitrary model/bus semantics or full architecture/industrial qualification.
+
 ## Decision
 
 The current tool is a candidate for a controlled engineering pilot: early

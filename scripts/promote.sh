@@ -17,6 +17,10 @@ export USP_REQUIRE_RTL_ZEPHYR=1
 export USP_REQUIRE_LIVE_GARNET=1
 export USP_REQUIRE_COHERENT=1
 export USP_REQUIRE_RTL_PLATFORM=1
+export USP_REQUIRE_NATIVE_SOC=1
+: "${USP_NATIVE_AI_SOC_BUILD:?Promotion requires the generated native AI_SOC build}"
+: "${USP_NATIVE_AIZ_SOC_BUILD:?Promotion requires the generated native AIZ_SOC build}"
+: "${USP_NATIVE_GEM5_BUILD:?Promotion requires the built native multi-instance gem5 engine}"
 : "${USP_COHERENT_BUILD:?Promotion requires the verified native two-hart coherent DMA engine}"
 : "${USP_GENERATED_DIR:?Promotion requires the verified custom QEMU/Zephyr build directory}"
 : "${USP_MODEL_DIR:?Promotion requires the TLM/RTL model build}"

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+Prioritized native SoC generation from a structured spec, memory map and I/O/IRQ
+assignments. Added a parameterized IP-XACT/XSD/IR frontend independent of fixed
+instance roles, custom QEMU machine generation, bare-metal headers/linker/firmware,
+multiple independent Chipyard GCD/OpenTitan GPIO/UART/RAM instances, actual guest
+conformance and evidence verification. Concurrent native gem5/QEMU execution shares IR/ELF and checks MMIO/IRQ data.
+Native generator OS lowering remains
+open; the existing full architecture inventories are separate targets.
+
 Added directly visible AI_SOC/AIZ_SOC IP-XACT examples, canonical file/IR parity
 checks and actual shared-ELF QEMU/gem5/SystemC acceptance. Added an industrial
 readiness assessment separating supported pilot use from arbitrary-SoC and full

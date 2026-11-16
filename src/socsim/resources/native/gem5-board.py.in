@@ -1,0 +1,74 @@
+# SPDX-License-Identifier: Apache-2.0
+# Generated/validated instance graph, not a preset gem5 board.
+import json
+import sys
+import m5
+from m5.objects import (
+    AddrRange, Clint, HiFiveBase, NativeSocDevice, PMAChecker, Plic, RiscvBareMetal,
+    RiscvRTC, RiscvTimingSimpleCPU, RiscvAtomicSimpleCPU, RiscvUart8250, Root,
+    SimpleMemory, SrcClockDomain, System, SystemXBar, Terminal, VoltageDomain,
+)
+c = json.load(open(sys.argv[1]))
+s = c['spec']
+by_name = {d['name']: d for d in s['devices']}
+one = lambda kind: next(d for d in s['devices'] if d['model'] == kind)
+system = System()
+system.voltage_domain = VoltageDomain()
+system.clk_domain = SrcClockDomain(clock='1GHz', voltage_domain=system.voltage_domain)
+cpu_type = {'gem5.RiscvTimingSimpleCPU': RiscvTimingSimpleCPU,
+            'gem5.RiscvAtomicSimpleCPU': RiscvAtomicSimpleCPU}[s['cpu']['gem5_model']]
+system.mem_mode = 'atomic' if cpu_type == RiscvAtomicSimpleCPU else 'timing'
+system.mem_ranges = [AddrRange(d['base'], size=d['size']) for d in s['devices'] if d['model'] == 'ram']
+system.rams = [SimpleMemory(range=r, latency='10ns') for r in system.mem_ranges]
+rom = by_name[s['boot']['rom']]
+system.rom = SimpleMemory(range=AddrRange(rom['base'], size=rom['size']), latency='10ns',
+                          writeable=False, image_file=c['rom_image'])
+system.bus = SystemXBar()
+system.system_port = system.bus.cpu_side_ports
+for memory in [*system.rams, system.rom]:
+    memory.port = system.bus.mem_side_ports
+system.cpu = [cpu_type(cpu_id=0)]
+cpu = system.cpu[0]
+if system.mem_mode == 'atomic':
+    cpu.simulate_data_stalls = True
+    cpu.simulate_inst_stalls = True
+cpu.icache_port = system.bus.cpu_side_ports
+cpu.dcache_port = system.bus.cpu_side_ports
+cpu.createInterruptController()
+cpu.createThreads()
+cpu.mmu.itb.walker.port = system.bus.cpu_side_ports
+cpu.mmu.dtb.walker.port = system.bus.cpu_side_ports
+system.platform = HiFiveBase()
+p = system.platform
+p.clint = Clint(pio_addr=one('clint')['base'], num_threads=1,
+                reset_mtimecmp=True, mtimecmp_reset_value=0xffffffffffffffff)
+p.plic = Plic(pio_addr=one('plic')['base'], n_src=32, hart_config='MS')
+p.rtc = RiscvRTC(frequency=str(s['cpu']['timebase_hz'])+'Hz')
+p.clint.int_pin = p.rtc.int_pin
+for d in (p.clint, p.plic):
+    d.pio = system.bus.mem_side_ports
+uarts = [d for d in s['devices'] if d['model'] == 'uart']
+system.uart_platforms = [HiFiveBase(uart_int_id=d['irq'], plic=p.plic) for d in uarts]
+for port, d in zip(system.uart_platforms, uarts):
+    port.terminal = Terminal(outfile='file')
+    port.uart = RiscvUart8250(pio_addr=d['base'], platform=port, device=port.terminal)
+    port.uart.pio = system.bus.mem_side_ports
+devices = [d for d in s['devices'] if d['model'] in ('chipyard.gcd', 'opentitan.gpio', 'finisher')]
+kinds = {'chipyard.gcd': 0, 'opentitan.gpio': 1, 'finisher': 2}
+system.native_ips = [NativeSocDevice(base=d['base'], span=d['size'], kind=kinds[d['model']],
+                                    irq=d.get('irq', 0), platform=p,
+                                    socket_path=c['sockets'].get(d['name'], '')) for d in devices]
+for d in system.native_ips:
+    d.pio = system.bus.mem_side_ports
+cpu.mmu.pma_checker = PMAChecker(uncacheable=[AddrRange(d['base'], size=d['size'])
+    for d in s['devices'] if d['model'] not in ('ram', 'rom')])
+system.workload = RiscvBareMetal(bootloader=c['elf'], auto_reset_vect=False, reset_vect=rom['base'])
+root = Root(full_system=True, system=system)
+m5.instantiate()
+json.dump({d['name']: port.terminal.path() for d, port in zip(uarts, system.uart_platforms)},
+          open(c['uart_index'], 'w'), indent=2)
+event = m5.simulate(c['max_ticks'])
+m5.stats.dump()
+json.dump({'cause': event.getCause(), 'code': event.getCode(), 'tick': m5.curTick()},
+          open(c['exit_file'], 'w'), indent=2)
+sys.exit(0 if event.getCause() == 'Native SoC guest finisher' and event.getCode() == 0 else 1)

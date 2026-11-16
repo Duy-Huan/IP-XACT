@@ -8,6 +8,13 @@ configuration describes implementation bindings, placement, boot and toolchains.
 The compiler produces a canonical hardware IR, resolves models for the selected
 engine, executes real workloads and records reproducible evidence.
 
+The owner's first priority is a native SoC generator: an input specification,
+memory map and I/O/interrupt assignments must generate the actual HW/SW simulator,
+including the machine, firmware/BSP and runnable build/execution path. Instance
+names and counts are design data, independent of model type. Existing board
+profiles are regression fixtures, not the platform abstraction. Qualify this
+compiler path before adding CHIA or other orchestration/agent layers.
+
 Target ecosystems: QEMU functional emulation; gem5 architectural/timing simulation;
 Chipyard/Chisel and OpenTitan IP/SoC source integration; SystemC/TLM adapters and
 selective RTL co-simulation. Firmware direction: bare-metal, Zephyr first, then
