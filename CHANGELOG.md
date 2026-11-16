@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+Added directly visible AI_SOC/AIZ_SOC IP-XACT examples, canonical file/IR parity
+checks and actual shared-ELF QEMU/gem5/SystemC acceptance. Added an industrial
+readiness assessment separating supported pilot use from arbitrary-SoC and full
+architecture qualification. The requested CHIA paper is explicitly unread while
+the authoritative download is blocked; no paper comparison is fabricated.
+
 Added a Podman rootless SDK Containerfile, committed-source build context,
 UID/GID-preserving wrapper, isolated host caches, SELinux support and offline
 native QEMU smoke. A separate container-v0.2.0-r1 prerelease workflow builds,
