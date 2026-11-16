@@ -3,7 +3,7 @@
 ## Unreleased
 
 Added clean-container CI reproduction and workflow/ShellCheck validation. Declared
-procps for cleanup tests, isolated the wrong-kernel Git fixture, pinned hosted
+procps for cleanup tests and bzip2 for source builds, isolated the wrong-kernel Git fixture, pinned hosted
 runner/base images and moved actions to verified Node.js 24 revisions. Publishing
 remains gated on the exact candidate's local checks; hosted status is separate.
 

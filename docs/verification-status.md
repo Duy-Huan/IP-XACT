@@ -7,6 +7,11 @@ HW/SW simulator generation. The new `usp soc` path separates instance identity
 from model type, emits XSD-validated IP-XACT/typed IR and custom QEMU/native gem5
 graphs plus shared bare-metal BSP/ELF. Its 13/11-instance acceptance inputs and
 concurrent dual-engine tests are distinct from the legacy fixed role profiles.
+The isolated native-generator suite passed 40 cases, including concurrent actual
+QEMU/gem5 runs for both inputs, matching per-instance commands/results and native
+gem5 instructions/cycles, plus guest-failure/timeout/wrong-entry cases on both
+engines. The first gem5 graph run failed because UART platforms lacked the shared
+CLINT reference; the link was fixed and the failed evidence retained.
 See native-soc-generator.md for commands and limits. Final qualification must use
 the newly built native gem5 adapter and actual logs/JUnit; the earlier 431-pass
 regression is not evidence for this implementation. Generic OS, arbitrary new IP

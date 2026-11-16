@@ -46,7 +46,9 @@ SSL_CERT_FILE; keep certificate verification enabled. That local trust setup is
 not a diagnosis of a hosted failure.
 
 The clean Debian reproduction found a missing procps/ps dependency for process
-cleanup tests. It also exposed a FreeRTOS negative test depending on the root
+cleanup tests. The clean custom source build also failed QEMU configuration
+because bzip2 was missing; source-build jobs and the SDK now declare it explicitly.
+It also exposed a FreeRTOS negative test depending on the root
 repository's .git; that test now constructs a real independent wrong-revision
 checkout. The latter archive issue is distinct from GitHub's actual checkout.
 Minimal CI intentionally skips native gates whose builds it does not provision;

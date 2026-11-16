@@ -81,7 +81,7 @@ jobs:
         run: |
           apt-get update
           apt-get install -y --no-install-recommends git ca-certificates procps python3 python3-venv \
-            gcc g++ make pkg-config libglib2.0-dev libpixman-1-dev zlib1g-dev libfdt-dev \
+            gcc g++ make bzip2 pkg-config libglib2.0-dev libpixman-1-dev zlib1g-dev libfdt-dev \
             device-tree-compiler flex bison bc m4 libsystemc-dev verilator \
             gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu gcc-riscv64-unknown-elf=14.2.0+19 \
             binutils-riscv64-unknown-elf=2.44-3+7+b1
@@ -135,7 +135,7 @@ jobs:
         run: |
           apt-get update
           apt-get install -y --no-install-recommends git ca-certificates procps python3 python3-venv \
-            gcc g++ make pkg-config libglib2.0-dev libpixman-1-dev zlib1g-dev libfdt-dev \
+            gcc g++ make bzip2 pkg-config libglib2.0-dev libpixman-1-dev zlib1g-dev libfdt-dev \
             device-tree-compiler flex bison bc m4 gcc-riscv64-linux-gnu \
             libsystemc-dev verilator curl openjdk-21-jdk-headless yosys=0.52-2 yosys-abc=0.52-2 \
             binutils-riscv64-linux-gnu gcc-riscv64-unknown-elf=14.2.0+19 \

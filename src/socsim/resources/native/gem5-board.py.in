@@ -48,7 +48,7 @@ p.clint.int_pin = p.rtc.int_pin
 for d in (p.clint, p.plic):
     d.pio = system.bus.mem_side_ports
 uarts = [d for d in s['devices'] if d['model'] == 'uart']
-system.uart_platforms = [HiFiveBase(uart_int_id=d['irq'], plic=p.plic) for d in uarts]
+system.uart_platforms = [HiFiveBase(uart_int_id=d['irq'], plic=p.plic, clint=p.clint) for d in uarts]
 for port, d in zip(system.uart_platforms, uarts):
     port.terminal = Terminal(outfile='file')
     port.uart = RiscvUart8250(pio_addr=d['base'], platform=port, device=port.terminal)

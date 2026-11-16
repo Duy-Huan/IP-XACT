@@ -16,7 +16,7 @@ RUN --mount=type=secret,id=proxy_ca \
     with-trust sh -ec 'apt-get update; \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       ca-certificates git curl xz-utils unzip zip bash tini procps file \
-      gcc g++ make pkg-config python3 python3-dev \
+      gcc g++ make bzip2 pkg-config python3 python3-dev \
       libglib2.0-dev libpixman-1-dev zlib1g-dev libfdt-dev device-tree-compiler \
       flex bison bc m4 libboost-dev openjdk-21-jdk-headless \
       libsystemc-dev=3.0.1-1 verilator=5.032-1+b2 \
