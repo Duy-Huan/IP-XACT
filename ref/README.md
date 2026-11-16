@@ -1,9 +1,11 @@
 # Owner-requested research sources
 
-The nine requested papers are indexed in papers.json. **No paper has been
-downloaded or read yet.** Every initial HTTPS request failed with proxy CONNECT
-403 on 2026-11-12. These errors establish a network-policy blocker, not whether
-the papers exist, what their titles are, their contents or whether they are novel.
+The nine requested papers are indexed in papers.json. CHIA (2606.27350v3) was
+provided as a PDF attachment and reviewed on 2026-11-16; see
+[the review and comparison](notes/chia-2606.27350.md). The PDF/text stay local and
+ignored; the ledger records its SHA256, version, CC BY 4.0 notice and provenance.
+The other eight papers have not been downloaded or read. Direct publisher/arXiv
+requests were blocked; this is not evidence about their contents or existence.
 
 A draft preserves existing network rules and adds arxiv.org, www.mdpi.com,
 ieeexplore.ieee.org, dvcon-proceedings.org and cds.cern.ch. Saving a draft does not

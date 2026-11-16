@@ -5,8 +5,9 @@
 Added directly visible AI_SOC/AIZ_SOC IP-XACT examples, canonical file/IR parity
 checks and actual shared-ELF QEMU/gem5/SystemC acceptance. Added an industrial
 readiness assessment separating supported pilot use from arbitrary-SoC and full
-architecture qualification. The requested CHIA paper is explicitly unread while
-the authoritative download is blocked; no paper comparison is fabricated.
+architecture qualification. The initial CHIA download was blocked; the owner then supplied v3. A page-cited
+review and pinned source inspection distinguish reported CHIA results from this
+project's actual runs and retain its remaining industrial limitations.
 
 Added a Podman rootless SDK Containerfile, committed-source build context,
 UID/GID-preserving wrapper, isolated host caches, SELinux support and offline

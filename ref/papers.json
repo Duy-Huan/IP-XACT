@@ -3,20 +3,28 @@
   "papers": [
     {
       "id": "arxiv-2606.27350",
-      "status": "BLOCKED_NETWORK",
+      "status": "PROVIDED_ATTACHMENT",
       "download_url": "https://arxiv.org/pdf/2606.27350",
       "requested_url": "https://arxiv.org/pdf/2606.27350",
-      "read_status": "NOT_READ",
-      "title": null,
-      "license": "NOT_VERIFIED",
-      "retrieved_at": null,
+      "read_status": "REVIEWED",
+      "title": "CHIA: An open-source framework for principled, agentic AI-driven hardware/software co-design research",
+      "license": "CC-BY-4.0 (PDF page 1)",
+      "retrieved_at": "2026-11-16T14:57:19.840013+07:00",
       "file": "papers/arxiv-2606.27350.pdf",
       "last_attempt": {
         "date": "2026-11-12",
         "http_status": "000",
         "curl_returncode": 56,
         "error": "CONNECT tunnel failed, response 403"
-      }
+      },
+      "authors": "Angela Cui et al., UC Berkeley",
+      "version": "arXiv:2606.27350v3, printed 17 July 2026",
+      "sha256": "e0dbb63c768ae72e46e95f454503110b6ba694229a8c100301eef22a75358c84",
+      "bytes": 1956993,
+      "pages": 20,
+      "retrieval_method": "user-uploaded PDF; direct arXiv request remains blocked",
+      "review": "notes/chia-2606.27350.md",
+      "review_scope": "Main text sections 2-5 and 7; source spot-check at f3c07712b8ab11888a1a8da475ac8994d2df5fd5; no CHIA experiments reproduced"
     },
     {
       "id": "electronics-15-21-4967",

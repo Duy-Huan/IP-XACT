@@ -115,7 +115,7 @@ def main():
             record["status"] = "FETCH_FAILED"
             record["last_error"] = str(exc)
         print(record["id"], record["status"])
-        failed |= record["status"] != "DOWNLOADED"
+        failed |= record["status"] not in {"DOWNLOADED", "PROVIDED_ATTACHMENT"}
         manifest.write_text(json.dumps(inventory, indent=2) + "\n")
         if urlparse(record["download_url"]).hostname == "arxiv.org":
             time.sleep(3)

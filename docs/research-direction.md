@@ -6,11 +6,14 @@ and design/spec evaluation. The research question is whether explicit contracts
 and lowering can make heterogeneous model composition reproducible, diagnosable
 and useful across functional, architectural and RTL fidelity levels.
 
-The owner supplied nine paper URLs, indexed in ref/papers.json. All initial
-requests received proxy CONNECT 403; **none has been downloaded or read**. Titles,
-contents, availability, licenses and claimed contributions remain unverified.
-No design claim in this document is attributed to those unread sources. The
-proposed novelty/research gap is a hypothesis, not an established priority claim.
+The nine requested sources are indexed in ref/papers.json. The owner supplied
+the CHIA v3 PDF after direct retrieval was blocked. Its reviewed workflow/model
+scope, RTL-to-gem5 alignment, independent verification, holdout/technology caveats
+and comparison are recorded in ref/notes/chia-2606.27350.md. The official source
+was inspected at a pinned SHA, without executing its experiments. The other
+eight papers remain unread. Novelty claims still require broader related-work
+review and measured evaluation; CHIA's orchestration is complementary to, rather
+than proof of completion of, the target IP-XACT/SoC-IR compilation layer.
 
 ## Existing executable baseline
 
