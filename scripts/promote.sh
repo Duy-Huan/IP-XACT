@@ -5,6 +5,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 [[ "$(git branch --show-current)" == dev ]] || { echo 'Run on dev' >&2; exit 1; }
 [[ -z "$(git status --porcelain)" ]] || { echo 'Working tree must be clean' >&2; exit 1; }
 candidate=$(git rev-parse HEAD)
+bash scripts/ci_lint.sh
 export USP_REQUIRE_BRINGUP=1 USP_REQUIRE_LINUX=1 USP_REQUIRE_MODELS=1 USP_REQUIRE_GEM5=1 USP_REQUIRE_FREERTOS=1 USP_REQUIRE_IPS=1 USP_REQUIRE_WORKSPACE=1
 export USP_REQUIRE_DUAL_SOC=1
 export USP_REQUIRE_ASIC=1
