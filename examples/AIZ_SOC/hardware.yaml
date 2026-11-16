@@ -1,0 +1,49 @@
+schema_version: '1'
+cpu:
+  isa: rv64imac_zicsr_zifencei
+  privilege: MSU
+  mmu: sv39
+  reset_vector: 4096
+  entry: 2147483648
+  timebase_hz: 10000000
+address_space:
+  name: cpu-physical
+  initiator: rv64
+  targets:
+  - rom
+  - ram
+  - uart
+  - finisher
+  - clint
+  - plic
+  - cygcd
+  - otgpio
+interrupts:
+- source: clint
+  target: rv64
+  line: 3
+  trigger: level-high
+- source: clint
+  target: rv64
+  line: 7
+  trigger: level-high
+- source: plic
+  target: rv64
+  line: 9
+  trigger: level-high
+- source: plic
+  target: rv64
+  line: 11
+  trigger: level-high
+- source: uart
+  target: plic
+  line: 14
+  trigger: level-high
+- source: cygcd
+  target: plic
+  line: 16
+  trigger: level-high
+- source: otgpio
+  target: plic
+  line: 17
+  trigger: level-high

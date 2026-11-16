@@ -71,6 +71,10 @@ old evidence is not overwritten. Failed guests/timeouts remain failed results.
 
 ## Guides and status
 
+- [Industrial readiness, arbitrary-SoC limits and CHIA reference status](docs/industrial-readiness.md)
+- [AI_SOC executable example](examples/AI_SOC/README.md)
+- [AIZ_SOC executable example](examples/AIZ_SOC/README.md)
+
 - [Verification status and phase exits](docs/verification-status.md)
 - [Milestone checklist and multi-SoC acceptance](docs/milestone-checklist.md)
 - [AI_SOC / AIZ_SOC designs and scoped flow](docs/dual-soc.md)
