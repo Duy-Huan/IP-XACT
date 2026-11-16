@@ -79,6 +79,8 @@ def test_unseen_configuration_renames_every_instance_and_adds_existing_ip(tmp_pa
         "reserved_name",
         "unknown_model",
         "cpu_adapter",
+        "cpu_model_type",
+        "gem5_model_type",
         "overlap",
         "alignment",
         "overflow",
@@ -114,6 +116,10 @@ def test_invalid_specs_fail_before_generating_any_output(tmp_path, case):
             first["model"] = "unknown.ai"
         elif case == "cpu_adapter":
             s["cpu"]["model"] = "chipyard.rocket"
+        elif case == "cpu_model_type":
+            s["cpu"]["model"] = {}
+        elif case == "gem5_model_type":
+            s["cpu"]["gem5_model"] = []
         elif case == "overlap":
             s["devices"][1]["base"] = first["base"]
         elif case == "alignment":

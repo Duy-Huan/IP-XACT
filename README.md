@@ -39,6 +39,9 @@ CPU/MMU, full-inventory, Yocto, timing, physical-evaluation and release work.
 
 ## Development setup
 
+Before publishing changes, follow [local CI and native promotion](docs/ci-local.md).
+Local checks must pass before pushing; hosted workflow status is reported separately.
+
 Podman users on KDE Plasma can use the versioned SDK container and separate
 source/build caches; see [Podman SDK and OCI release](docs/podman.md).
 

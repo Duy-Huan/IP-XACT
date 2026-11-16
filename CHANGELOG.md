@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+Added clean-container CI reproduction and workflow/ShellCheck validation. Declared
+procps for cleanup tests, isolated the wrong-kernel Git fixture, pinned hosted
+runner/base images and moved actions to verified Node.js 24 revisions. Publishing
+remains gated on the exact candidate's local checks; hosted status is separate.
+
 Prioritized native SoC generation from a structured spec, memory map and I/O/IRQ
 assignments. Added a parameterized IP-XACT/XSD/IR frontend independent of fixed
 instance roles, custom QEMU machine generation, bare-metal headers/linker/firmware,

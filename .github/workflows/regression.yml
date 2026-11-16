@@ -10,9 +10,29 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
+  workflow-lint:
+    runs-on: ubuntu-24.04
+    container: debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
+    timeout-minutes: 10
+    steps:
+      - name: Install pinned workflow linters
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git ca-certificates golang-go=2:1.24~2 shellcheck=0.10.0-1
+          GOBIN=/usr/local/bin go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.9
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          persist-credentials: false
+      - name: Validate workflow contracts and shell syntax
+        run: bash scripts/ci_lint.sh
+
   branch-policy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Require same-repository dev promotion into main
         if: github.event_name == 'pull_request' && github.base_ref == 'main'
@@ -22,21 +42,21 @@ jobs:
         run: test "$SOURCE" = dev && test "$SAME_REPO" = true
 
   regression:
-    runs-on: ubuntu-latest
-    container: debian:trixie-slim
+    runs-on: ubuntu-24.04
+    container: debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
     timeout-minutes: 15
     steps:
       - name: Install pinned reference runtime and compiler
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends git ca-certificates python3 python3-venv \
+          apt-get install -y --no-install-recommends git ca-certificates procps python3 python3-venv \
             qemu-system-riscv=1:10.0.13+ds-0+deb13u1 \
             qemu-system-data=1:10.0.13+ds-0+deb13u1 \
             gcc-riscv64-unknown-elf=14.2.0+19 binutils-riscv64-unknown-elf=2.44-3+7+b1
           python3 -m venv /opt/ci-uv
           /opt/ci-uv/bin/pip install uv==0.13.5
           echo /opt/ci-uv/bin >> "$GITHUB_PATH"
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1 (Node.js 24)
         with:
           persist-credentials: false
       - name: Frozen setup and required regression
@@ -45,7 +65,7 @@ jobs:
           bash scripts/regression.sh
       - name: Upload synthetic test results
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0 (Node.js 24)
         with:
           name: regression-junit
           path: build/junit.xml
@@ -53,14 +73,14 @@ jobs:
           retention-days: 7
 
   custom-zephyr:
-    runs-on: ubuntu-latest
-    container: debian:trixie-slim
+    runs-on: ubuntu-24.04
+    container: debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
     timeout-minutes: 45
     steps:
       - name: Install source-build prerequisites
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends git ca-certificates python3 python3-venv \
+          apt-get install -y --no-install-recommends git ca-certificates procps python3 python3-venv \
             gcc g++ make pkg-config libglib2.0-dev libpixman-1-dev zlib1g-dev libfdt-dev \
             device-tree-compiler flex bison bc m4 libsystemc-dev verilator \
             gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu gcc-riscv64-unknown-elf=14.2.0+19 \
@@ -69,7 +89,7 @@ jobs:
           python3 -m venv /opt/ci-uv
           /opt/ci-uv/bin/pip install uv==0.13.5
           echo /opt/ci-uv/bin >> "$GITHUB_PATH"
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with:
           persist-credentials: false
       - name: Acquire pinned public sources and build exact generated machine/BSP
@@ -92,7 +112,7 @@ jobs:
           bash scripts/setup_chipyard_tools.sh
           bash scripts/source_ips_bringup.sh
           bash scripts/hierarchy_bringup.sh
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         if: always()
         with:
           name: custom-zephyr-junit
@@ -107,14 +127,14 @@ jobs:
 
   gem5-se:
     if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    container: debian:trixie-slim
+    runs-on: ubuntu-24.04
+    container: debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
     timeout-minutes: 240
     steps:
       - name: Install full acceptance source-build prerequisites
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends git ca-certificates python3 python3-venv \
+          apt-get install -y --no-install-recommends git ca-certificates procps python3 python3-venv \
             gcc g++ make pkg-config libglib2.0-dev libpixman-1-dev zlib1g-dev libfdt-dev \
             device-tree-compiler flex bison bc m4 gcc-riscv64-linux-gnu \
             libsystemc-dev verilator curl openjdk-21-jdk-headless yosys=0.52-2 yosys-abc=0.52-2 \
@@ -123,7 +143,7 @@ jobs:
           python3 -m venv /opt/ci-uv
           /opt/ci-uv/bin/pip install uv==0.13.5
           echo /opt/ci-uv/bin >> "$GITHUB_PATH"
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with:
           persist-credentials: false
       - name: Build and compare the full supported acceptance matrix
@@ -151,7 +171,7 @@ jobs:
           USP_IP_MODELS_DIR="$PWD/build/source-ip-models" bash scripts/native_soc_bringup.sh
           bash scripts/rtl_cpu_bringup.sh
           USP_REQUIRE_WORKSPACE=1 .venv/bin/python -m pytest tests/test_workspace.py -v --junitxml=build/workspace-junit.xml
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         if: always()
         with:
           name: gem5-se-junit

@@ -20,7 +20,7 @@ from .ipblocks import verify_models
 from .ipxact import digest
 from .pipeline import QEMU_SHA, verify_source
 from .project import inside
-from .runner import write_json
+from .runner import tool_version, write_json
 from .soc_spec import CATALOG, ROLE, devices, emit_ipxact, load_spec, selected
 
 ROOT = Path(__file__).parent
@@ -401,6 +401,7 @@ def build(out, source, cross_compile, jobs=2, reuse_qemu=None):
     )
     verify_source(source, QEMU_SHA)
     verify_generated(out)
+    compiler_path, compiler_version = tool_version(cross_compile + "gcc")
     write_json(
         out / "build.json",
         {
@@ -408,6 +409,11 @@ def build(out, source, cross_compile, jobs=2, reuse_qemu=None):
             "source_commit": QEMU_SHA,
             "cpu": spec["cpu"]["model"],
             "reused_qemu": reused,
+            "firmware_compiler": {
+                "path": compiler_path,
+                "version": compiler_version,
+                "binary_sha256": digest(Path(compiler_path)),
+            },
             "files": {
                 n: digest(out / n)
                 for n in ("qemu-build/qemu-system-riscv64", "firmware.elf", "soc.dtb")

@@ -65,12 +65,12 @@ def load_spec(path):
         "native CPU",
     )
     name(cpu["name"])
-    if cpu["model"] not in {"qemu.rv64", "qemu.max"}:
+    if not isinstance(cpu["model"], str) or cpu["model"] not in {"qemu.rv64", "qemu.max"}:
         raise ContractError("native generator currently binds QEMU rv64/max; no CPU substitution")
-    if "gem5_model" in cpu and cpu["gem5_model"] not in {
-        "gem5.RiscvTimingSimpleCPU",
-        "gem5.RiscvAtomicSimpleCPU",
-    }:
+    if "gem5_model" in cpu and (
+        not isinstance(cpu["gem5_model"], str)
+        or cpu["gem5_model"] not in {"gem5.RiscvTimingSimpleCPU", "gem5.RiscvAtomicSimpleCPU"}
+    ):
         raise ContractError("native gem5 requires an explicitly supported CPU model")
     cpu["timebase_hz"] = integer(cpu["timebase_hz"], "timebase_hz")
     if not 1000 <= cpu["timebase_hz"] <= 100000000:
