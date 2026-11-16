@@ -4,6 +4,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 required = [
+    "ref/notes/chia-2606.27350.md",
     "docs/industrial-readiness.md",
     "docs/podman.md",
     "docs/next-version.md",

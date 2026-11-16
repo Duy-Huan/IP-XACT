@@ -81,5 +81,6 @@ The owner selected public-PDK ASIC evaluation; production foundry signoff is not
 required for that clarified scope. Full-inventory implementation remains open.
 
 The owner research direction and nine-paper ledger are in research-direction.md
-and ref/. Paper retrieval is currently blocked; novelty claims await a direct
-related-work review and measured evaluation.
+and ref/. CHIA v3 was provided and reviewed (ref/notes/chia-2606.27350.md); the other eight
+sources remain unread. Novelty claims await broader related-work review and
+measured evaluation.

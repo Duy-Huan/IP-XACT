@@ -19,23 +19,24 @@ requirements coverage percentage, full industrial qualification or silicon
 signoff. Application in a real project requires a defined use case, a validated
 model library and correlation against that project's reference implementation.
 
-## CHIA reference status
+## CHIA reference and comparison
 
-The owner identified CHIA as https://arxiv.org/abs/2606.27350. The direct requested
-PDF URL is https://arxiv.org/pdf/2606.27350. Retrieval in this review failed with
-HTTP/proxy 403 (curl return 22, reported final HTTP code 000). The paper has not
-been read, its title/version/content have not been independently verified, and
-no claim here describes CHIA's architecture, results, advantages or limitations.
-The earlier reference ledger also records this source as unread.
+The initial direct download from https://arxiv.org/pdf/2606.27350 was blocked.
+The owner then provided the 20-page v3 PDF (17 July 2026), which was reviewed along
+with a read-only source snapshot of the official ucb-bar/chia repository at
+f3c07712b8ab11888a1a8da475ac8994d2df5fd5. Full provenance, page/section evidence,
+reported results, caveats and the comparison are in
+[the CHIA review](../ref/notes/chia-2606.27350.md). No CHIA experiments were
+reproduced here; reported benchmark numbers are attributed to its authors.
 
-A defensible side-by-side comparison requires the actual paper or accessible
-authoritative source. Extract its stated CPU/IP/protocol support, abstraction and
-timing levels, synchronization/memory ownership, workload/OS scope, configuration
-generality, hardware correlation, benchmark scale, artifacts and limitations.
-Record page/section evidence for each claim. Then run comparable workloads on the
-same hardware contract before making relative accuracy or performance claims.
-The industrial assessment below is based on this repository, independently of
-any unverified attribution to CHIA.
+CHIA is principally a workflow/cluster orchestration and evaluation framework.
+This project targets design metadata/IR and model execution contracts. They can
+be complementary, but a CHIA workflow does not automatically supply missing IP
+behavior, a generic SoC compiler, bus/MMU adapters or calibrated target timing.
+The paper's BOOM/gem5 alignment and Spike/FireSim evaluation demonstrate validation
+practices and scale beyond this project's current evidence. Even that paper
+reports holdout outliers/overfitting and technology-dependent QoR results.
+Neither the paper nor this tool establishes automatic support for every SoC.
 
 ## Code-level capability boundary
 
