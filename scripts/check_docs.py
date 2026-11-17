@@ -4,6 +4,9 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 required = [
+    "docs/ci-local.md",
+    "docs/native-soc-generator.md",
+    "specs/README.md",
     "ref/notes/chia-2606.27350.md",
     "docs/industrial-readiness.md",
     "docs/podman.md",

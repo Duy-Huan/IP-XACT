@@ -1,0 +1,76 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+/* Each selected RTL instance has independent SystemC state and a socket. */
+#include "hw/irq.h"
+#include <sys/socket.h>
+#include <sys/un.h>
+typedef struct NativeIP {
+    int fd;
+    uint32_t seq, model_offset, irq_bit, irq_level;
+    qemu_irq irq;
+} NativeIP;
+static uint32_t native_call(NativeIP *ip, uint32_t op, uint32_t offset, uint32_t value)
+{
+    uint32_t req[5] = { cpu_to_le32(0x31505355), cpu_to_le32(++ip->seq),
+                       cpu_to_le32(op), cpu_to_le32(offset), cpu_to_le32(value) }, res[5];
+    for (unsigned direction = 0; direction < 2; ++direction) {
+        for (size_t pos = 0; pos < sizeof(req);) {
+            ssize_t n = direction ? recv(ip->fd, (char *)res + pos, sizeof(res) - pos, 0)
+                : send(ip->fd, (char *)req + pos, sizeof(req) - pos, MSG_NOSIGNAL);
+            if (n < 0 && errno == EINTR) { continue; }
+            if (n <= 0) { error_report("native RTL transport failed"); exit(1); }
+            pos += n;
+        }
+    }
+    if (le32_to_cpu(res[0]) != 0x31505355 || res[1] != req[1] || res[2] ||
+        le32_to_cpu(res[4]) > 3) {
+        error_report("native RTL response rejected"); exit(1);
+    }
+    uint32_t level = !!(le32_to_cpu(res[4]) & ip->irq_bit);
+    if (level != ip->irq_level) {
+        qemu_set_irq(ip->irq, level);
+        ip->irq_level = level;
+    }
+    return le32_to_cpu(res[3]);
+}
+static uint64_t native_read(void *opaque, hwaddr addr, unsigned size)
+{
+    NativeIP *ip = opaque;
+    return native_call(ip, 0, ip->model_offset + addr, 0);
+}
+static void native_write(void *opaque, hwaddr addr, uint64_t value, unsigned size)
+{
+    NativeIP *ip = opaque;
+    native_call(ip, 1, ip->model_offset + addr, value);
+}
+static const MemoryRegionOps native_ops = {
+    .read = native_read, .write = native_write, .endianness = DEVICE_LITTLE_ENDIAN,
+    .valid = { .min_access_size = 4, .max_access_size = 4, .unaligned = false },
+    .impl = { .min_access_size = 4, .max_access_size = 4 },
+};
+static void native_attach(MemoryRegion *memory, DeviceState *plic, unsigned slot,
+                          hwaddr base, unsigned irq, unsigned kind, const char *name)
+{
+    char variable[64];
+    snprintf(variable, sizeof(variable), "USP_NATIVE_SOCKET_%u", slot);
+    const char *path = getenv(variable);
+    struct sockaddr_un addr = { .sun_family = AF_UNIX };
+    struct timeval timeout = { .tv_sec = 2 };
+    NativeIP *ip = g_new0(NativeIP, 1);
+    MemoryRegion *region = g_new0(MemoryRegion, 1);
+    if (!path || strlen(path) >= sizeof(addr.sun_path)) {
+        error_report("native RTL instance requires owned local socket"); exit(1);
+    }
+    strcpy(addr.sun_path, path);
+    ip->fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (ip->fd < 0 || connect(ip->fd, (struct sockaddr *)&addr, sizeof(addr)) ||
+        setsockopt(ip->fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) ||
+        setsockopt(ip->fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout))) {
+        error_report("native RTL socket initialization failed"); exit(1);
+    }
+    ip->irq = qdev_get_gpio_in(plic, irq);
+    ip->model_offset = kind * 0x1000;
+    ip->irq_bit = 1U << kind;
+    memory_region_init_io(region, NULL, &native_ops, ip, name, 0x1000);
+    memory_region_add_subregion(memory, base, region);
+    native_call(ip, 2, 0, 0);
+}

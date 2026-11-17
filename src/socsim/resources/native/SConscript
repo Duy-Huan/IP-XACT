@@ -1,0 +1,7 @@
+Import('*')
+extension = Dir('.').srcnode()
+extension_paths = {extension.abspath, extension.Dir('..').abspath, Dir('.').abspath}
+env['CPPPATH'] = [p for p in env['CPPPATH']
+                  if getattr(p, 'abspath', None) not in extension_paths]
+SimObject('NativeSocDevice.py', sim_objects=['NativeSocDevice'])
+Source('native_soc_device.cc')

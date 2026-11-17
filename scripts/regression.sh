@@ -3,8 +3,8 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 export PATH="$PWD/.venv/bin:$PATH"
-ruff check src tests scripts/check_docs.py scripts/fetch_papers.py
-ruff format --check src tests scripts/check_docs.py scripts/fetch_papers.py
+ruff check src tests scripts/check_docs.py scripts/fetch_papers.py scripts/emit_ci_job.py
+ruff format --check src tests scripts/check_docs.py scripts/fetch_papers.py scripts/emit_ci_job.py
 mypy --ignore-missing-imports --check-untyped-defs src/socsim
 python scripts/check_docs.py
 SOCSIM_REQUIRE_INTEGRATION=1 python -m pytest -v --junitxml=build/junit.xml

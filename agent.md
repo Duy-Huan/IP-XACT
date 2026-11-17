@@ -8,6 +8,13 @@ configuration describes implementation bindings, placement, boot and toolchains.
 The compiler produces a canonical hardware IR, resolves models for the selected
 engine, executes real workloads and records reproducible evidence.
 
+The owner's first priority is a native SoC generator: an input specification,
+memory map and I/O/interrupt assignments must generate the actual HW/SW simulator,
+including the machine, firmware/BSP and runnable build/execution path. Instance
+names and counts are design data, independent of model type. Existing board
+profiles are regression fixtures, not the platform abstraction. Qualify this
+compiler path before adding CHIA or other orchestration/agent layers.
+
 Target ecosystems: QEMU functional emulation; gem5 architectural/timing simulation;
 Chipyard/Chisel and OpenTitan IP/SoC source integration; SystemC/TLM adapters and
 selective RTL co-simulation. Firmware direction: bare-metal, Zephyr first, then
@@ -73,6 +80,10 @@ board bring-up. These targets are a roadmap, not implemented capability claims.
 
 - `dev`: all implementation, fixes, integration and dependency updates.
 - `main`: regression-verified promotion from `dev`. No direct feature commits.
+- Owner clarification, 2026-11-16: do not push further updates until relevant local
+  CI checks pass on the exact candidate. Include workflow lint, a clean minimal
+  Debian reproduction and the complete mandatory native regression. Preserve
+  failures and distinguish local validation from observed hosted Actions status.
 - Run `bash scripts/regression.sh` before promotion. It requires real QEMU boot,
   guest-failure and timeout tests plus unit, formatting and documentation gates.
 - `scripts/promote.sh` provides local checked promotion. First promotion in an empty

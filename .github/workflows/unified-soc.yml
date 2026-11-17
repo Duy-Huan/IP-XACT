@@ -6,6 +6,10 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   unified-soc:
     # Trusted provisioned runner; activation supplies matching pinned source and
@@ -15,12 +19,13 @@ jobs:
     env:
       USP_TOOLCHAIN_ENV: ${{ vars.USP_TOOLCHAIN_ENV }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with:
           persist-credentials: false
       - name: Build out-of-tree gem5 bridge and execute both CPU engines
         run: |
           test -n "$USP_TOOLCHAIN_ENV"
+          # shellcheck source=/dev/null
           source "$USP_TOOLCHAIN_ENV"
           uv sync --frozen --extra dev --extra bringup --extra models
           source .venv/bin/activate
@@ -31,6 +36,7 @@ jobs:
           python -m pytest tests/test_unified.py tests/test_live_fabric.py -v --junitxml=build/unified-junit.xml
       - name: Build native coherent DMA engine and test the three mapped designs
         run: |
+          # shellcheck source=/dev/null
           source "$USP_TOOLCHAIN_ENV"
           source .venv/bin/activate
           export USP_COHERENT_BUILD="$PWD/build/coherent-gem5-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
@@ -38,7 +44,7 @@ jobs:
           USP_REQUIRE_COHERENT=1 python -m pytest tests/test_coherent.py -v --junitxml=build/coherent-junit.xml
       - name: Upload synthetic regression results
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: unified-soc-junit
           path: |

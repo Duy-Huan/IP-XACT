@@ -6,6 +6,10 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   rtl-os:
     runs-on: [self-hosted, linux, x64, soc-eda]
@@ -13,12 +17,13 @@ jobs:
     env:
       USP_TOOLCHAIN_ENV: ${{ vars.USP_TOOLCHAIN_ENV }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with:
           persist-credentials: false
       - name: Build real kernels and execute both CPU and engine matrices
         run: |
           test -n "$USP_TOOLCHAIN_ENV"
+          # shellcheck source=/dev/null
           source "$USP_TOOLCHAIN_ENV"
           uv sync --frozen --extra dev --extra bringup --extra models
           source .venv/bin/activate
@@ -30,7 +35,7 @@ jobs:
           USP_REQUIRE_RTL_PLATFORM=1 python -m pytest tests/test_rtl_platform.py -v --junitxml=build/rtl-platform-junit.xml
       - name: Upload synthetic JUnit only
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: rtl-os-junit
           path: |

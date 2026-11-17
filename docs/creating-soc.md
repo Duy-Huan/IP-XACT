@@ -1,5 +1,11 @@
 # Create and bind a SoC project
 
+For a spec-driven native machine with variable instance names/counts, start with
+[the native generator](native-soc-generator.md) and specs/AI_SOC-native.yaml.
+It generates custom QEMU hardware and bare-metal software from the input map.
+The sections below describe the earlier fixed-profile APIs, which remain useful
+for their existing OS and backend regressions.
+
 Start from `examples/riscv-virt` for the implemented reference profile. Author
 components with exact vendor/library/name/version identities and memory blocks,
 then instantiate them in `ipxact/design.xml`. Use the 2022 namespace and bundled

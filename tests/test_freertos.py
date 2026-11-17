@@ -1,6 +1,7 @@
 import json
 import os
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -56,8 +57,27 @@ def test_hybrid_is_explicitly_unsupported(tmp_path):
 def test_wrong_kernel_revision_is_rejected(tmp_path):
     project = load_project(ROOT / "examples/rv64-minimal")
     out = generate(project, tmp_path / "generated")
+    # Exercise an actual wrong Git revision independently of the source tree's .git.
+    wrong = tmp_path / "wrong-kernel"
+    subprocess.run(["git", "init", "-q", str(wrong)], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(wrong),
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "--allow-empty",
+            "-qm",
+            "wrong kernel",
+        ],
+        check=True,
+    )
     with pytest.raises(ContractError, match="revision mismatch"):
-        build_freertos(project, out, ROOT, "riscv64-unknown-elf-")
+        build_freertos(project, out, wrong, "riscv64-unknown-elf-")
 
 
 @pytest.mark.parametrize(

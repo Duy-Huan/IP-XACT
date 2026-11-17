@@ -1,0 +1,16 @@
+# Different counts, CPU choice, reset/RAM/IO/IRQ map; not the full architecture.
+schema_version: '1'
+name: AIZ_SOC_native
+cpu: {name: control_core, model: qemu.max, gem5_model: gem5.RiscvAtomicSimpleCPU, timebase_hz: 5000000}
+boot: {ram: working_memory, rom: reset_memory, console: trace_port, entry: 0x81001000}
+devices:
+  - {name: working_memory, model: ram, base: 0x81000000, size: 0x800000}
+  - {name: reset_memory, model: rom, base: 0x8000, size: 0x2000}
+  - {name: time_unit, model: clint, base: 0x2100000, size: 0x10000}
+  - {name: irq_unit, model: plic, base: 0xc000000, size: 0x4000000}
+  - {name: result_port, model: finisher, base: 0x110000, size: 0x1000}
+  - {name: trace_port, model: uart, base: 0x16000000, size: 0x100, irq: 3}
+  - {name: math_0, model: chipyard.gcd, base: 0x17000000, size: 0x1000, irq: 5}
+  - {name: math_1, model: chipyard.gcd, base: 0x17003000, size: 0x1000, irq: 9}
+  - {name: math_2, model: chipyard.gcd, base: 0x17009000, size: 0x1000, irq: 17}
+  - {name: event_pins, model: opentitan.gpio, base: 0x18000000, size: 0x1000, irq: 19}

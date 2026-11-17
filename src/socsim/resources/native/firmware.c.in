@@ -1,0 +1,89 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+#include <stdint.h>
+#include "soc.h"
+#define R32(a) (*(volatile uint32_t *)(uintptr_t)(a))
+#define R64(a) (*(volatile uint64_t *)(uintptr_t)(a))
+#define R8(a) (*(volatile uint8_t *)(uintptr_t)(a))
+typedef struct { uintptr_t base; unsigned irq; const char *name; } Device;
+static const Device uarts[] = { $uarts };
+static const Device gcds[] = { $gcds };
+static const Device gpios[] = { $gpios };
+static volatile unsigned uart_hits[$uart_count], gcd_hits[$gcd_slots], gpio_hits[$gpio_slots];
+static volatile unsigned results[$gcd_slots], timer_hits;
+static const unsigned uart_count=$uart_count, gcd_count=$gcd_count, gpio_count=$gpio_count;
+static void text(const char *s) {
+    while (*s) { while (!(R8(USP_CONSOLE_BASE+5)&0x20)) {} R8(USP_CONSOLE_BASE)=*s++; }
+}
+static void finish(unsigned code) {
+    while (!(R8(USP_CONSOLE_BASE+5)&0x40)) {}
+    R32(USP_FINISHER_BASE)=code;
+    for (;;) __asm__ volatile("wfi");
+}
+static void fail(void) { text("USP_NATIVE_FAIL\n"); finish(0x13333); }
+void trap_handler(void) __attribute__((interrupt("machine"),aligned(4)));
+void trap_handler(void) {
+    uintptr_t cause; __asm__ volatile("csrr %0,mcause":"=r"(cause));
+    if (cause==0x8000000000000007UL) {
+        R64(USP_CLINT_BASE+0x4000)=UINT64_MAX; ++timer_hits; return;
+    }
+    if (cause!=0x800000000000000bUL) fail();
+    unsigned irq=R32(USP_PLIC_BASE+0x200004), found=0;
+    for (unsigned i=0;i<uart_count;i++) if (irq==uarts[i].irq) {
+        R8(uarts[i].base+1)=0; ++uart_hits[i]; found=1;
+    }
+    for (unsigned i=0;i<gcd_count;i++) if (irq==gcds[i].irq) {
+        results[i]=R32(gcds[i].base+12); ++gcd_hits[i]; found=1;
+    }
+    for (unsigned i=0;i<gpio_count;i++) if (irq==gpios[i].irq) {
+        unsigned pending=R32(gpios[i].base);
+        if (!pending) fail();
+        R32(gpios[i].base)=pending; ++gpio_hits[i]; found=1;
+    }
+    if (!found) fail();
+    R32(USP_PLIC_BASE+0x200004)=irq;
+}
+int main(void) {
+    for (unsigned i=0;i<uart_count;i++) {
+        uintptr_t b=uarts[i].base;
+        R8(b+1)=0; R8(b+3)=0x80; R8(b)=2; R8(b+1)=0; R8(b+3)=3; R8(b+2)=1;
+    }
+    text("USP_NATIVE_BOOT_OK\n");
+    volatile uint64_t sum=0;
+    for (unsigned i=0;i<5000;i++) sum+=i;
+    if (sum!=12497500) fail();
+    $extra_ram_tests
+    text("USP_NATIVE_MEMORY_OK\n");
+    R32(USP_PLIC_BASE+0x2000)=$irq_mask;
+    R32(USP_PLIC_BASE+0x200000)=0;
+    $irq_priorities
+    __asm__ volatile("csrw mie,%0"::"r"((1UL<<7)|(1UL<<11)));
+    R64(USP_CLINT_BASE+0x4000)=R64(USP_CLINT_BASE+0xbff8)+$timer_ticks;
+    __asm__ volatile("csrsi mstatus,8");
+    while (!timer_hits) __asm__ volatile("wfi");
+    text("USP_NATIVE_TIMER_OK\n");
+    for (unsigned i=0;i<uart_count;i++) {
+        R8(uarts[i].base+1)=2;
+        for (unsigned n=0;!uart_hits[i] && n<1000000;n++) __asm__ volatile("nop");
+        if (uart_hits[i]!=1) fail();
+        text("USP_NATIVE_UART_OK:"); text(uarts[i].name); text("\n");
+    }
+    for (unsigned i=0;i<gcd_count;i++) {
+        unsigned answer=6+2*i;
+        if (R32(gcds[i].base)!=2 || gcd_hits[i]) fail();
+        R32(gcds[i].base+4)=8*answer; R32(gcds[i].base+8)=3*answer;
+    }
+    for (unsigned i=0;i<gcd_count;i++) {
+        for (unsigned n=0;!gcd_hits[i] && n<10000;n++) (void)R32(gcds[i].base);
+        if (gcd_hits[i]!=1 || results[i]!=6+2*i) fail();
+        text("USP_NATIVE_GCD_OK:"); text(gcds[i].name); text("\n");
+    }
+    for (unsigned i=0;i<gpio_count;i++) {
+        unsigned bit=1u<<(i%16); uintptr_t b=gpios[i].base;
+        if (R32(b+0x10) || gpio_hits[i]) fail();
+        R32(b+0x20)=bit; R32(b+0x2c)=bit; R32(b+4)=bit; R32(b+0x14)=bit;
+        for (unsigned n=0;!gpio_hits[i] && n<10000;n++) (void)R32(b+0x10);
+        if (gpio_hits[i]!=1 || R32(b) || R32(b+0x10)!=bit) fail();
+        text("USP_NATIVE_GPIO_OK:"); text(gpios[i].name); text("\n");
+    }
+    text("USP_NATIVE_PASS\n"); finish(0x5555); return 0;
+}

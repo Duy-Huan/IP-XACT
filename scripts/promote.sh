@@ -5,6 +5,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 [[ "$(git branch --show-current)" == dev ]] || { echo 'Run on dev' >&2; exit 1; }
 [[ -z "$(git status --porcelain)" ]] || { echo 'Working tree must be clean' >&2; exit 1; }
 candidate=$(git rev-parse HEAD)
+bash scripts/ci_lint.sh
 export USP_REQUIRE_BRINGUP=1 USP_REQUIRE_LINUX=1 USP_REQUIRE_MODELS=1 USP_REQUIRE_GEM5=1 USP_REQUIRE_FREERTOS=1 USP_REQUIRE_IPS=1 USP_REQUIRE_WORKSPACE=1
 export USP_REQUIRE_DUAL_SOC=1
 export USP_REQUIRE_ASIC=1
@@ -17,6 +18,10 @@ export USP_REQUIRE_RTL_ZEPHYR=1
 export USP_REQUIRE_LIVE_GARNET=1
 export USP_REQUIRE_COHERENT=1
 export USP_REQUIRE_RTL_PLATFORM=1
+export USP_REQUIRE_NATIVE_SOC=1
+: "${USP_NATIVE_AI_SOC_BUILD:?Promotion requires the generated native AI_SOC build}"
+: "${USP_NATIVE_AIZ_SOC_BUILD:?Promotion requires the generated native AIZ_SOC build}"
+: "${USP_NATIVE_GEM5_BUILD:?Promotion requires the built native multi-instance gem5 engine}"
 : "${USP_COHERENT_BUILD:?Promotion requires the verified native two-hart coherent DMA engine}"
 : "${USP_GENERATED_DIR:?Promotion requires the verified custom QEMU/Zephyr build directory}"
 : "${USP_MODEL_DIR:?Promotion requires the TLM/RTL model build}"

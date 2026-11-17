@@ -4,6 +4,14 @@ The objective in agent.md takes precedence over the original bare-metal-only
 baseline. Phase completion means executable acceptance, not directories or claims.
 Detailed observed status and evidence are maintained in verification-status.md.
 
+Owner priority update: native SoC generation comes first, ahead of CHIA/agent
+orchestration. The new spec frontend (native-soc-generator.md) generates actual
+IP-XACT/IR, custom QEMU/native gem5 hardware, memory/I/O/IRQ wiring and bare-metal software
+with arbitrary instance names and supported IP counts. Its dual-engine acceptance specs
+have 13/11 instances rather than the legacy fixed role sets. Generic OS
+lowering, new model semantics and richer bus/timing graphs remain next exits;
+older successful reference profiles do not close those gates.
+
 The next-version QA matrix is in next-version.md. Explicit native gem5 two-hart
 coherent DMA is implemented in a separate profile (coherent-dma.md); the original
 single-hart Zephyr reference keeps its prior boundary. Generic platform YAML now

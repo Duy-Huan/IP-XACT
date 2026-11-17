@@ -17,6 +17,10 @@ def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     json_errors = "--json" in argv
     argv = [argument for argument in argv if argument != "--json"]
+    if argv and argv[0] == "soc":
+        from .soc_native import main as soc_main
+
+        return soc_main(argv[1:])
     if argv and argv[0] == "coherent":
         from .coherent import main as coherent_main
 
@@ -85,6 +89,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="usp (socsim compatibility)")
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("soc", help="generate a native SoC from spec/memory map/IO; use --help")
     commands.add_parser(
         "platform", help="select CPU provider, engine and software workloads; use --help"
     )
