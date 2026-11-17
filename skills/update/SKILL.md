@@ -5,6 +5,11 @@ description: Update platform dependencies and model profiles with reproducible r
 
 # Update workflow
 
+Native generalization changes also require docs/native-design-capabilities.md and
+docs/native-external-models.md. Promotion requires all real SMP/Linux, maximum-hart
+and external model/driver/bus-error cases; unsupported CPU/ABI/bus conversions
+must fail explicitly. Keep one-shot IRQ semantics and per-hart native counters.
+
 The owner's first priority is native SoC generation, ahead of orchestration.
 Native frontend/backend changes require docs/native-soc-generator.md, multiple
 instances with independent identity/map/IRQ, source-built QEMU and native gem5,

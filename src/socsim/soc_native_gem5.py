@@ -2,6 +2,7 @@
 
 import fcntl
 import json
+import math
 import shutil
 import struct
 import sys
@@ -98,6 +99,7 @@ def build_engine(source, out, jobs=2):
 
 
 def verify_engine(out):
+    out = out.resolve()
     record = json.loads((out / "native-build.json").read_text())
     verify_gem5_configuration(out, record)
     if (
@@ -113,7 +115,7 @@ def verify_engine(out):
     return record
 
 
-def prepare_run(spec, generated, out, sockets):
+def prepare_run(spec, generated, out, sockets, dtb=None):
     from elftools.elf.elffile import ELFFile
 
     with (out / "firmware.elf").open("rb") as stream:
@@ -131,15 +133,65 @@ def prepare_run(spec, generated, out, sockets):
                 and segment["p_paddr"] + segment["p_memsz"] <= ram["base"] + ram["size"]
             ):
                 raise ContractError("ELF load segment outside native executable RAM")
+    dtb_address = 0
+    ram_image = ""
+    if dtb is not None:
+        dtb_address = ram["base"] + ram["size"] - 0x200000
+        with (out / "firmware.elf").open("rb") as stream:
+            elf = ELFFile(stream)
+            if any(
+                seg["p_type"] == "PT_LOAD" and seg["p_paddr"] + seg["p_memsz"] > dtb_address
+                for seg in elf.iter_segments()
+            ):
+                raise ContractError("native firmware overlaps reserved DTB region")
+        shutil.copy2(dtb, out / "software.dtb")
+        execute_build(
+            [
+                "riscv64-unknown-elf-objcopy",
+                "-I",
+                "binary",
+                "-O",
+                "elf64-littleriscv",
+                "-B",
+                "riscv",
+                "--rename-section",
+                ".data=.dtb",
+                "--change-section-vma",
+                ".dtb=" + hex(dtb_address),
+                str(out / "software.dtb"),
+                str(out / "dtb.o"),
+            ],
+            out,
+            out / "dtb-objcopy.log",
+            60,
+        )
+        (out / "dtb.ld").write_text(
+            "SECTIONS { . = " + hex(dtb_address) + "; .dtb : { *(.dtb) } }\n"
+        )
+        execute_build(
+            [
+                "riscv64-unknown-elf-ld",
+                "-T",
+                str(out / "dtb.ld"),
+                str(out / "dtb.o"),
+                "-o",
+                str(out / "dtb.elf"),
+            ],
+            out,
+            out / "dtb-link.log",
+            60,
+        )
+        ram_image = str(out / "dtb.elf")
     rom = struct.pack(
-        "<6IQ",
+        "<6IQQ",
         0x00000297,
         0xF1402573,
-        0x00000593,
+        0x0202B583,
         0x0182B283,
         0x00028067,
         0x00000013,
         spec["boot"]["entry"],
+        dtb_address,
     )
     (out / "rom.bin").write_bytes(rom)
     shutil.copy2(generated / "gem5-board.py", out / "gem5-board.py")
@@ -150,7 +202,8 @@ def prepare_run(spec, generated, out, sockets):
             "sockets": sockets,
             "elf": str(out / "firmware.elf"),
             "rom_image": str(out / "rom.bin"),
-            "max_ticks": 2000000000000,
+            "max_ticks": 10000000000000 if dtb else 2000000000000,
+            "ram_image": ram_image,
             "uart_index": str(out / "uart-index.json"),
             "exit_file": str(out / "exit.json"),
         },
@@ -174,8 +227,56 @@ def collect_run(spec, out):
     }
     metrics = None
     try:
-        metrics = gem5_metrics(out / "stats.txt")
+        metrics = (
+            gem5_metrics(out / "stats.txt")
+            if spec["cpu"]["harts"] == 1
+            else multicore_metrics(out / "stats.txt", spec["cpu"]["harts"])
+        )
+        for h, counters in enumerate(metrics.get("per_hart", [])):
+            checks[f"hart{h}.actual_cpu_execution"] = counters["instructions"] > 0
         checks["actual_cpu_execution"] = metrics["counters"]["instructions"] > 0
     except (OSError, ContractError):
         checks["actual_cpu_execution"] = False
     return checks, metrics
+
+
+def multicore_metrics(path, harts):
+    stats = {}
+    for line in path.read_text().splitlines():
+        fields = line.split()
+        if len(fields) >= 2:
+            try:
+                stats[fields[0]] = float(fields[1])
+            except ValueError:
+                continue
+    counters, sources = [], []
+    for hart in range(harts):
+        names = {
+            "cycles": f"system.cpu{hart}.numCycles",
+            "instructions": f"system.cpu{hart}.commitStats0.numInsts",
+        }
+        values = {k: stats.get(n, 0) for k, n in names.items()}
+        if any(not math.isfinite(v) or v <= 0 for v in values.values()):
+            raise ContractError(f"missing native counters for hart {hart}")
+        counters.append(
+            dict(
+                values,
+                native_cpi=values["cycles"] / values["instructions"],
+                native_ipc=values["instructions"] / values["cycles"],
+            )
+        )
+        sources.append(names)
+    instructions = sum(v["instructions"] for v in counters)
+    cycles = sum(v["cycles"] for v in counters)
+    return {
+        "engine": "gem5",
+        "measurement": "native-simulator-statistics",
+        "counters": {"instructions": instructions, "cycles": cycles},
+        "per_hart": counters,
+        "native_cpi": cycles / instructions,
+        "native_ipc": instructions / cycles,
+        "source_keys": sources,
+        "raw_stats_sha256": digest(path),
+        "scope": "whole run including boot and idle; cycles=sum of core cycles",
+        "fidelity": "native model counters, not calibrated silicon or system throughput",
+    }

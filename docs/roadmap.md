@@ -4,13 +4,15 @@ The objective in agent.md takes precedence over the original bare-metal-only
 baseline. Phase completion means executable acceptance, not directories or claims.
 Detailed observed status and evidence are maintained in verification-status.md.
 
-Owner priority update: native SoC generation comes first, ahead of CHIA/agent
-orchestration. The new spec frontend (native-soc-generator.md) generates actual
-IP-XACT/IR, custom QEMU/native gem5 hardware, memory/I/O/IRQ wiring and bare-metal software
-with arbitrary instance names and supported IP counts. Its dual-engine acceptance specs
-have 13/11 instances rather than the legacy fixed role sets. Generic OS
-lowering, new model semantics and richer bus/timing graphs remain next exits;
-older successful reference profiles do not close those gates.
+Owner priority: native generation precedes CHIA/agent orchestration. The frontend
+emits real IP-XACT/IR, custom QEMU/native gem5 graphs, per-hart IRQ/memory wiring
+and software from design data. In addition to the 13/11-instance base cases, the
+native SMP inputs have 16/12 instances, four/two harts, high physical maps and
+source-built OpenSBI/Linux. Project-local models register through the explicit
+MMIO32 transport rather than new compiler branches. See native-soc-generator.md,
+native-external-models.md and native-design-capabilities.md. Generic OS/driver
+ports, CPU/bus/translation adapters and full inventories remain separate exits;
+older profile success does not qualify those contracts.
 
 The next-version QA matrix is in next-version.md. Explicit native gem5 two-hart
 coherent DMA is implemented in a separate profile (coherent-dma.md); the original
@@ -26,7 +28,7 @@ standalone-only RTL software boundaries below; broader master exits remain open.
 | 2 | Strict catalog/lock and generated compiled custom QEMU machine | Seven-role base, eight-role FIFO and nine-role Chipyard/OpenTitan profiles |
 | 3 | Generated Zephyr BSP, real build, UART and IRQ | CLINT timer ISR and UART→PLIC ISR; original guest conformance application |
 | 4 | Linux userspace and Yocto BSP/image | Direct OpenSBI/Linux path and generated layer; Yocto image fetch policy remains a prerequisite |
-| 5 | Pinned gem5 workload/statistics and cross-engine behavior | SE workload and explicit full-system Zephyr/SystemC GCD/GPIO board; Linux full-system remains unverified |
+| 5 | Pinned gem5 workload/statistics and cross-engine behavior | SE plus full-system source-IP profiles; native generated SMP/Linux and per-hart counters; model timing remains uncalibrated |
 | 6 | Real SystemC/RTL MMIO/IRQ bridge with time contract | FIFO/GCD/GPIO and deterministic replay; separate two-hart native gem5 coherent DMA reference; broader timing/initiators open |
 | 7 | Versioned release, support matrix, regression and repeatable evidence | Multi-SoC workspace, evidence integrity, CLI/native CI; release and optional API/IDE still open |
 

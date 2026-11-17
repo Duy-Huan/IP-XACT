@@ -1,0 +1,62 @@
+# Native SMP acceptance; real multi-hart execution and >4 GiB physical maps.
+schema_version: '1'
+name: AIZ_SOC_SMP
+cpu:
+  name: service_cluster
+  model: qemu.max
+  gem5_model: gem5.RiscvAtomicSimpleCPU
+  timebase_hz: 5000000
+  harts: 2
+  clock_hz: 600000000
+  memory_latency_ns: 25
+boot:
+  ram: working_memory
+  rom: reset_memory
+  console: trace_port
+  entry: 10737418240
+devices:
+- name: working_memory
+  model: ram
+  base: 10737418240
+  size: 67108864
+- name: reset_memory
+  model: rom
+  base: 32768
+  size: 8192
+- name: time_unit
+  model: clint
+  base: 34603008
+  size: 65536
+- name: irq_unit
+  model: plic
+  base: 201326592
+  size: 67108864
+- name: result_port
+  model: finisher
+  base: 1114112
+  size: 4096
+- name: trace_port
+  model: uart
+  base: 4664066048
+  size: 256
+  irq: 3
+- name: math_0
+  model: chipyard.gcd
+  base: 4680843264
+  size: 4096
+  irq: 5
+- name: math_1
+  model: chipyard.gcd
+  base: 4680855552
+  size: 4096
+  irq: 9
+- name: math_2
+  model: chipyard.gcd
+  base: 4680880128
+  size: 4096
+  irq: 17
+- name: event_pins
+  model: opentitan.gpio
+  base: 4697620480
+  size: 4096
+  irq: 19

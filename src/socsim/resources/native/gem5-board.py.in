@@ -14,35 +14,36 @@ by_name = {d['name']: d for d in s['devices']}
 one = lambda kind: next(d for d in s['devices'] if d['model'] == kind)
 system = System()
 system.voltage_domain = VoltageDomain()
-system.clk_domain = SrcClockDomain(clock='1GHz', voltage_domain=system.voltage_domain)
+system.clk_domain = SrcClockDomain(clock=str(s['cpu']['clock_hz'])+'Hz', voltage_domain=system.voltage_domain)
 cpu_type = {'gem5.RiscvTimingSimpleCPU': RiscvTimingSimpleCPU,
             'gem5.RiscvAtomicSimpleCPU': RiscvAtomicSimpleCPU}[s['cpu']['gem5_model']]
 system.mem_mode = 'atomic' if cpu_type == RiscvAtomicSimpleCPU else 'timing'
 system.mem_ranges = [AddrRange(d['base'], size=d['size']) for d in s['devices'] if d['model'] == 'ram']
-system.rams = [SimpleMemory(range=r, latency='10ns') for r in system.mem_ranges]
+system.rams = [SimpleMemory(range=r, latency=str(s['cpu']['memory_latency_ns'])+'ns',
+    image_file=c.get('ram_image', '') if d['name'] == s['boot']['ram'] else '') for r, d in zip(system.mem_ranges, [x for x in s['devices'] if x['model'] == 'ram'])]
 rom = by_name[s['boot']['rom']]
-system.rom = SimpleMemory(range=AddrRange(rom['base'], size=rom['size']), latency='10ns',
+system.rom = SimpleMemory(range=AddrRange(rom['base'], size=rom['size']), latency=str(s['cpu']['memory_latency_ns'])+'ns',
                           writeable=False, image_file=c['rom_image'])
 system.bus = SystemXBar()
 system.system_port = system.bus.cpu_side_ports
 for memory in [*system.rams, system.rom]:
     memory.port = system.bus.mem_side_ports
-system.cpu = [cpu_type(cpu_id=0)]
-cpu = system.cpu[0]
-if system.mem_mode == 'atomic':
-    cpu.simulate_data_stalls = True
-    cpu.simulate_inst_stalls = True
-cpu.icache_port = system.bus.cpu_side_ports
-cpu.dcache_port = system.bus.cpu_side_ports
-cpu.createInterruptController()
-cpu.createThreads()
-cpu.mmu.itb.walker.port = system.bus.cpu_side_ports
-cpu.mmu.dtb.walker.port = system.bus.cpu_side_ports
+system.cpu = [cpu_type(cpu_id=h) for h in range(s['cpu']['harts'])]
+for cpu in system.cpu:
+    if system.mem_mode == 'atomic':
+        cpu.simulate_data_stalls = True
+        cpu.simulate_inst_stalls = True
+    cpu.icache_port = system.bus.cpu_side_ports
+    cpu.dcache_port = system.bus.cpu_side_ports
+    cpu.createInterruptController()
+    cpu.createThreads()
+    cpu.mmu.itb.walker.port = system.bus.cpu_side_ports
+    cpu.mmu.dtb.walker.port = system.bus.cpu_side_ports
 system.platform = HiFiveBase()
 p = system.platform
-p.clint = Clint(pio_addr=one('clint')['base'], num_threads=1,
+p.clint = Clint(pio_addr=one('clint')['base'], num_threads=s['cpu']['harts'],
                 reset_mtimecmp=True, mtimecmp_reset_value=0xffffffffffffffff)
-p.plic = Plic(pio_addr=one('plic')['base'], n_src=32, hart_config='MS')
+p.plic = Plic(pio_addr=one('plic')['base'], n_src=32, hart_config=','.join(['MS']*s['cpu']['harts']))
 p.rtc = RiscvRTC(frequency=str(s['cpu']['timebase_hz'])+'Hz')
 p.clint.int_pin = p.rtc.int_pin
 for d in (p.clint, p.plic):
@@ -53,15 +54,17 @@ for port, d in zip(system.uart_platforms, uarts):
     port.terminal = Terminal(outfile='file')
     port.uart = RiscvUart8250(pio_addr=d['base'], platform=port, device=port.terminal)
     port.uart.pio = system.bus.mem_side_ports
-devices = [d for d in s['devices'] if d['model'] in ('chipyard.gcd', 'opentitan.gpio', 'finisher')]
+devices = [d for d in s['devices'] if d['model'] in ('chipyard.gcd', 'opentitan.gpio', 'finisher') or d['model'] in s['external_models']]
 kinds = {'chipyard.gcd': 0, 'opentitan.gpio': 1, 'finisher': 2}
-system.native_ips = [NativeSocDevice(base=d['base'], span=d['size'], kind=kinds[d['model']],
+kinds.update({name: 0 for name in s.get('external_models', {})})
+system.native_ips = [NativeSocDevice(base=d['base'], span=d['size'], kind=kinds.get(d['model'], 0),
                                     irq=d.get('irq', 0), platform=p,
                                     socket_path=c['sockets'].get(d['name'], '')) for d in devices]
 for d in system.native_ips:
     d.pio = system.bus.mem_side_ports
-cpu.mmu.pma_checker = PMAChecker(uncacheable=[AddrRange(d['base'], size=d['size'])
-    for d in s['devices'] if d['model'] not in ('ram', 'rom')])
+for cpu in system.cpu:
+    cpu.mmu.pma_checker = PMAChecker(uncacheable=[AddrRange(d['base'], size=d['size'])
+        for d in s['devices'] if d['model'] not in ('ram', 'rom')])
 system.workload = RiscvBareMetal(bootloader=c['elf'], auto_reset_vect=False, reset_vect=rom['base'])
 root = Root(full_system=True, system=system)
 m5.instantiate()

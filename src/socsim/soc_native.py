@@ -1,4 +1,4 @@
-"""Compile a spec into a native custom QEMU machine and bare-metal software."""
+"""Compile a spec into native QEMU/gem5 machines and checked software bundles."""
 
 import argparse
 import concurrent.futures
@@ -21,7 +21,17 @@ from .ipxact import digest
 from .pipeline import QEMU_SHA, verify_source
 from .project import inside
 from .runner import tool_version, write_json
-from .soc_spec import CATALOG, ROLE, devices, emit_ipxact, load_spec, selected
+from .soc_spec import (
+    CATALOG,
+    ROLE,
+    cpu_instances,
+    devices,
+    emit_ipxact,
+    load_spec,
+    model_descriptor,
+    model_instances,
+    selected,
+)
 
 ROOT = Path(__file__).parent
 RESOURCES = ROOT / "resources/native"
@@ -33,6 +43,8 @@ def compiler_identity():
         for p in (
             "soc_native.py",
             "soc_native_gem5.py",
+            "soc_native_codegen.py",
+            "native_external.py",
             "soc_spec.py",
             "domain.py",
             "ipxact.py",
@@ -48,15 +60,22 @@ def compiler_identity():
 
 
 def generate(spec_path, out, engine="qemu"):
+    identity = compiler_identity()
     if engine not in {"qemu", "gem5", "both"}:
         raise ContractError("unsupported native engine")
     spec = load_spec(spec_path)
+    from .native_external import preflight, stage
+
+    preflight(spec, spec_path.resolve().parent)
     engines = ["qemu", "gem5"] if engine == "both" else [engine]
     if "gem5" in engines and "gem5_model" not in spec["cpu"]:
         raise ContractError("native gem5 requires explicit cpu.gem5_model; no CPU substitution")
     out = out.resolve()
     out.mkdir(parents=True, exist_ok=False)
     shutil.copyfile(spec_path, out / "spec.yaml")
+    if load_spec(out / "spec.yaml") != spec:
+        raise ContractError("native input changed during generation")
+    stage(spec, spec_path.resolve().parent, out)
     ir = emit_ipxact(spec, out)
     windows = {i.name: i.windows[0] for i in ir.instances if i.windows}
     values = {
@@ -82,7 +101,7 @@ def generate(spec_path, out, engine="qemu"):
                 f'memory_region_init_ram(r, NULL, "{d["name"]}", {hex(d["size"])}, &error_fatal); '
                 f"memory_region_add_subregion(memory, {hex(d['base'])}, r); }}"
             )
-    rtl = [d for d in spec["devices"] if d["model"] in {"chipyard.gcd", "opentitan.gpio"}]
+    rtl = model_instances(spec)
     for slot, d in enumerate(rtl):
         init.append(
             f"native_attach(memory, plic, {slot}, {hex(d['base'])}, {d['irq']}, "
@@ -93,6 +112,8 @@ def generate(spec_path, out, engine="qemu"):
         bridge_init="\n".join(init),
     )
     machine = (ROOT / "templates/machine.c.in").read_text()
+    from .soc_native_codegen import emit_dts, machine_topology
+
     old = (
         "serial_mm_init(memory, $uart_base, 0, qdev_get_gpio_in(plic, $uart_irq),\n"
         "                   $uart_baudbase, serial_hd(0), DEVICE_LITTLE_ENDIAN);"
@@ -106,12 +127,14 @@ def generate(spec_path, out, engine="qemu"):
     )
     (out / "machine.c").write_text(
         Template(
-            machine.replace(old, serials)
-            .replace("usp-rv64", "usp-native")
-            .replace('"MS", 1, 0, 31, 7', '"MS", 1, 0, 32, 7')
+            machine_topology(machine, spec).replace(old, serials).replace("usp-rv64", "usp-native")
         ).substitute(values)
     )
-    headers = ["/* Generated from soc-ir.json; byte addresses. */", "#pragma once"]
+    headers = [
+        "/* Generated from soc-ir.json; byte addresses. */",
+        "#pragma once",
+        f"#define USP_HART_COUNT {spec['cpu']['harts']}",
+    ]
     for d in spec["devices"]:
         headers += [
             f"#define USP_INSTANCE_{d['name'].upper()}_BASE {hex(d['base'])}UL",
@@ -172,55 +195,11 @@ def generate(spec_path, out, engine="qemu"):
         ". = ALIGN(16); __bss_end = .; } > RAM\n"
         "__stack_top = ORIGIN(RAM)+LENGTH(RAM)-16;\n"
         "/DISCARD/ : { *(.comment .note .note.* .eh_frame .eh_frame.*) } }\n"
+        f'ASSERT(__bss_end <= __stack_top - {4096 * spec["cpu"]["harts"]}, "RAM stack overlap")\n'
     )
-    dts = [
-        "/dts-v1/;",
-        "/ { #address-cells = <1>; #size-cells = <1>;",
-        f'model = "{spec["name"]}"; compatible = "socsim,native-v1";',
-        f"chosen {{ stdout-path = &{spec['boot']['console']}; }};",
-        "cpus { #address-cells = <1>; #size-cells = <0>;",
-        f"timebase-frequency = <{ir.cpu.timebase_hz}>;",
-        'cpu@0 { device_type = "cpu"; reg = <0>; compatible = "riscv";',
-        'riscv,isa = "rv64imac_zicsr_zifencei"; mmu-type = "riscv,sv39";',
-        "__usp_hlic: interrupt-controller { #interrupt-cells = <1>; #address-cells = <0>; "
-        'interrupt-controller; compatible = "riscv,cpu-intc"; }; }; };',
-    ]
-    compatibles = {
-        "ram": "mmio-sram",
-        "rom": "mtd-rom",
-        "uart": "ns16550a",
-        "clint": "riscv,clint0",
-        "plic": "sifive,plic-1.0.0",
-        "finisher": "sifive,test1",
-        "chipyard.gcd": "socsim,cygcd",
-        "opentitan.gpio": "socsim,otgpio",
-    }
-    for d in spec["devices"]:
-        node = (
-            f"{d['name']}: device@{d['base']:x} {{ "
-            f'compatible = "{compatibles[d["model"]]}"; '
-            f"reg = <{hex(d['base'])} {hex(d['size'])}>;"
-        )
-        if "irq" in d:
-            node += (
-                f"interrupt-parent = <&{devices(spec, 'plic')[0]['name']}>; "
-                f"interrupts = <{d['irq']}>;"
-            )
-        if d["model"] == "plic":
-            node += (
-                "#interrupt-cells = <1>; #address-cells = <0>; interrupt-controller; "
-                "riscv,ndev = <31>; riscv,max-priority = <7>; "
-                "interrupts-extended = <&__usp_hlic 11 &__usp_hlic 9>;"
-            )
-        if d["model"] == "clint":
-            node += "interrupts-extended = <&__usp_hlic 3 &__usp_hlic 7>;"
-        if d["model"] == "uart":
-            node += "clock-frequency = <3686400>; current-speed = <115200>; reg-shift = <0>;"
-        dts.append(node + "};")
-    (out / "soc.dts").write_text("\n".join([*dts, "};", ""]))
+    (out / "soc.dts").write_text(emit_dts(spec))
     shutil.copy2(RESOURCES / "gem5-board.py.in", out / "gem5-board.py")
     from .gem5 import GEM5_SHA
-    from .soc_spec import catalog
 
     implementations = {
         "ram": "SimpleMemory",
@@ -232,42 +211,73 @@ def generate(spec_path, out, engine="qemu"):
         "chipyard.gcd": "NativeSocDevice+SystemC.GCD",
         "opentitan.gpio": "NativeSocDevice+SystemC.GPIO",
     }
-    cat = catalog()
     engine_bindings = {}
     for e in engines:
         engine_bindings[e] = [
             {
-                "instance": spec["cpu"]["name"],
+                "instance": cpu,
                 "implementation": spec["cpu"]["model" if e == "qemu" else "gem5_model"],
                 "source_commit": QEMU_SHA if e == "qemu" else GEM5_SHA,
             }
+            for cpu in cpu_instances(spec)
         ]
         engine_bindings[e] += [
             {
                 "instance": d["name"],
                 "model": d["model"],
-                "implementation": cat[ROLE[d["model"]]]["id"]
+                "implementation": model_descriptor(spec, d["model"])["id"]
                 if e == "qemu"
-                else implementations[d["model"]],
-                "source": cat[ROLE[d["model"]]]["source"]
-                if e == "qemu" or d["model"] in {"chipyard.gcd", "opentitan.gpio"}
+                else implementations.get(d["model"], "NativeSocDevice+external.usp-mmio32-v1"),
+                "source": model_descriptor(spec, d["model"])["source"]
+                if e == "qemu"
+                or d["model"] in {"chipyard.gcd", "opentitan.gpio"} | set(spec["external_models"])
                 else {"commit": GEM5_SHA, "engine": "gem5"},
             }
             for d in spec["devices"]
         ]
     write_json(out / "engine-bindings.json", engine_bindings)
+    write_json(
+        out / "hardware-graph.json",
+        {
+            "contract": "native-flat-functional-v1",
+            "cpu_instances": cpu_instances(spec),
+            "harts": spec["cpu"]["harts"],
+            "cpu_clock_hz": spec["cpu"]["clock_hz"],
+            "memory_latency_ns": spec["cpu"]["memory_latency_ns"],
+            "qemu_timing": "functional; clock metadata does not imply CPU cycles",
+            "bus": "flat functional address-decoded fabric; gem5 SystemXBar",
+            "interrupts": ir.to_dict()["interrupts"],
+            "address_spaces": ir.to_dict()["address_spaces"],
+        },
+    )
+    write_json(
+        out / "hardware-graph.json",
+        {
+            "contract": "native-flat-functional-v1",
+            "cpu_instances": cpu_instances(spec),
+            "harts": spec["cpu"]["harts"],
+            "cpu_clock_hz": spec["cpu"]["clock_hz"],
+            "memory_latency_ns": spec["cpu"]["memory_latency_ns"],
+            "qemu_timing": "functional; clock metadata does not imply CPU cycles",
+            "bus": "flat functional address-decoded fabric; gem5 SystemXBar",
+            "interrupts": ir.to_dict()["interrupts"],
+            "address_spaces": ir.to_dict()["address_spaces"],
+        },
+    )
     (out / "simulate.py").write_text(
         "from pathlib import Path\nimport sys\nfrom socsim.soc_native import main\n"
         "args = ['run', '--generated', str(Path(__file__).resolve().parent), *sys.argv[1:]]\n"
         "raise SystemExit(main(args))\n"
     )
+    if identity != compiler_identity():
+        raise ContractError("native compiler changed during generation")
     write_json(
         out / "manifest.json",
         {
             "contract": "native-soc-qemu-v1",
             "engine": engine,
             "engines": engines,
-            "compiler": compiler_identity(),
+            "compiler": identity,
             "ir_sha256": digest(out / "soc-ir.json"),
             "files": {
                 p.relative_to(out).as_posix(): digest(p)
@@ -275,8 +285,9 @@ def generate(spec_path, out, engine="qemu"):
                 if p.is_file()
             },
             "limits": [
-                "one RV64 ISS hart, flat physical memory bus, functional timing",
-                "bare-metal BSP/application; Zephyr/Linux and arbitrary RTL need adapters",
+                "1..8 homogeneous RV64 ISS harts, flat physical memory bus, functional timing",
+                "bare-metal and OpenSBI/Linux; native Zephyr/RTOS BSPs and arbitrary RTL "
+                "need adapters",
                 "independent RTL instance processes; no coherent DMA or global cycle accuracy",
             ],
         },
@@ -291,16 +302,23 @@ def generate(spec_path, out, engine="qemu"):
 
 
 def verify_generated(out):
+    out = out.resolve()
     record = json.loads((out / "manifest.json").read_text())
     if record["contract"] != "native-soc-qemu-v1" or record["compiler"] != compiler_identity():
         raise ContractError("stale native compiler; regenerate the SoC")
     for filename, sha in record["files"].items():
         if digest(inside(out, filename)) != sha:
             raise ContractError("modified generated native artifact: " + filename)
-    return load_spec(out / "spec.yaml")
+    spec = load_spec(out / "spec.yaml")
+    from .native_external import preflight
+
+    preflight(spec, out)
+    return spec
 
 
 def build(out, source, cross_compile, jobs=2, reuse_qemu=None):
+    out = out.resolve()
+    reuse_qemu = reuse_qemu.resolve() if reuse_qemu is not None else None
     spec = verify_generated(out)
     source = verify_source(source, QEMU_SHA)
     if not 1 <= jobs <= 8:
@@ -429,17 +447,43 @@ def expected_markers(spec):
         "USP_NATIVE_MEMORY_OK",
         "USP_NATIVE_TIMER_OK",
         "USP_NATIVE_PASS",
+        "USP_NATIVE_SMP_OK",
     ]
     for kind, tag in (("uart", "UART"), ("chipyard.gcd", "GCD"), ("opentitan.gpio", "GPIO")):
         markers += [f"USP_NATIVE_{tag}_OK:{d['name']}" for d in devices(spec, kind)]
+    markers += [f"USP_NATIVE_HART_OK:{h}" for h in range(spec["cpu"]["harts"])]
     return markers
 
 
 @cleanup_on_termination
-def run(generated, models, out, timeout=30, firmware=None, engine="qemu", gem5_build=None):
+def run(
+    generated,
+    models,
+    out,
+    timeout=30,
+    firmware=None,
+    engine="qemu",
+    gem5_build=None,
+    software="baremetal",
+):
+    generated, out = generated.resolve(), out.resolve()
+    models = models.resolve() if models is not None else None
+    gem5_build = gem5_build.resolve() if gem5_build is not None else None
     if not math.isfinite(timeout) or not 0 < timeout <= 300:
         raise ContractError("invalid native simulation timeout")
+    if software not in {"baremetal", "linux"} or (software == "linux" and firmware is not None):
+        raise ContractError("select generated Linux or bare-metal/user ELF, not both")
     spec = verify_generated(generated)
+    linux_record = None
+    if software == "linux":
+        from .soc_native_linux import verify as verify_linux
+
+        linux_record = verify_linux(generated)
+    conformance = firmware is None and software == "baremetal"
+    if conformance and any(d["model"] in spec["external_models"] for d in spec["devices"]):
+        raise ContractError(
+            "external models require explicit user firmware; behavior is not inferred"
+        )
     manifest = json.loads((generated / "manifest.json").read_text())
     if engine not in manifest["engines"]:
         raise ContractError("engine was not selected during native generation")
@@ -456,14 +500,17 @@ def run(generated, models, out, timeout=30, firmware=None, engine="qemu", gem5_b
     for filename, sha in built["files"].items():
         if digest(inside(generated, filename)) != sha:
             raise ContractError("modified native build: " + filename)
-    rtl = [d for d in spec["devices"] if d["model"] in {"chipyard.gcd", "opentitan.gpio"}]
-    if rtl and models is None:
+    rtl = model_instances(spec)
+    builtin_rtl = any(d["model"] in {"chipyard.gcd", "opentitan.gpio"} for d in rtl)
+    if builtin_rtl and models is None:
         raise ContractError(
             "source IP instances need --models with verified native SystemC/RTL builds"
         )
-    model_record = verify_models(models) if rtl else None
+    model_record = verify_models(models) if builtin_rtl else None
     out.mkdir(parents=True, exist_ok=False)
     elf = generated / "firmware.elf" if firmware is None else firmware.resolve()
+    if linux_record:
+        elf = generated / "linux/opensbi/platform/generic/firmware/fw_payload.elf"
     shutil.copy2(elf, out / "firmware.elf")
     shutil.copy2(generated / "spec.yaml", out / "spec.yaml")
     shutil.copy2(generated / "soc-ir.json", out / "soc-ir.json")
@@ -472,6 +519,8 @@ def run(generated, models, out, timeout=30, firmware=None, engine="qemu", gem5_b
         out / "engine-bindings.json",
         json.loads((generated / "engine-bindings.json").read_text())[engine],
     )
+    if linux_record:
+        write_json(out / "linux-build.json", linux_record)
     if gem5_record:
         write_json(out / "gem5-build.json", gem5_record)
         shutil.copy2(gem5_build / "gem5-LICENSE", out / "gem5-LICENSE")
@@ -493,14 +542,21 @@ def run(generated, models, out, timeout=30, firmware=None, engine="qemu", gem5_b
                 trace = out / (d["name"] + ".trace.jsonl")
                 stream = (out / (d["name"] + ".model.log")).open("wb")
                 streams.append(stream)
-                cmd = [str(models / "rtl/Vusp_ipblocks"), str(sock), str(trace)]
+                descriptor = spec["external_models"].get(d["model"])
+                executable = (
+                    inside(generated, descriptor["executable"])
+                    if descriptor
+                    else models / "rtl/Vusp_ipblocks"
+                )
+                cmd = [str(executable), str(sock), str(trace)]
                 write_json(
                     out / (d["name"] + ".command.json"),
                     {
                         "argv": cmd,
                         "instance": d["name"],
                         "selected_model": d["model"],
-                        "unmapped_wrapper_sibling": True,
+                        "executable_sha256": digest(Path(cmd[0])),
+                        "unmapped_wrapper_sibling": descriptor is None,
                     },
                 )
                 process = subprocess.Popen(
@@ -521,6 +577,8 @@ def run(generated, models, out, timeout=30, firmware=None, engine="qemu", gem5_b
                 "usp-native",
                 "-cpu",
                 spec["cpu"]["model"].removeprefix("qemu."),
+                "-smp",
+                str(spec["cpu"]["harts"]),
                 "-m",
                 f"{ram['size'] // 1024}K",
                 "-display",
@@ -532,11 +590,19 @@ def run(generated, models, out, timeout=30, firmware=None, engine="qemu", gem5_b
             ]
             for d in devices(spec, "uart"):
                 cmd += ["-serial", "file:" + str(out / (d["name"] + ".uart.log"))]
+            if software == "linux":
+                cmd += ["-dtb", str(generated / "linux/soc.dtb")]
             if engine == "gem5":
                 from .gem5 import python_environment
                 from .soc_native_gem5 import prepare_run
 
-                prepare_run(spec, generated, out, sockets)
+                prepare_run(
+                    spec,
+                    generated,
+                    out,
+                    sockets,
+                    generated / "linux/soc.dtb" if software == "linux" else None,
+                )
                 cmd = [
                     str(gem5_build / "gem5.opt"),
                     "--listener-mode=off",
@@ -571,13 +637,17 @@ def run(generated, models, out, timeout=30, firmware=None, engine="qemu", gem5_b
     uart = uart_path.read_text(errors="replace") if uart_path.exists() else ""
     checks = (
         {marker: marker in uart.splitlines() for marker in expected_markers(spec)}
-        if firmware is None
+        if conformance
         else {}
     )
+    if software == "linux":
+        from .soc_native_linux import checks as linux_checks
+
+        checks.update(linux_checks(uart))
     checks["engine_exit"] = error is None
     checks["model_exits"] = all(rc == 0 for rc in model_exits.values())
     checks.update(gem5_checks)
-    for d in rtl if firmware is None else []:
+    for d in rtl if conformance else []:
         p = out / (d["name"] + ".trace.jsonl")
         tx = [json.loads(line) for line in p.read_text().splitlines()] if p.exists() else []
         checks[d["name"] + ".transactions"] = bool(tx) and all(t["status"] == 0 for t in tx)
@@ -600,7 +670,9 @@ def run(generated, models, out, timeout=30, firmware=None, engine="qemu", gem5_b
         "generated_manifest_sha256": digest(generated / "manifest.json"),
         "ir_sha256": digest(generated / "soc-ir.json"),
         "firmware_sha256": digest(out / "firmware.elf"),
-        "suite": "generated-conformance" if firmware is None else "user-firmware-execution",
+        "suite": "native-linux-boot"
+        if software == "linux"
+        else ("generated-conformance" if conformance else "user-firmware-execution"),
         "scope": "native spec execution; full peripheral checks only for generated conformance",
         "full_master_objective_complete": False,
         "files": {
@@ -617,6 +689,7 @@ def run(generated, models, out, timeout=30, firmware=None, engine="qemu", gem5_b
 
 
 def verify(out):
+    out = out.resolve()
     record = json.loads((out / "report.json").read_text())
     for filename, sha in record["files"].items():
         if digest(inside(out, filename)) != sha:
@@ -630,6 +703,11 @@ def verify(out):
     spec = load_spec(out / "spec.yaml")
     uart_path = out / (spec["boot"]["console"] + ".uart.log")
     text = uart_path.read_text() if uart_path.exists() else ""
+    if record["suite"] == "native-linux-boot":
+        from .soc_native_linux import checks as linux_checks
+
+        if not all(linux_checks(text).values()):
+            raise ContractError("native Linux boot evidence incomplete")
     if record["suite"] == "generated-conformance" and any(
         m not in text.splitlines() for m in expected_markers(spec)
     ):
@@ -644,13 +722,16 @@ def verify(out):
 
 
 @cleanup_on_termination
-def accept(generated, models, gem5_build, out, timeout=30):
+def accept(generated, models, gem5_build, out, timeout=30, software="baremetal", firmware=None):
     """Run two independent native engines concurrently against the same IR/ELF."""
+    generated, out = generated.resolve(), out.resolve()
     verify_generated(generated)
     out.mkdir(parents=True, exist_ok=False)
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
         futures = {
-            e: pool.submit(run, generated, models, out / e, timeout, None, e, gem5_build)
+            e: pool.submit(
+                run, generated, models, out / e, timeout, firmware, e, gem5_build, software
+            )
             for e in ("qemu", "gem5")
         }
         reports = {e: task.result() for e, task in futures.items()}
@@ -658,8 +739,8 @@ def accept(generated, models, gem5_build, out, timeout=30):
     checks["same_elf"] = reports["qemu"]["firmware_sha256"] == reports["gem5"]["firmware_sha256"]
     checks["same_ir"] = reports["qemu"]["ir_sha256"] == reports["gem5"]["ir_sha256"]
     spec = load_spec(generated / "spec.yaml")
-    for d in spec["devices"]:
-        if d["model"] not in {"chipyard.gcd", "opentitan.gpio"}:
+    for d in spec["devices"] if software == "baremetal" else []:
+        if d["model"] not in {"chipyard.gcd", "opentitan.gpio"} | set(spec["external_models"]):
             continue
         traces = []
         for engine in ("qemu", "gem5"):
@@ -673,16 +754,28 @@ def accept(generated, models, gem5_build, out, timeout=30):
                 [
                     (t["op"], t["offset"], t["data"] if t["op"] == 1 else t["value"])
                     for t in tx
-                    if t["op"] in {1, 2} or (t["op"] == 0 and t["offset"] == 12)
+                    if t["op"] in {1, 2}
+                    or (
+                        t["op"] == 0
+                        and (t["offset"] == 12 or d["model"] in spec["external_models"])
+                    )
                 ]
             )
         checks[d["name"] + ".same_commands_results"] = bool(traces[0]) and traces[0] == traces[1]
+        if d["model"] in spec["external_models"]:
+            from .native_external import trace_checks
+
+            for engine in ("qemu", "gem5"):
+                checks[d["name"] + "." + engine + ".transactions"] = trace_checks(
+                    out / engine / (d["name"] + ".trace.jsonl")
+                )
     result = {
         "kind": "native-dual-engine",
         "status": "PASSED" if all(checks.values()) else "FAILED",
         "checks": checks,
         "name": spec["name"],
         "execution": "concurrent independent engines",
+        "software": software,
         "full_master_objective_complete": False,
         "files": {
             p.relative_to(out).as_posix(): digest(p) for p in sorted(out.rglob("*")) if p.is_file()
@@ -709,20 +802,32 @@ def main(argv):
     )
     sub.add_argument("--jobs", type=int, default=2)
     sub.add_argument("--reuse-qemu", type=Path)
+    sub = commands.add_parser("linux-build")
+    sub.add_argument("--generated", type=Path, required=True)
+    sub.add_argument("--source-linux", type=Path, required=True)
+    sub.add_argument("--source-opensbi", type=Path, required=True)
+    sub.add_argument(
+        "--cross-compile", default=os.environ.get("CROSS_COMPILE_LINUX", "riscv64-linux-gnu-")
+    )
+    sub.add_argument("--jobs", type=int, default=2)
+    sub.add_argument("--reuse-linux", type=Path)
     sub = commands.add_parser("run")
     sub.add_argument("--generated", type=Path, required=True)
     sub.add_argument("--models", type=Path)
     sub.add_argument("--out", type=Path, required=True)
     sub.add_argument("--timeout", type=float, default=30)
     sub.add_argument("--firmware", type=Path)
+    sub.add_argument("--software", choices=["baremetal", "linux"], default="baremetal")
     sub.add_argument("--engine", choices=["qemu", "gem5"], default="qemu")
     sub.add_argument("--gem5-build", type=Path)
     sub = commands.add_parser("accept")
     sub.add_argument("--generated", type=Path, required=True)
-    sub.add_argument("--models", type=Path, required=True)
+    sub.add_argument("--models", type=Path)
     sub.add_argument("--gem5-build", type=Path, required=True)
     sub.add_argument("--out", type=Path, required=True)
     sub.add_argument("--timeout", type=float, default=30)
+    sub.add_argument("--software", choices=["baremetal", "linux"], default="baremetal")
+    sub.add_argument("--firmware", type=Path)
     sub = commands.add_parser("gem5-build")
     sub.add_argument("--source-gem5", type=Path, required=True)
     sub.add_argument("--out", type=Path, required=True)
@@ -740,6 +845,23 @@ def main(argv):
             result = {
                 "engines": ["qemu", "gem5"],
                 "models": sorted(ROLE),
+                "capabilities": {
+                    "homogeneous_rv64_harts": {"minimum": 1, "maximum": 8},
+                    "physical_address_bits": 48,
+                    "maximum_instances": 64,
+                    "irq_sources": 31,
+                    "fabric": "flat functional memory map; gem5 SystemXBar",
+                    "external_models": {
+                        "protocol": "usp-mmio32-v1",
+                        "aperture_bytes": 4096,
+                        "access_bits": 32,
+                        "interrupt": "one level-high source; wire response bit zero",
+                        "ownership": "selected ISS owns CPU/RAM; model owns peripheral state",
+                        "qualification": "explicit executable, hash, license and user firmware",
+                        "dma": False,
+                    },
+                    "software": ["generated-baremetal", "native-linux", "explicit-user-elf"],
+                },
                 "cpu_models": {
                     "qemu": ["qemu.rv64", "qemu.max"],
                     "gem5": ["gem5.RiscvTimingSimpleCPU", "gem5.RiscvAtomicSimpleCPU"],
@@ -750,11 +872,22 @@ def main(argv):
             result = {
                 "status": "PASSED",
                 "name": s["name"],
-                "instances": 1 + len(s["devices"]),
+                "instances": s["cpu"]["harts"] + len(s["devices"]),
                 "scope": "native spec semantics/model capability",
             }
         elif args.action == "generate":
             result = generate(args.spec.resolve(), args.out, args.engine)
+        elif args.action == "linux-build":
+            from .soc_native_linux import build as build_linux
+
+            result = build_linux(
+                args.generated.resolve(),
+                args.source_linux,
+                args.source_opensbi,
+                args.cross_compile,
+                args.jobs,
+                args.reuse_linux.resolve() if args.reuse_linux else None,
+            )
         elif args.action == "build":
             result = build(
                 args.generated.resolve(),
@@ -772,14 +905,17 @@ def main(argv):
                 args.firmware,
                 args.engine,
                 args.gem5_build.resolve() if args.gem5_build else None,
+                args.software,
             )
         elif args.action == "accept":
             result = accept(
                 args.generated.resolve(),
-                args.models.resolve(),
+                args.models.resolve() if args.models else None,
                 args.gem5_build.resolve(),
                 args.out.resolve(),
                 args.timeout,
+                args.software,
+                args.firmware,
             )
         else:
             result = verify(args.out.resolve())

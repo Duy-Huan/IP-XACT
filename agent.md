@@ -263,3 +263,18 @@ firmware and real instruction ownership at every stage. Promotion requires
 USP_REQUIRE_RTL_PLATFORM. Existing standalone kernel and negative tests remain
 mandatory. Linux/MMU, arbitrary CPU buses, full inventories, public-library
 electrical/PVT closure, hosted acceptance and release remain separate exits.
+
+## 14. Native topology, software and external model qualification
+
+Native design parameters now include homogeneous RV64 hart count, 48-bit physical
+maps and gem5 CPU clock/memory latency. Keep explicit CPU binding and per-hart
+IR/address spaces/interrupts. Require actual shared-memory atomic, timer and IPI
+acceptance, native Linux/OpenSBI/DTB/userspace and the maximum-hart fixture.
+External project models bind via an explicit local executable/hash/license/VLNV
+and the MMIO32 wire contract. Their behavior and user driver are supplied, never
+inferred or replaced by a built-in. Require real MMIO/IRQ and bus-error tests on
+both engines. See docs/native-design-capabilities.md and native-external-models.md.
+Promotion requires USP_REQUIRE_NATIVE_SMP/USP_REQUIRE_NATIVE_EXTERNAL and all
+verified native roots. Core/template changes regenerate affected outputs; explicit
+QEMU/kernel reuse must validate original inputs/artifacts and record provenance.
+No generic AXI/TileLink/RTL CPU/coherence/physical completeness claims follow.

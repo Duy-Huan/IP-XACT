@@ -9,7 +9,10 @@ static const Device uarts[] = { $uarts };
 static const Device gcds[] = { $gcds };
 static const Device gpios[] = { $gpios };
 static volatile unsigned uart_hits[$uart_count], gcd_hits[$gcd_slots], gpio_hits[$gpio_slots];
-static volatile unsigned results[$gcd_slots], timer_hits;
+static volatile unsigned results[$gcd_slots], timer_hits[USP_HART_COUNT], ipi_hits[USP_HART_COUNT];
+static volatile unsigned hart_ready[USP_HART_COUNT], hart_done[USP_HART_COUNT];
+static volatile uint64_t shared_sum;
+volatile unsigned boot_ready;
 static const unsigned uart_count=$uart_count, gcd_count=$gcd_count, gpio_count=$gpio_count;
 static void text(const char *s) {
     while (*s) { while (!(R8(USP_CONSOLE_BASE+5)&0x20)) {} R8(USP_CONSOLE_BASE)=*s++; }
@@ -20,11 +23,30 @@ static void finish(unsigned code) {
     for (;;) __asm__ volatile("wfi");
 }
 static void fail(void) { text("USP_NATIVE_FAIL\n"); finish(0x13333); }
+static void hex(uint64_t value) {
+    char digits[17];
+    for (unsigned i=0;i<16;i++) digits[i]="0123456789abcdef"[(value>>(60-4*i))&15];
+    digits[16]=0; text(digits);
+}
+static void fail_hart(const char *stage, unsigned hart) {
+    text("USP_NATIVE_SMP_FAIL:"); text(stage); text(" hart="); hex(hart);
+    text(" ready="); hex(hart_ready[hart]); text(" done="); hex(hart_done[hart]);
+    text(" timer="); hex(timer_hits[hart]); text(" ipi="); hex(ipi_hits[hart]);
+    text(" shared_sum="); hex(shared_sum); text("\n"); fail();
+}
 void trap_handler(void) __attribute__((interrupt("machine"),aligned(4)));
 void trap_handler(void) {
-    uintptr_t cause; __asm__ volatile("csrr %0,mcause":"=r"(cause));
+    uintptr_t cause, hart; __asm__ volatile("csrr %0,mcause":"=r"(cause));
+    __asm__ volatile("csrr %0,mhartid":"=r"(hart));
+    if (hart >= USP_HART_COUNT) fail();
+    if (cause==0x8000000000000003UL) {
+        __asm__ volatile("csrc mie,%0"::"r"(1UL<<3));
+        R32(USP_CLINT_BASE+4*hart)=0; ++ipi_hits[hart]; return;
+    }
     if (cause==0x8000000000000007UL) {
-        R64(USP_CLINT_BASE+0x4000)=UINT64_MAX; ++timer_hits; return;
+        /* One-shot conformance timer: MTIP may clear on a later RTC tick. */
+        __asm__ volatile("csrc mie,%0"::"r"(1UL<<7));
+        R64(USP_CLINT_BASE+0x4000+8*hart)=UINT64_MAX; ++timer_hits[hart]; return;
     }
     if (cause!=0x800000000000000bUL) fail();
     unsigned irq=R32(USP_PLIC_BASE+0x200004), found=0;
@@ -42,6 +64,18 @@ void trap_handler(void) {
     if (!found) fail();
     R32(USP_PLIC_BASE+0x200004)=irq;
 }
+void secondary_main(uintptr_t hart) {
+    if (!hart || hart >= USP_HART_COUNT) fail();
+    R64(USP_CLINT_BASE+0x4000+8*hart)=R64(USP_CLINT_BASE+0xbff8)+$timer_ticks;
+    __asm__ volatile("csrw mie,%0"::"r"((1UL<<3)|(1UL<<7)));
+    __asm__ volatile("csrsi mstatus,8");
+    __atomic_store_n(&hart_ready[hart],1,__ATOMIC_RELEASE);
+    while (!timer_hits[hart] || !ipi_hits[hart]) __asm__ volatile("nop");
+    if (timer_hits[hart]!=1 || ipi_hits[hart]!=1) fail_hart("interrupts",hart);
+    __atomic_fetch_add(&shared_sum,hart+1,__ATOMIC_SEQ_CST);
+    __atomic_store_n(&hart_done[hart],1,__ATOMIC_RELEASE);
+    for (;;) __asm__ volatile("wfi");
+}
 int main(void) {
     for (unsigned i=0;i<uart_count;i++) {
         uintptr_t b=uarts[i].base;
@@ -56,11 +90,29 @@ int main(void) {
     R32(USP_PLIC_BASE+0x2000)=$irq_mask;
     R32(USP_PLIC_BASE+0x200000)=0;
     $irq_priorities
-    __asm__ volatile("csrw mie,%0"::"r"((1UL<<7)|(1UL<<11)));
+    __asm__ volatile("csrw mie,%0"::"r"((1UL<<3)|(1UL<<7)|(1UL<<11)));
     R64(USP_CLINT_BASE+0x4000)=R64(USP_CLINT_BASE+0xbff8)+$timer_ticks;
     __asm__ volatile("csrsi mstatus,8");
-    while (!timer_hits) __asm__ volatile("wfi");
+    while (!timer_hits[0]) __asm__ volatile("wfi");
     text("USP_NATIVE_TIMER_OK\n");
+    __atomic_fetch_add(&shared_sum,1,__ATOMIC_SEQ_CST);
+    for (unsigned h=1;h<USP_HART_COUNT;h++) {
+        for (unsigned n=0;!__atomic_load_n(&hart_ready[h],__ATOMIC_ACQUIRE) && n<10000000;n++)
+            __asm__ volatile("nop");
+        if (!hart_ready[h]) fail_hart("ready",h);
+        R32(USP_CLINT_BASE+4*h)=1;
+    }
+    for (unsigned h=1;h<USP_HART_COUNT;h++) {
+        for (unsigned n=0;!__atomic_load_n(&hart_done[h],__ATOMIC_ACQUIRE) && n<10000000;n++)
+            __asm__ volatile("nop");
+        if (!hart_done[h] || timer_hits[h]!=1 || ipi_hits[h]!=1) fail_hart("join",h);
+    }
+    if (shared_sum != USP_HART_COUNT*(USP_HART_COUNT+1)/2) fail_hart("sum",0);
+    for (unsigned h=0;h<USP_HART_COUNT;h++) {
+        char id[2]={(char)('0'+h),0};
+        text("USP_NATIVE_HART_OK:"); text(id); text("\n");
+    }
+    text("USP_NATIVE_SMP_OK\n");
     for (unsigned i=0;i<uart_count;i++) {
         R8(uarts[i].base+1)=2;
         for (unsigned n=0;!uart_hits[i] && n<1000000;n++) __asm__ volatile("nop");

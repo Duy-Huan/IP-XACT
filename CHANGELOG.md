@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — native design generalization
+
+- Parameterized homogeneous hart topology, per-hart CLINT/PLIC/startup and native counters.
+- 48-bit physical maps, configurable gem5 clocks/latency and native OpenSBI/Linux boot.
+- External MMIO32 executable/VLNV registry, checked identities, original SystemC/IRQ-driver example.
+- Mandatory SMP/Linux/model/error gates; modern Linux ISA bindings and one-shot IRQ fixes.
+- Qualified functional contracts; generic bus/RTL/OS/physical coverage remains explicit.
+
 ## Unreleased
 
 Added clean-container CI reproduction and workflow/ShellCheck validation. Declared

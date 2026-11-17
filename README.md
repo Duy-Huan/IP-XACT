@@ -37,6 +37,13 @@ and [one platform configuration for all four RTL kernels](docs/rtl-software-plat
 The complete [QA remediation matrix](docs/next-version.md) records the remaining
 CPU/MMU, full-inventory, Yocto, timing, physical-evaluation and release work.
 
+The native generator now adds homogeneous multi-hart execution, 48-bit physical
+maps, configured gem5 clocks/latency, native OpenSBI/Linux boot and external
+MMIO model registration with explicit executable identity and guest drivers.
+See [native design capability assessment](docs/native-design-capabilities.md) and
+[external model contract](docs/native-external-models.md). These are qualified
+interfaces, not automatic arbitrary RTL/ISA/bus conversion.
+
 ## Development setup
 
 Before publishing changes, follow [local CI and native promotion](docs/ci-local.md).

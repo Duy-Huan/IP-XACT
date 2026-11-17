@@ -19,6 +19,12 @@ export USP_REQUIRE_LIVE_GARNET=1
 export USP_REQUIRE_COHERENT=1
 export USP_REQUIRE_RTL_PLATFORM=1
 export USP_REQUIRE_NATIVE_SOC=1
+export USP_REQUIRE_NATIVE_SMP=1
+export USP_REQUIRE_NATIVE_EXTERNAL=1
+: "${USP_NATIVE_MAX_HART_BUILD:?Promotion requires the maximum-hart native boundary build}"
+: "${USP_NATIVE_EXTERNAL_ROOT:?Promotion requires the compiled external SystemC model and user driver}"
+: "${USP_NATIVE_AI_SOC_SMP_BUILD:?Promotion requires the native multi-hart AI_SOC and Linux build}"
+: "${USP_NATIVE_AIZ_SOC_SMP_BUILD:?Promotion requires the native multi-hart AIZ_SOC and Linux build}"
 : "${USP_NATIVE_AI_SOC_BUILD:?Promotion requires the generated native AI_SOC build}"
 : "${USP_NATIVE_AIZ_SOC_BUILD:?Promotion requires the generated native AIZ_SOC build}"
 : "${USP_NATIVE_GEM5_BUILD:?Promotion requires the built native multi-instance gem5 engine}"

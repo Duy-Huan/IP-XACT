@@ -52,19 +52,38 @@ def catalog():
 
 def load_spec(path):
     data = read_yaml(path)
-    keys(data, {"schema_version", "name", "cpu", "boot", "devices"}, "native SoC spec")
+    keys(
+        data,
+        {"schema_version", "name", "cpu", "boot", "devices"}
+        | ({"external_models"} if "external_models" in data else set()),
+        "native SoC spec",
+    )
     if data["schema_version"] != "1":
         raise ContractError("unsupported native SoC spec schema")
     name(data["name"])
+    from .native_external import validate
+
+    data["external_models"] = validate(
+        data.get("external_models", {}), ROLE, [v["vlnv"] for v in catalog().values()]
+    )
+    irq_models = IRQ_MODELS | set(data["external_models"])
     if not isinstance(data["cpu"], dict):
         raise ContractError("native CPU must be a mapping")
     cpu = keys(
         data["cpu"],
         {"name", "model", "timebase_hz"}
-        | ({"gem5_model"} if "gem5_model" in data["cpu"] else set()),
+        | (set(data["cpu"]) & {"gem5_model", "harts", "clock_hz", "memory_latency_ns"}),
         "native CPU",
     )
     name(cpu["name"])
+    for field, default, low, high in (
+        ("harts", 1, 1, 8),
+        ("clock_hz", 1000000000, 1000000, 10000000000),
+        ("memory_latency_ns", 10, 1, 100000),
+    ):
+        cpu[field] = integer(cpu.get(field, default), "cpu." + field)
+        if not low <= cpu[field] <= high:
+            raise ContractError(f"unsupported native cpu.{field}: expected {low}..{high}")
     if not isinstance(cpu["model"], str) or cpu["model"] not in {"qemu.rv64", "qemu.max"}:
         raise ContractError("native generator currently binds QEMU rv64/max; no CPU substitution")
     if "gem5_model" in cpu and (
@@ -81,17 +100,19 @@ def load_spec(path):
     boot["entry"] = integer(boot["entry"], "entry")
     if not isinstance(data["devices"], list) or not 5 <= len(data["devices"]) <= 63:
         raise ContractError("native spec requires 5..63 devices")
-    names = {cpu["name"].upper()}
+    names = {name(n).upper() for n in cpu_instances(data)}
+    if len(data["devices"]) + cpu["harts"] > 64:
+        raise ContractError("native spec exceeds 64 total instances")
     irqs = set()
     for dev in data["devices"]:
         if not isinstance(dev, dict) or not isinstance(dev.get("model"), str):
             raise ContractError("invalid native device")
         kind = dev["model"]
-        if kind not in ROLE:
+        if kind not in ROLE and kind not in data["external_models"]:
             raise ContractError(f"no qualified native model: {kind}")
         keys(
             dev,
-            {"name", "model", "base", "size"} | ({"irq"} if kind in IRQ_MODELS else set()),
+            {"name", "model", "base", "size"} | ({"irq"} if kind in irq_models else set()),
             "native device",
         )
         label = name(dev["name"])
@@ -101,15 +122,19 @@ def load_spec(path):
         for key in ("base", "size"):
             dev[key] = integer(dev[key], label + "." + key)
         base, size = dev["base"], dev["size"]
-        if base % 4096 or not size or base + size > 2**32:
-            raise ContractError(f"{label}: native windows require aligned 32-bit addresses")
-        if kind in FIXED_SIZE and size != FIXED_SIZE[kind]:
+        if base % 4096 or not size or base + size > 2**48:
+            raise ContractError(
+                f"{label}: native windows require aligned 48-bit physical addresses"
+            )
+        if (kind in FIXED_SIZE and size != FIXED_SIZE[kind]) or (
+            kind in data["external_models"] and size != 0x1000
+        ):
             raise ContractError(f"{label}: incompatible {kind} aperture")
         if kind in {"ram", "rom"} and (
             size % 4096 or not 4096 <= size <= (512 * 1024**2 if kind == "ram" else 65536)
         ):
             raise ContractError(f"{label}: unsupported memory size")
-        if kind in IRQ_MODELS:
+        if kind in irq_models:
             dev["irq"] = integer(dev["irq"], label + ".irq")
             if not 1 <= dev["irq"] <= 31 or dev["irq"] in irqs:
                 raise ContractError("PLIC IRQ must be unique in 1..31")
@@ -123,12 +148,21 @@ def load_spec(path):
         if not any(d["name"] == boot[field] for d in devices(data, kind)):
             raise ContractError(f"boot.{field} does not reference a {kind} instance")
     ram = selected(data, "ram")
-    if boot["entry"] % 4 or not ram["base"] <= boot["entry"] < ram["base"] + ram["size"] - 4096:
+    if (
+        ram["size"] < 4096 * cpu["harts"] + 4096
+        or boot["entry"] % 4
+        or not ram["base"] <= boot["entry"] < ram["base"] + ram["size"] - 4096 * cpu["harts"]
+    ):
         raise ContractError("boot entry outside executable RAM or unaligned")
     ranges = sorted((d["base"], d["base"] + d["size"]) for d in data["devices"])
     if any(b[0] < a[1] for a, b in zip(ranges, ranges[1:], strict=False)):
         raise ContractError("overlapping native memory/IO windows")
     return data
+
+
+def cpu_instances(spec):
+    cpu = spec["cpu"]
+    return [cpu["name"]] + [f"{cpu['name']}_hart{i}" for i in range(1, cpu.get("harts", 1))]
 
 
 def devices(spec, model):
@@ -164,8 +198,10 @@ def emit_ipxact(spec, out):
 
     kinds = {d["model"] for d in spec["devices"]}
     for kind in sorted(kinds | {"cpu"}):
-        role = "rv64" if kind == "cpu" else ROLE[kind]
-        component = root("component", cat[role]["vlnv"])
+        component = root(
+            "component",
+            cat["rv64"]["vlnv"] if kind == "cpu" else model_descriptor(spec, kind)["vlnv"],
+        )
         if kind != "cpu":
             block = element(element(element(component, "memoryMaps"), "memoryMap"), "name", "map")
             memory_map = block.getparent()
@@ -192,14 +228,19 @@ def emit_ipxact(spec, out):
         save(component, kind.replace(".", "_") + ".xml")
     design = root("design", f"socsim.native:generated:{spec['name']}:1.0")
     instances = element(design, "componentInstances")
-    all_instances = [{"name": spec["cpu"]["name"], "model": "cpu", "base": 0}, *spec["devices"]]
+    all_instances = [
+        *({"name": n, "model": "cpu", "base": 0} for n in cpu_instances(spec)),
+        *spec["devices"],
+    ]
     for dev in all_instances:
         instance = element(instances, "componentInstance")
         element(instance, "instanceName", dev["name"])
-        role = "rv64" if dev["model"] == "cpu" else ROLE[dev["model"]]
-        attrs = dict(
-            zip(("vendor", "library", "name", "version"), cat[role]["vlnv"].split(":"), strict=True)
+        vlnv = (
+            cat["rv64"]["vlnv"]
+            if dev["model"] == "cpu"
+            else model_descriptor(spec, dev["model"])["vlnv"]
         )
+        attrs = dict(zip(("vendor", "library", "name", "version"), vlnv.split(":"), strict=True))
         ref = element(instance, "componentRef", **attrs)
         if dev["model"] != "cpu":
             values = element(ref, "configurableElementValues")
@@ -211,10 +252,11 @@ def emit_ipxact(spec, out):
     routes = [
         InterruptRoute(d["name"], plic, d["irq"], "level-high")
         for d in spec["devices"]
-        if d["model"] in IRQ_MODELS
+        if d["model"] in IRQ_MODELS | set(spec["external_models"])
     ]
-    routes += [InterruptRoute(clint, cpu, n, "level-high") for n in (3, 7)]
-    routes += [InterruptRoute(plic, cpu, n, "level-high") for n in (9, 11)]
+    for cpu in cpu_instances(spec):
+        routes += [InterruptRoute(clint, cpu, n, "level-high") for n in (3, 7)]
+        routes += [InterruptRoute(plic, cpu, n, "level-high") for n in (9, 11)]
     ir = replace(
         ir,
         cpu=CpuContract(
@@ -226,20 +268,28 @@ def emit_ipxact(spec, out):
             spec["cpu"]["timebase_hz"],
         ),
         interrupts=tuple(routes),
-        address_spaces=(AddressSpace("physical", cpu, tuple(d["name"] for d in spec["devices"])),),
+        address_spaces=tuple(
+            AddressSpace(
+                "physical" if h == 0 else f"physical_hart{h}",
+                n,
+                tuple(d["name"] for d in spec["devices"]),
+            )
+            for h, n in enumerate(cpu_instances(spec))
+        ),
         sources=tuple(sorted((*ir.sources, ("spec.yaml", digest(out / "spec.yaml"))))),
     )
     write_json(out / "soc-ir.json", ir.to_dict())
     bindings = [
-        {"instance": spec["cpu"]["name"], "model": spec["cpu"]["model"], "source_commit": QEMU_SHA}
+        {"instance": n, "model": spec["cpu"]["model"], "source_commit": QEMU_SHA}
+        for n in cpu_instances(spec)
     ]
     bindings += [
         {
             "instance": d["name"],
             "model": d["model"],
-            "vlnv": cat[ROLE[d["model"]]]["vlnv"],
-            "implementation": cat[ROLE[d["model"]]]["id"],
-            "source": cat[ROLE[d["model"]]]["source"],
+            "vlnv": model_descriptor(spec, d["model"])["vlnv"],
+            "implementation": model_descriptor(spec, d["model"])["id"],
+            "source": model_descriptor(spec, d["model"])["source"],
         }
         for d in spec["devices"]
     ]
@@ -253,3 +303,19 @@ def emit_ipxact(spec, out):
         },
     )
     return ir
+
+
+def model_descriptor(spec, model):
+    if model in ROLE:
+        return catalog()[ROLE[model]]
+    from .native_external import descriptor
+
+    return descriptor(spec["external_models"][model])
+
+
+def model_instances(spec):
+    return [
+        d
+        for d in spec["devices"]
+        if d["model"] in {"chipyard.gcd", "opentitan.gpio"} | set(spec.get("external_models", {}))
+    ]
