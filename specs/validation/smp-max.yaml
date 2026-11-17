@@ -1,0 +1,71 @@
+# Maximum-hart regression fixture, not a third architecture target.
+schema_version: '1'
+name: AI_SOC_MAX_HART_VALIDATION
+cpu:
+  name: application_cluster
+  model: qemu.rv64
+  gem5_model: gem5.RiscvAtomicSimpleCPU
+  timebase_hz: 10000000
+  harts: 8
+  clock_hz: 1200000000
+  memory_latency_ns: 25
+boot:
+  ram: main_sram
+  rom: boot_code
+  console: debug_console
+  entry: 6442450944
+devices:
+- name: main_sram
+  model: ram
+  base: 6442450944
+  size: 67108864
+- name: scratch_sram
+  model: ram
+  base: 2415919104
+  size: 65536
+- name: boot_code
+  model: rom
+  base: 4096
+  size: 4096
+- name: timer_controller
+  model: clint
+  base: 33554432
+  size: 65536
+- name: interrupt_controller
+  model: plic
+  base: 201326592
+  size: 67108864
+- name: simulation_exit
+  model: finisher
+  base: 1048576
+  size: 4096
+- name: debug_console
+  model: uart
+  base: 4580179968
+  size: 256
+  irq: 10
+- name: service_console
+  model: uart
+  base: 4580184064
+  size: 256
+  irq: 11
+- name: accelerator_a
+  model: chipyard.gcd
+  base: 4613734400
+  size: 4096
+  irq: 12
+- name: accelerator_b
+  model: chipyard.gcd
+  base: 4613738496
+  size: 4096
+  irq: 14
+- name: control_gpio
+  model: opentitan.gpio
+  base: 4630511616
+  size: 4096
+  irq: 13
+- name: status_gpio
+  model: opentitan.gpio
+  base: 4630515712
+  size: 4096
+  irq: 15

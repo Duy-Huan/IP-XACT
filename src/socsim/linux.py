@@ -16,6 +16,19 @@ def build_linux(project, out, linux_source, opensbi_source, cross_compile, jobs=
     verify_generated(project, out)
     if project.manifest["profile"] not in {"usp-rv64-v1", "usp-rv64-ips-v1"}:
         raise ContractError("Linux requires the non-hybrid base or source-IP profile")
+    return build_payload(
+        out,
+        linux_source,
+        opensbi_source,
+        cross_compile,
+        jobs,
+        project.ir.cpu.entry,
+        out / "linux.dts",
+    )
+
+
+def build_payload(out, linux_source, opensbi_source, cross_compile, jobs, entry, dts, smp=False):
+    """Shared pinned kernel/OpenSBI build, independent of a hardware frontend."""
     linux_source = verify_source(linux_source, LINUX_SHA)
     opensbi_source = verify_source(opensbi_source, OPENSBI_SHA)
     directory = out / "linux"
@@ -128,7 +141,7 @@ def build_linux(project, out, linux_source, opensbi_source, cross_compile, jobs=
         "--set-str",
         "INITRAMFS_SOURCE",
         str(cpio_list),
-        "--disable",
+        "--enable" if smp else "--disable",
         "SMP",
         "--disable",
         "WERROR",
@@ -140,7 +153,7 @@ def build_linux(project, out, linux_source, opensbi_source, cross_compile, jobs=
     execute([*make, "-j", str(jobs), "Image"], out, out / "logs/linux-build.log", 1800, env)
     image = build / "arch/riscv/boot/Image"
     execute(
-        ["dtc", "-I", "dts", "-O", "dtb", "-o", str(directory / "soc.dtb"), str(out / "linux.dts")],
+        ["dtc", "-I", "dts", "-O", "dtb", "-o", str(directory / "soc.dtb"), str(dts)],
         out,
         out / "logs/linux-dtc.log",
     )
@@ -153,7 +166,7 @@ def build_linux(project, out, linux_source, opensbi_source, cross_compile, jobs=
             "O=" + str(sbi_build),
             "PLATFORM=generic",
             "CROSS_COMPILE=" + cross_compile,
-            "FW_TEXT_START=" + hex(project.ir.cpu.entry),
+            "FW_TEXT_START=" + hex(entry),
             "FW_PAYLOAD_PATH=" + str(image),
             "FW_PAYLOAD_OFFSET=0x200000",
             "-j",

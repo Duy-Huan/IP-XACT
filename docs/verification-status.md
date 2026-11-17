@@ -1,5 +1,19 @@
 # Master-spec phase status
 
+## Native design generalization, 2026-11-17
+
+Actual native runs now include four/two-hart generated systems with high physical
+maps, per-hart atomic/timer/IPI acceptance and OpenSBI/Linux/userspace/poweroff on
+both QEMU and gem5. An eight-hart boundary case also executes on both engines.
+A project-local SystemC/TLM counter and user IRQ driver bind through a registered
+executable/VLNV/hash descriptor, without compiler branches for that IP identity.
+The new required gate includes model bus errors, changed executables, topology
+mismatch and Linux artifact corruption. See native-design-capabilities.md for
+scope, known defects fixed through execution and remaining industrial boundaries.
+Raw local evidence is retained under results/native-generalization-20261117.
+The complete regression must be rerun on the exact committed candidate; earlier
+471-pass results do not qualify this change. Hosted status remains unobserved.
+
 ## Native SoC generator priority, 2026-11-16
 
 The owner clarified that the first deliverable is spec + memory map/I/O → actual

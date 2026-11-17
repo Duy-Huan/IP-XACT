@@ -125,7 +125,7 @@ def test_invalid_specs_fail_before_generating_any_output(tmp_path, case):
         elif case == "alignment":
             first["base"] += 1
         elif case == "overflow":
-            first["base"] = 0xFFFFF000
+            first["base"] = 0xFFFFFFFFF000
         elif case == "empty_ram":
             first["size"] = 0
         elif case == "bad_aperture":

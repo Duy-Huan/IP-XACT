@@ -71,3 +71,11 @@ skip. Retain raw logs, JUnit, failed attempts and exact tested source/artifact
 identities. `usp soc accept` must execute the actual new QEMU/gem5 instance graph
 with the same ELF/IR; older fixed-profile passes cannot qualify it. Git push is a
 separate action after the local gate, not an automatic side effect of a script.
+
+The native topology/model upgrade additionally requires USP_REQUIRE_NATIVE_SMP,
+USP_REQUIRE_NATIVE_EXTERNAL, USP_NATIVE_AI_SOC_SMP_BUILD,
+USP_NATIVE_AIZ_SOC_SMP_BUILD, USP_NATIVE_MAX_HART_BUILD and
+USP_NATIVE_EXTERNAL_ROOT. scripts/native_soc_bringup.sh builds the source models,
+SMP/Linux artifacts and external example needed for its three native test modules.
+The referenced source-IP model root must already be verified; this script does
+not implicitly download any private or public source tree.

@@ -37,6 +37,8 @@ required = [
     "README.md",
     "CHANGELOG.md",
     "docs/architecture.md",
+    "docs/native-design-capabilities.md",
+    "docs/native-external-models.md",
     "docs/creating-soc.md",
     "docs/firmware-and-os.md",
     "docs/roadmap.md",
