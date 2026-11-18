@@ -40,3 +40,7 @@ DTS, linker and firmware. Native acceptance requires identical bare-metal ELF
 and real translated Chipyard/OpenTitan MMIO/IRQ, FreeRTOS, Zephyr and both µC/OS
 kernels on QEMU and gem5 for both maps. USP_REQUIRE_BUS_XML makes these tests
 mandatory in promotion. A frontend-only pass does not qualify execution.
+
+Native bare-metal builds map output-directory debug paths to relative names and
+retain deterministic assembler intermediates. Equivalent XML/fabric hardware must
+yield identical complete ELF bytes, including debug metadata, across directories.

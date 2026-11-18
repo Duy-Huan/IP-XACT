@@ -8,6 +8,8 @@
   AI_SOC/AIZ_SOC XML flows and mandatory real dual-engine/kernel acceptance.
 - Add workflow-published Git notes with exact source/job outcomes and source
   release asset hashes; missing evidence remains UNOBSERVED. No REST access needed.
+- Make native bare-metal ELF debug paths and assembler intermediates reproducible
+  across output directories; require byte identity for equivalent XML/fabric inputs.
 - Preserve v3/v4, original qualified engines and immutable SDK/source releases.
   General bus timing, RTL CPUs/MMU, Yocto and complete M1-M9 exits stay open.
 
