@@ -1,5 +1,11 @@
 # Native design capability assessment
 
+The v4 compiler increment adds a rooted static decoder tree with local spaces,
+explicit target/source apertures and recomputed physical placement. Candidate
+qualification is tracked in upgrade/address-decoder-batch.md; implementation is
+not broad industrial-bus or complete milestone acceptance. The bounded contract
+and its mandatory real engine/software tests are in native-address-decoder.md.
+
 This is the native-generator acceptance contract, updated 2026-11-17. A usable
 arbitrary-design platform composes implemented models through declared
 interfaces; IP-XACT metadata alone does not supply missing hardware behavior.

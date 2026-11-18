@@ -15,6 +15,11 @@ Native IR v3; structural 2022 import; flat homogeneous RV64 contracts accepted i
 
 ## Evidence and execution
 
+The 0.3.0a3 candidate implements typed static decoder routing in native IR v4,
+preserving v3 compatibility. See address-decoder-batch.md and
+docs/native-address-decoder.md. General IP-XACT bus XML, initiator-specific views,
+timed protocols and asynchronous domains remain open; this subset does not close M1.
+
 Attach exact candidate/source/tool identities, build commands, real positive and
 negative run reports and JUnit to each completed exit. Keep failures and cache
 reuse explicit. The aggregate CI gate runs only after the batch is frozen.

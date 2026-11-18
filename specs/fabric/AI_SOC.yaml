@@ -1,0 +1,125 @@
+schema_version: native-fabric-1
+name: AI_SOC_fabric
+cpu:
+  name: application_core
+  model: qemu.rv64
+  gem5_model: gem5.RiscvTimingSimpleCPU
+  timebase_hz: 10000000
+boot:
+  ram: main_sram
+  rom: boot_code
+  console: debug_console
+  entry: 2147483648
+devices:
+- name: main_sram
+  model: ram
+  size: 16777216
+- name: scratch_sram
+  model: ram
+  size: 65536
+- name: boot_code
+  model: rom
+  size: 4096
+- name: timer_controller
+  model: clint
+  size: 65536
+- name: interrupt_controller
+  model: plic
+  size: 67108864
+- name: simulation_exit
+  model: finisher
+  size: 4096
+- name: debug_console
+  model: uart
+  size: 256
+  irq: 10
+- name: service_console
+  model: uart
+  size: 256
+  irq: 11
+- name: accelerator_a
+  model: chipyard.gcd
+  size: 4096
+  irq: 12
+- name: accelerator_b
+  model: chipyard.gcd
+  size: 4096
+  irq: 14
+- name: control_gpio
+  model: opentitan.gpio
+  size: 4096
+  irq: 13
+- name: status_gpio
+  model: opentitan.gpio
+  size: 4096
+  irq: 15
+routing:
+  root: physical
+  spaces:
+  - name: physical
+    address_bits: 48
+  - name: io
+    address_bits: 32
+  - name: math
+    address_bits: 20
+  - name: security
+    address_bits: 20
+  bridges:
+  - name: io_decode
+    source: physical
+    target: io
+    source_base: 4398046511104
+    target_base: 1073741824
+    size: 2097152
+    protocol: static-address-decoder-v1
+  - name: math_decode
+    source: io
+    target: math
+    source_base: 1073745920
+    target_base: 65536
+    size: 65536
+    protocol: static-address-decoder-v1
+  - name: security_decode
+    source: io
+    target: security
+    source_base: 1073872896
+    target_base: 65536
+    size: 65536
+    protocol: static-address-decoder-v1
+  placements:
+  - instance: main_sram
+    space: physical
+    address: 2147483648
+  - instance: scratch_sram
+    space: physical
+    address: 2415919104
+  - instance: boot_code
+    space: physical
+    address: 4096
+  - instance: timer_controller
+    space: physical
+    address: 33554432
+  - instance: interrupt_controller
+    space: physical
+    address: 201326592
+  - instance: simulation_exit
+    space: physical
+    address: 1048576
+  - instance: debug_console
+    space: physical
+    address: 285212672
+  - instance: service_console
+    space: physical
+    address: 285216768
+  - instance: accelerator_a
+    space: math
+    address: 65536
+  - instance: accelerator_b
+    space: math
+    address: 77824
+  - instance: control_gpio
+    space: security
+    address: 65536
+  - instance: status_gpio
+    space: security
+    address: 77824

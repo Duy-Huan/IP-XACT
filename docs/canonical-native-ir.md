@@ -1,5 +1,10 @@
 # Canonical native IR and direct IEEE 1685-2022 intake
 
+Native IR v4 additionally retains typed local spaces, bridge apertures and local
+placements, with a checked physical projection for qualified static decoder
+trees. The v3 representation stays compatible. See native-address-decoder.md;
+general IP-XACT bus XML, timing and per-initiator remapping stay separate exits.
+
 Application 0.3.0a1 starts M1 of the approved upgrade programme. It adds
 native-ir-v3 alongside the unchanged legacy SoCIR API. It is an executable native
 contract, not the complete general bus/translation/heterogeneous compiler.

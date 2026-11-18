@@ -23,6 +23,9 @@ export USP_REQUIRE_NATIVE_SMP=1
 export USP_REQUIRE_NATIVE_EXTERNAL=1
 export USP_REQUIRE_NATIVE_IPXACT=1
 export USP_REQUIRE_NATIVE_FLOW=1
+export USP_REQUIRE_NATIVE_FABRIC=1
+: "${USP_NATIVE_FABRIC_AI_SOC:?Promotion requires the translated AI_SOC HW/SW flow}"
+: "${USP_NATIVE_FABRIC_AIZ_SOC:?Promotion requires the translated AIZ_SOC HW/SW flow}"
 : "${USP_NATIVE_FLOW_SMP_PROFILE:?Promotion requires actual multi-hart QEMU/gem5 counters}"
 : "${USP_NATIVE_FLOW_AI_SOC:?Promotion requires source-package HW/SW flow on both engines}"
 : "${USP_NATIVE_FLOW_AIZ_SOC:?Promotion requires native BSP flow on the other mapped SoC}"

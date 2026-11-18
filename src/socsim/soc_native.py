@@ -50,6 +50,7 @@ def compiler_identity():
             "soc_spec.py",
             "native_ir.py",
             "native_ipxact.py",
+            "native_fabric.py",
             "schemas/native-ir-v3.json",
             "domain.py",
             "ipxact.py",
@@ -77,6 +78,11 @@ def generate(spec_path, out, engine="qemu", input_format="yaml"):
     elif input_format == "yaml":
         spec = load_spec(spec_path)
         source_root = spec_path.resolve().parent
+    elif input_format == "fabric":
+        from .native_fabric import read_source
+
+        spec, routing = read_source(spec_path)
+        source_root = spec_path.resolve().parent
     else:
         raise ContractError("unsupported native input format")
     from .native_external import preflight, stage
@@ -93,6 +99,27 @@ def generate(spec_path, out, engine="qemu", input_format="yaml"):
             raise ContractError("native input changed during generation")
         structural = emit_ipxact(spec, out)
         canonical = compile_design(spec, structural)
+    elif input_format == "fabric":
+        import yaml
+
+        (out / "spec.yaml").write_text(yaml.safe_dump(spec, sort_keys=False))
+        shutil.copy2(spec_path, out / "source-fabric.yaml")
+        from .native_fabric import read_source
+
+        if read_source(out / "source-fabric.yaml") != (spec, routing):
+            raise ContractError("fabric input changed during generation")
+        canonical = compile_design(spec, emit_ipxact(spec, out))
+        canonical = replace(
+            canonical,
+            schema_version="4",
+            fabric="hierarchical-static-decode-v1",
+            routing=routing,
+            sources=tuple(
+                sorted(
+                    (*canonical.sources, ("source-fabric.yaml", digest(out / "source-fabric.yaml")))
+                )
+            ),
+        )
     else:
         import yaml
 
@@ -895,7 +922,7 @@ def main(argv):
     for action in ("validate", "generate"):
         sub = commands.add_parser(action)
         sub.add_argument("spec", type=Path)
-        sub.add_argument("--input-format", choices=["yaml", "ipxact"], default="yaml")
+        sub.add_argument("--input-format", choices=["yaml", "ipxact", "fabric"], default="yaml")
         if action == "generate":
             sub.add_argument("--out", type=Path, required=True)
             sub.add_argument("--engine", choices=["qemu", "gem5", "both"], default="both")

@@ -1,5 +1,10 @@
 # IP-XACT RISC-V virtual platform
 
+The next compiler increment adds typed local address spaces and checked static
+decoder lowering in native IR v4. See [the decoder guide](docs/native-address-decoder.md)
+and [candidate batch](upgrade/address-decoder-batch.md). Broad M1-M9 completion and
+release qualification remain separate from these implemented contracts.
+
 A headless compiler and execution toolchain: IEEE 1685-2022 IP-XACT → typed SoC IR →
 strict model binding → generated QEMU machine and software artifacts → real guest
 execution with evidence. The master-spec objective and development rules are in
