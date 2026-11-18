@@ -71,3 +71,12 @@ Wider coverage needs bus/clock/reset/translation IR, CPU/initiator adapters,
 model-specific reset/error/DMA behavior and OS/driver conformance. Those require
 engineering interfaces and executable gates, not inference from an IP name or a
 successful Linux boot.
+
+## Native flow increment (0.3.0a2)
+
+[Source-package flows](native-flow.md) add persisted ownership/build/run plans,
+source-built SystemC packages, RV64 single-hart FreeRTOS/Zephyr and explicit local
+LP64 ports of µC/OS-II/III. Both SoCs exercise these BSPs on QEMU and gem5. Native
+Linux retains its existing MMU/SMP contract. Optional QEMU per-hart events feed
+explicit uncalibrated cost estimates; gem5 keeps native statistics. Generic
+SMP RTOS/IP drivers, Yocto, arbitrary CPU/bus/NoC and full inventories remain open.

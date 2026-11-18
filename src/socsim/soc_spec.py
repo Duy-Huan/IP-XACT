@@ -54,29 +54,13 @@ def load_spec(path):
     return validate_spec(read_yaml(path))
 
 
-def validate_spec(data):
-    """Validate and normalize an owned mapping, independent of its input format."""
-    keys(
-        data,
-        {"schema_version", "name", "cpu", "boot", "devices"}
-        | ({"external_models"} if "external_models" in data else set()),
-        "native SoC spec",
-    )
-    if data["schema_version"] != "1":
-        raise ContractError("unsupported native SoC spec schema")
-    name(data["name"])
-    from .native_external import validate
-
-    data["external_models"] = validate(
-        data.get("external_models", {}), ROLE, [v["vlnv"] for v in catalog().values()]
-    )
-    irq_models = IRQ_MODELS | set(data["external_models"])
-    if not isinstance(data["cpu"], dict):
+def validate_cpu(data):
+    if not isinstance(data, dict):
         raise ContractError("native CPU must be a mapping")
     cpu = keys(
-        data["cpu"],
+        data,
         {"name", "model", "timebase_hz"}
-        | (set(data["cpu"]) & {"gem5_model", "harts", "clock_hz", "memory_latency_ns"}),
+        | (set(data) & {"gem5_model", "harts", "clock_hz", "memory_latency_ns"}),
         "native CPU",
     )
     name(cpu["name"])
@@ -98,6 +82,29 @@ def validate_spec(data):
     cpu["timebase_hz"] = integer(cpu["timebase_hz"], "timebase_hz")
     if not 1000 <= cpu["timebase_hz"] <= 100000000:
         raise ContractError("unsupported native timebase")
+    return cpu
+
+
+def validate_spec(data):
+    """Validate and normalize an owned mapping, independent of its input format."""
+    if not isinstance(data, dict):
+        raise ContractError("native SoC spec must be a mapping")
+    keys(
+        data,
+        {"schema_version", "name", "cpu", "boot", "devices"}
+        | ({"external_models"} if "external_models" in data else set()),
+        "native SoC spec",
+    )
+    if data["schema_version"] != "1":
+        raise ContractError("unsupported native SoC spec schema")
+    name(data["name"])
+    from .native_external import validate
+
+    data["external_models"] = validate(
+        data.get("external_models", {}), ROLE, [v["vlnv"] for v in catalog().values()]
+    )
+    irq_models = IRQ_MODELS | set(data["external_models"])
+    cpu = validate_cpu(data["cpu"])
     boot = keys(data["boot"], {"ram", "rom", "console", "entry"}, "native boot")
     for key in ("ram", "rom", "console"):
         name(boot[key])

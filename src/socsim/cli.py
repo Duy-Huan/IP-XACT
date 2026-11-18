@@ -17,6 +17,18 @@ def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     json_errors = "--json" in argv
     argv = [argument for argument in argv if argument != "--json"]
+    if argv and argv[0] == "upgrade":
+        from .upgrade import main as upgrade_main
+
+        return upgrade_main(argv[1:])
+    if argv and argv[0] == "package":
+        from .native_package import main as package_main
+
+        return package_main(argv[1:])
+    if argv and argv[0] == "flow":
+        from .native_flow import main as flow_main
+
+        return flow_main(argv[1:])
     if argv and argv[0] == "soc":
         from .soc_native import main as soc_main
 
@@ -89,6 +101,9 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="usp (socsim compatibility)")
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("upgrade", help="validate sequential milestone status/evidence; use --help")
+    commands.add_parser("package", help="build/verify a pinned source model package; use --help")
+    commands.add_parser("flow", help="plan/build/software/run/verify a native SoC; use --help")
     commands.add_parser("soc", help="generate a native SoC from spec/memory map/IO; use --help")
     commands.add_parser(
         "platform", help="select CPU provider, engine and software workloads; use --help"

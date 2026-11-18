@@ -22,6 +22,11 @@ export USP_REQUIRE_NATIVE_SOC=1
 export USP_REQUIRE_NATIVE_SMP=1
 export USP_REQUIRE_NATIVE_EXTERNAL=1
 export USP_REQUIRE_NATIVE_IPXACT=1
+export USP_REQUIRE_NATIVE_FLOW=1
+: "${USP_NATIVE_FLOW_SMP_PROFILE:?Promotion requires actual multi-hart QEMU/gem5 counters}"
+: "${USP_NATIVE_FLOW_AI_SOC:?Promotion requires source-package HW/SW flow on both engines}"
+: "${USP_NATIVE_FLOW_AIZ_SOC:?Promotion requires native BSP flow on the other mapped SoC}"
+: "${USP_NATIVE_FLOW_GEM5_ONLY:?Promotion requires gem5-only execution without QEMU build}"
 : "${USP_NATIVE_AI_SOC_IPXACT_BUILD:?Promotion requires direct IP-XACT AI_SOC execution}"
 : "${USP_NATIVE_AIZ_SOC_IPXACT_BUILD:?Promotion requires direct IP-XACT AIZ_SOC execution}"
 : "${USP_NATIVE_HIERARCHY_IPXACT_BUILD:?Promotion requires direct hierarchical IP-XACT execution}"

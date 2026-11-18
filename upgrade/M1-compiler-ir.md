@@ -1,0 +1,21 @@
+# M1: compiler ir
+
+Target version: 0.3.0. Status: **partial** at baseline.
+Dependencies: none.
+
+## Observed baseline
+
+Native IR v3; structural 2022 import; flat homogeneous RV64 contracts accepted in v0.3.0-alpha.1.
+
+## Required exits
+
+- [ ] Canonical typed IR and equivalent YAML/IP-XACT intake
+- [ ] Explicit CPU, memory, IRQ, clock/reset and hierarchy contracts
+- [ ] General interface/address-space/translation representation and capability-checked lowering
+
+## Evidence and execution
+
+Attach exact candidate/source/tool identities, build commands, real positive and
+negative run reports and JUnit to each completed exit. Keep failures and cache
+reuse explicit. The aggregate CI gate runs only after the batch is frozen.
+A missing behavior/protocol/model is blocked, never a successful placeholder.

@@ -296,3 +296,14 @@ Promotion requires USP_REQUIRE_NATIVE_SMP/USP_REQUIRE_NATIVE_EXTERNAL and all
 verified native roots. Core/template changes regenerate affected outputs; explicit
 QEMU/kernel reuse must validate original inputs/artifacts and record provenance.
 No generic AXI/TileLink/RTL CPU/coherence/physical completeness claims follow.
+
+## 16. Sequential upgrade batches, owner instruction 2026-11-18
+
+Maintain the approved milestone requirements and observed state in upgrade/README.md
+and upgrade/milestones.yaml. Implement in dependency order on dev. Focused build/run
+checks may guide implementation; freeze the complete batch before the one aggregate
+CI/CD sequence (workflow lint, clean minimal Debian, full mandatory native gate,
+checked main promotion and version-matched tag). Do not run/publish a release after
+each milestone. Failures require a corrected candidate and rerun; no skipped mandatory
+exits, invented models or speculative milestone/version tags. Record blocked and
+partial exits honestly and preserve all prior acceptance evidence.

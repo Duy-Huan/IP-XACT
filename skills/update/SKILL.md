@@ -174,3 +174,13 @@ profile, not a silent expansion of the selected-class adapter. OpenTitan GPIO
 updates must retain TL-UL integrity checks and real backpressure/error/reset/IRQ
 tests. Rebuild affected artifacts after identity changes; never edit stored hashes
 to bypass a stale build. Preserve BSD/Apache notices in model/run bundles.
+
+## Sequential aggregate upgrade qualification
+
+Owner instruction 2026-11-18: save M1-M9 in upgrade/, implement in dependency order
+and freeze the whole batch before the single aggregate CI/CD cycle. Focused
+engineering probes are allowed; do not publish after each milestone. Read
+docs/native-flow.md for source-package locks, native software ABI and performance
+scopes. Require USP_REQUIRE_NATIVE_FLOW and all four verified flow roots at
+promotion, including gem5-only and actual multi-hart counters. Preserve prior
+evidence, unsupported exits and immutable source/version tags.

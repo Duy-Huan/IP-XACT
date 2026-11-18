@@ -1,0 +1,53 @@
+schema_version: '1'
+name: AI_SOC_package
+cpu:
+  name: application_core
+  model: qemu.max
+  gem5_model: gem5.RiscvAtomicSimpleCPU
+  timebase_hz: 5000000
+boot:
+  ram: main_sram
+  rom: boot_code
+  console: debug_console
+  entry: 13421772800
+devices:
+- name: main_sram
+  model: ram
+  base: 13421772800
+  size: 100663296
+- name: boot_code
+  model: rom
+  base: 4096
+  size: 4096
+- name: timer_controller
+  model: clint
+  base: 33554432
+  size: 65536
+- name: interrupt_controller
+  model: plic
+  base: 201326592
+  size: 67108864
+- name: simulation_exit
+  model: finisher
+  base: 1048576
+  size: 4096
+- name: debug_console
+  model: uart
+  base: 285212672
+  size: 256
+  irq: 10
+- name: service_console
+  model: uart
+  base: 285216768
+  size: 256
+  irq: 11
+- name: mailbox_counter_a
+  model: user.counter
+  base: 6727663616
+  size: 4096
+  irq: 20
+- name: mailbox_counter_b
+  model: user.counter
+  base: 6727675904
+  size: 4096
+  irq: 21

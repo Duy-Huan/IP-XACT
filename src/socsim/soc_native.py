@@ -350,7 +350,7 @@ def verify_generated(out):
     return spec
 
 
-def build(out, source, cross_compile, jobs=2, reuse_qemu=None):
+def build(out, source, cross_compile, jobs=2, reuse_qemu=None, enable_plugins=False):
     out = out.resolve()
     reuse_qemu = reuse_qemu.resolve() if reuse_qemu is not None else None
     spec = verify_generated(out)
@@ -360,12 +360,15 @@ def build(out, source, cross_compile, jobs=2, reuse_qemu=None):
     native = out / "qemu-build"
     native.mkdir(exist_ok=True)
     reused = None
+    if type(enable_plugins) is not bool:
+        raise ContractError("native QEMU plugin selection must be boolean")
     if reuse_qemu is not None:
         previous = json.loads((reuse_qemu / "build.json").read_text())
         manifest = json.loads((reuse_qemu / "manifest.json").read_text())
         binary_name = "qemu-build/qemu-system-riscv64"
         if (
-            previous["source_commit"] != QEMU_SHA
+            enable_plugins != previous.get("plugins", False)
+            or previous["source_commit"] != QEMU_SHA
             or previous["generated_manifest_sha256"] != digest(reuse_qemu / "manifest.json")
             or manifest["files"]["machine.c"] != digest(out / "machine.c")
             or digest(reuse_qemu / "machine.c") != digest(out / "machine.c")
@@ -399,7 +402,7 @@ def build(out, source, cross_compile, jobs=2, reuse_qemu=None):
         )
     if reused is None:
         shutil.copyfile(out / "machine.c", derived / "hw/riscv/usp_native.c")
-    if reused is None and not (native / "build.ninja").exists():
+    if reused is None and (not (native / "build.ninja").exists() or enable_plugins):
         command = [
             str(derived / "configure"),
             "--target-list=riscv64-softmmu",
@@ -409,6 +412,8 @@ def build(out, source, cross_compile, jobs=2, reuse_qemu=None):
             "--enable-fdt",
             "--python=" + sys.executable,
         ]
+        if enable_plugins:
+            command.append("--enable-plugins")
         prefix = os.environ.get("USP_HOST_PREFIX")
         if prefix:
             command += [
@@ -461,6 +466,7 @@ def build(out, source, cross_compile, jobs=2, reuse_qemu=None):
             "source_commit": QEMU_SHA,
             "cpu": spec["cpu"]["model"],
             "reused_qemu": reused,
+            "plugins": enable_plugins,
             "firmware_compiler": {
                 "path": compiler_path,
                 "version": compiler_version,
@@ -499,6 +505,7 @@ def run(
     engine="qemu",
     gem5_build=None,
     software="baremetal",
+    qemu_profile=None,
 ):
     generated, out = generated.resolve(), out.resolve()
     models = models.resolve() if models is not None else None
@@ -529,6 +536,16 @@ def run(
             raise ContractError("--gem5-build is required for the actual native gem5 engine")
         gem5_record = verify_engine(gem5_build)
     built = json.loads((generated / "build.json").read_text())
+    profile_record = None
+    if qemu_profile is not None and engine == "qemu":
+        from .native_performance import validate_cost, verify_counter
+
+        if not built.get("plugins", False):
+            raise ContractError("native profiling requires an explicitly plugin-enabled QEMU build")
+        validate_cost(qemu_profile["cost"])
+        profile_record = verify_counter(Path(qemu_profile["counter"]))
+        if "," in str(qemu_profile["counter"]) or "," in str(out):
+            raise ContractError("QEMU plugin paths cannot contain commas")
     if built["generated_manifest_sha256"] != digest(generated / "manifest.json"):
         raise ContractError("stale native build")
     for filename, sha in built["files"].items():
@@ -627,6 +644,13 @@ def run(
             ]
             for d in devices(spec, "uart"):
                 cmd += ["-serial", "file:" + str(out / (d["name"] + ".uart.log"))]
+            if profile_record:
+                cmd += [
+                    "-plugin",
+                    str(Path(qemu_profile["counter"]) / "counter.so")
+                    + ",output="
+                    + str(out / "qemu-counters.json"),
+                ]
             if software == "linux":
                 cmd += ["-dtb", str(generated / "linux/soc.dtb")]
             if engine == "gem5":
@@ -666,6 +690,16 @@ def run(
             for stream in streams:
                 stream.close()
     gem5_checks, metrics = {}, None
+    if profile_record:
+        from .native_performance import metrics as qemu_event_metrics
+
+        try:
+            metrics = qemu_event_metrics(
+                out / "qemu-counters.json", spec["cpu"]["harts"], qemu_profile["cost"]
+            )
+            gem5_checks["qemu_actual_per_hart_events"] = True
+        except (ContractError, OSError, ValueError, KeyError):
+            gem5_checks["qemu_actual_per_hart_events"] = False
     if engine == "gem5":
         from .soc_native_gem5 import collect_run
 
@@ -702,6 +736,9 @@ def run(
         "name": spec["name"],
         "engine": engine,
         "performance": metrics,
+        "qemu_profile": {"counter": profile_record, "cost": qemu_profile["cost"]}
+        if profile_record
+        else None,
         "error": error,
         "model_exit_codes": model_exits,
         "generated_manifest_sha256": digest(generated / "manifest.json"),
@@ -762,15 +799,38 @@ def verify(out):
 
 
 @cleanup_on_termination
-def accept(generated, models, gem5_build, out, timeout=30, software="baremetal", firmware=None):
+def accept(
+    generated,
+    models,
+    gem5_build,
+    out,
+    timeout=30,
+    software="baremetal",
+    firmware=None,
+    peripheral_acceptance=True,
+    qemu_profile=None,
+):
     """Run two independent native engines concurrently against the same IR/ELF."""
     generated, out = generated.resolve(), out.resolve()
     verify_generated(generated)
+    if type(peripheral_acceptance) is not bool or (
+        not peripheral_acceptance and firmware is None and software == "baremetal"
+    ):
+        raise ContractError("software-only acceptance requires an explicit workload ELF")
     out.mkdir(parents=True, exist_ok=False)
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
         futures = {
             e: pool.submit(
-                run, generated, models, out / e, timeout, firmware, e, gem5_build, software
+                run,
+                generated,
+                models,
+                out / e,
+                timeout,
+                firmware,
+                e,
+                gem5_build,
+                software,
+                qemu_profile,
             )
             for e in ("qemu", "gem5")
         }
@@ -782,7 +842,7 @@ def accept(generated, models, gem5_build, out, timeout=30, software="baremetal",
         reports["qemu"]["native_ir_sha256"] == reports["gem5"]["native_ir_sha256"]
     )
     spec = verify_generated(generated)
-    for d in spec["devices"] if software == "baremetal" else []:
+    for d in spec["devices"] if software == "baremetal" and peripheral_acceptance else []:
         if d["model"] not in {"chipyard.gcd", "opentitan.gpio"} | set(spec["external_models"]):
             continue
         traces = []
@@ -819,6 +879,7 @@ def accept(generated, models, gem5_build, out, timeout=30, software="baremetal",
         "name": spec["name"],
         "execution": "concurrent independent engines",
         "software": software,
+        "peripheral_acceptance": peripheral_acceptance,
         "full_master_objective_complete": False,
         "files": {
             p.relative_to(out).as_posix(): digest(p) for p in sorted(out.rglob("*")) if p.is_file()
@@ -846,6 +907,7 @@ def main(argv):
     )
     sub.add_argument("--jobs", type=int, default=2)
     sub.add_argument("--reuse-qemu", type=Path)
+    sub.add_argument("--enable-plugins", action="store_true")
     sub = commands.add_parser("linux-build")
     sub.add_argument("--generated", type=Path, required=True)
     sub.add_argument("--source-linux", type=Path, required=True)
@@ -946,6 +1008,7 @@ def main(argv):
                 args.cross_compile,
                 args.jobs,
                 args.reuse_qemu.resolve() if args.reuse_qemu else None,
+                args.enable_plugins,
             )
         elif args.action == "run":
             result = run(

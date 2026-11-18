@@ -364,3 +364,13 @@ executed and verified the actual QEMU rv64 and gem5 Atomic bare-metal runs. ELF
 inspection is pinned in core dependencies. The additional pure contract tests
 passed separately; clean-commit promotion runs the current complete suite and
 retains its actual latest result in build/junit.xml and the promotion log.
+
+## Sequential source-package/software batch, 2026-11-18
+
+The 0.3.0a2 implementation and boundaries are in native-flow.md and
+releases/v0.3.0-alpha.2.md. upgrade/ holds the complete M1-M9 programme. Targeted
+development runs exercised source-package conformance, two-instance high-map
+MMIO/IRQ, native FreeRTOS/Zephyr and explicit RV64 LP64 µC/OS-II/III ports, Linux
+and both engines. Final candidate qualification is the aggregate promotion
+JUnit/annotated receipt, not these intermediate runs. Broader CPU/bus/NoC/Yocto,
+full inventories and hosted/cold/OCI exits remain separate.
