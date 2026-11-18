@@ -1,0 +1,105 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<design xmlns="http://www.accellera.org/XMLSchema/IPXACT/1685-2022">
+  <vendor>socsim.native</vendor>
+  <library>generated</library>
+  <name>AI_SOC_SMP</name>
+  <version>1.0</version>
+  <componentInstances>
+    <componentInstance>
+      <instanceName>application_cluster</instanceName>
+      <componentRef vendor="socsim.example" library="reference" name="rv64" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>application_cluster_hart1</instanceName>
+      <componentRef vendor="socsim.example" library="reference" name="rv64" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>application_cluster_hart2</instanceName>
+      <componentRef vendor="socsim.example" library="reference" name="rv64" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>application_cluster_hart3</instanceName>
+      <componentRef vendor="socsim.example" library="reference" name="rv64" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>main_sram</instanceName>
+      <componentRef vendor="socsim.example" library="reference" name="ram" version="1.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="SIZE">67108864</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>scratch_sram</instanceName>
+      <componentRef vendor="socsim.example" library="reference" name="ram" version="1.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="SIZE">65536</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>boot_code</instanceName>
+      <componentRef vendor="socsim.example" library="reference" name="rom" version="1.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="SIZE">4096</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>timer_controller</instanceName>
+      <componentRef vendor="socsim.example" library="reference" name="clint" version="1.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="SIZE">65536</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>interrupt_controller</instanceName>
+      <componentRef vendor="socsim.example" library="reference" name="plic" version="1.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="SIZE">67108864</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>simulation_exit</instanceName>
+      <componentRef vendor="socsim.example" library="reference" name="finisher" version="1.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="SIZE">4096</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>debug_console</instanceName>
+      <componentRef vendor="socsim.example" library="reference" name="uart" version="1.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="SIZE">256</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>service_console</instanceName>
+      <componentRef vendor="socsim.example" library="reference" name="uart" version="1.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="SIZE">256</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>control_gpio</instanceName>
+      <componentRef vendor="lowrisc" library="ip" name="gpio" version="silver-v5">
+        <configurableElementValues>
+          <configurableElementValue referenceId="SIZE">4096</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>status_gpio</instanceName>
+      <componentRef vendor="lowrisc" library="ip" name="gpio" version="silver-v5">
+        <configurableElementValues>
+          <configurableElementValue referenceId="SIZE">4096</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+  <componentInstance><instanceName>cluster</instanceName><componentRef vendor="socsim.example" library="hierarchy" name="accelerator_wrapper" version="1.0"/></componentInstance></componentInstances>
+</design>

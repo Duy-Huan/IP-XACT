@@ -1,0 +1,59 @@
+schema_version: native-ipxact-1
+design: ipxact/design.xml
+name: AIZ_SOC_SMP
+cpu:
+  name: service_cluster
+  model: qemu.max
+  gem5_model: gem5.RiscvAtomicSimpleCPU
+  timebase_hz: 5000000
+  harts: 2
+  clock_hz: 600000000
+  memory_latency_ns: 25
+boot:
+  ram: working_memory
+  rom: reset_memory
+  console: trace_port
+  entry: 10737418240
+placements:
+  service_cluster: 0
+  service_cluster_hart1: 0
+  working_memory: 10737418240
+  reset_memory: 32768
+  time_unit: 34603008
+  irq_unit: 201326592
+  result_port: 1114112
+  trace_port: 4664066048
+  math_0: 4680843264
+  math_1: 4680855552
+  math_2: 4680880128
+  event_pins: 4697620480
+bindings:
+- instance: service_cluster
+  model: cpu
+- instance: service_cluster_hart1
+  model: cpu
+- instance: working_memory
+  model: ram
+- instance: reset_memory
+  model: rom
+- instance: time_unit
+  model: clint
+- instance: irq_unit
+  model: plic
+- instance: result_port
+  model: finisher
+- instance: trace_port
+  model: uart
+  irq: 3
+- instance: math_0
+  model: chipyard.gcd
+  irq: 5
+- instance: math_1
+  model: chipyard.gcd
+  irq: 9
+- instance: math_2
+  model: chipyard.gcd
+  irq: 17
+- instance: event_pins
+  model: opentitan.gpio
+  irq: 19

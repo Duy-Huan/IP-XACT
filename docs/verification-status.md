@@ -1,5 +1,17 @@
 # Master-spec phase status
 
+## 0.3.0a1 canonical native IR increment, 2026-11-18
+
+The approved M1-M9 programme is in versioned-upgrade-plan.md. The first alpha adds
+canonical native IR v3, YAML/direct structural IP-XACT frontends and a hierarchical
+fixture through the existing qualified native backends. Exact scope and versioned
+notes are in canonical-native-ir.md and releases/v0.3.0-alpha.1.md. M1 remains
+partial; M2-M9 are not closed by this increment. Actual release qualification
+requires the newly extended complete promotion gate; its JUnit/source identities
+are attached to the annotated tag after success. Historical 506-pass baseline
+results below are not acceptance of this new code. Hosted/cold/OCI status remains
+separate. No source tag means a new SDK image has been published.
+
 ## Native design generalization, 2026-11-17
 
 Actual native runs now include four/two-hart generated systems with high physical

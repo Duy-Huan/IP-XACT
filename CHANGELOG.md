@@ -1,6 +1,25 @@
 # Changelog
 
-## Unreleased — native design generalization
+## Unreleased
+
+Remaining M1-M9 work is tracked in docs/versioned-upgrade-plan.md. Future
+version tags are created only after their stated acceptance gates.
+
+## 0.3.0a1 — 2026-11-18 (v0.3.0-alpha.1)
+
+- Owner-approved versioned upgrade programme: v0.3 compiler/model/BSP, v0.4
+  qualified RTL/bus/NoC/time/performance, v1.0 full-reference/release acceptance.
+- Start M1 with immutable native IR v3 and direct structural IP-XACT intake,
+  exact binding/window/register validation, hierarchy aliases and IR-driven backends.
+- Require all Linux SMP harts online; add direct high-address AI_SOC/AIZ_SOC and
+  hierarchical real-engine gates. Regenerate version-affected legacy bundles and
+  record explicitly verified QEMU cache reuse while rebuilding their software.
+- Match package/CLI/lock/tag identities; attach complete checksummed local JUnit
+  and source qualification to annotated tags, with separate hosted source assets.
+- This is an alpha scope; M1-M9 completion and future release tags are gated on
+  actual execution. See docs/versioned-upgrade-plan.md for remaining exits.
+
+## 0.2.0 qualified baseline — main 4d65eae
 
 - Parameterized homogeneous hart topology, per-hart CLINT/PLIC/startup and native counters.
 - 48-bit physical maps, configurable gem5 clocks/latency and native OpenSBI/Linux boot.
@@ -8,7 +27,7 @@
 - Mandatory SMP/Linux/model/error gates; modern Linux ISA bindings and one-shot IRQ fixes.
 - Qualified functional contracts; generic bus/RTL/OS/physical coverage remains explicit.
 
-## Unreleased
+### CI, SDK and earlier platform increments
 
 Added clean-container CI reproduction and workflow/ShellCheck validation. Declared
 procps for cleanup tests and bzip2 for source builds, isolated the wrong-kernel Git fixture, pinned hosted

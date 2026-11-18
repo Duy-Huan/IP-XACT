@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from dataclasses import replace
 from pathlib import Path
 from string import Template
 
@@ -31,6 +32,7 @@ from .soc_spec import (
     model_descriptor,
     model_instances,
     selected,
+    write_model_lock,
 )
 
 ROOT = Path(__file__).parent
@@ -46,6 +48,9 @@ def compiler_identity():
             "soc_native_codegen.py",
             "native_external.py",
             "soc_spec.py",
+            "native_ir.py",
+            "native_ipxact.py",
+            "schemas/native-ir-v3.json",
             "domain.py",
             "ipxact.py",
             "parameters.py",
@@ -59,24 +64,56 @@ def compiler_identity():
     return {p.relative_to(ROOT).as_posix(): digest(p) for p in paths if p.is_file()}
 
 
-def generate(spec_path, out, engine="qemu"):
+def generate(spec_path, out, engine="qemu", input_format="yaml"):
     identity = compiler_identity()
     if engine not in {"qemu", "gem5", "both"}:
         raise ContractError("unsupported native engine")
-    spec = load_spec(spec_path)
+    from .native_ir import compile_design, read_ir
+
+    if input_format == "ipxact":
+        from .native_ipxact import import_design
+
+        spec, canonical, source_root, _, _ = import_design(spec_path)
+    elif input_format == "yaml":
+        spec = load_spec(spec_path)
+        source_root = spec_path.resolve().parent
+    else:
+        raise ContractError("unsupported native input format")
     from .native_external import preflight, stage
 
-    preflight(spec, spec_path.resolve().parent)
+    preflight(spec, source_root)
     engines = ["qemu", "gem5"] if engine == "both" else [engine]
     if "gem5" in engines and "gem5_model" not in spec["cpu"]:
         raise ContractError("native gem5 requires explicit cpu.gem5_model; no CPU substitution")
     out = out.resolve()
     out.mkdir(parents=True, exist_ok=False)
-    shutil.copyfile(spec_path, out / "spec.yaml")
-    if load_spec(out / "spec.yaml") != spec:
-        raise ContractError("native input changed during generation")
-    stage(spec, spec_path.resolve().parent, out)
-    ir = emit_ipxact(spec, out)
+    if input_format == "yaml":
+        shutil.copyfile(spec_path, out / "spec.yaml")
+        if load_spec(out / "spec.yaml") != spec:
+            raise ContractError("native input changed during generation")
+        structural = emit_ipxact(spec, out)
+        canonical = compile_design(spec, structural)
+    else:
+        import yaml
+
+        (out / "spec.yaml").write_text(yaml.safe_dump(spec, sort_keys=False))
+        sources = []
+        for filename, sha in canonical.sources:
+            destination = filename if filename.startswith("ipxact/") else "source-overlay.yaml"
+            target = inside(out, destination)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(inside(source_root, filename), target)
+            if digest(target) != sha:
+                raise ContractError("native IP-XACT source changed during generation")
+            sources.append((destination, sha))
+        canonical = replace(canonical, sources=tuple(sorted(sources)))
+    stage(spec, source_root, out)
+    write_json(out / "native-ir.json", canonical.to_dict())
+    # Both lowerers consume the validated IR, never the source input representation.
+    canonical = read_ir(out / "native-ir.json")
+    spec, ir = canonical.to_spec(), canonical.structural_ir()
+    write_json(out / "soc-ir.json", ir.to_dict())
+    write_model_lock(spec, out)
     windows = {i.name: i.windows[0] for i in ir.instances if i.windows}
     values = {
         "ir_hash": digest(out / "soc-ir.json"),
@@ -250,20 +287,6 @@ def generate(spec_path, out, engine="qemu"):
             "address_spaces": ir.to_dict()["address_spaces"],
         },
     )
-    write_json(
-        out / "hardware-graph.json",
-        {
-            "contract": "native-flat-functional-v1",
-            "cpu_instances": cpu_instances(spec),
-            "harts": spec["cpu"]["harts"],
-            "cpu_clock_hz": spec["cpu"]["clock_hz"],
-            "memory_latency_ns": spec["cpu"]["memory_latency_ns"],
-            "qemu_timing": "functional; clock metadata does not imply CPU cycles",
-            "bus": "flat functional address-decoded fabric; gem5 SystemXBar",
-            "interrupts": ir.to_dict()["interrupts"],
-            "address_spaces": ir.to_dict()["address_spaces"],
-        },
-    )
     (out / "simulate.py").write_text(
         "from pathlib import Path\nimport sys\nfrom socsim.soc_native import main\n"
         "args = ['run', '--generated', str(Path(__file__).resolve().parent), *sys.argv[1:]]\n"
@@ -279,6 +302,8 @@ def generate(spec_path, out, engine="qemu"):
             "engines": engines,
             "compiler": identity,
             "ir_sha256": digest(out / "soc-ir.json"),
+            "native_ir_sha256": digest(out / "native-ir.json"),
+            "input_format": input_format,
             "files": {
                 p.relative_to(out).as_posix(): digest(p)
                 for p in sorted(out.rglob("*"))
@@ -309,7 +334,16 @@ def verify_generated(out):
     for filename, sha in record["files"].items():
         if digest(inside(out, filename)) != sha:
             raise ContractError("modified generated native artifact: " + filename)
-    spec = load_spec(out / "spec.yaml")
+    from .native_ir import read_ir
+
+    if record.get("native_ir_sha256") != digest(out / "native-ir.json"):
+        raise ContractError("modified canonical native IR")
+    canonical = read_ir(out / "native-ir.json")
+    if json.loads(json.dumps(canonical.structural_ir().to_dict())) != json.loads(
+        (out / "soc-ir.json").read_text()
+    ):
+        raise ContractError("native compatibility IR differs from canonical IR")
+    spec = canonical.to_spec()
     from .native_external import preflight
 
     preflight(spec, out)
@@ -512,7 +546,10 @@ def run(
     if linux_record:
         elf = generated / "linux/opensbi/platform/generic/firmware/fw_payload.elf"
     shutil.copy2(elf, out / "firmware.elf")
-    shutil.copy2(generated / "spec.yaml", out / "spec.yaml")
+    import yaml
+
+    (out / "spec.yaml").write_text(yaml.safe_dump(spec, sort_keys=False))
+    shutil.copy2(generated / "native-ir.json", out / "native-ir.json")
     shutil.copy2(generated / "soc-ir.json", out / "soc-ir.json")
     write_json(out / "build.json", built)
     write_json(
@@ -643,7 +680,7 @@ def run(
     if software == "linux":
         from .soc_native_linux import checks as linux_checks
 
-        checks.update(linux_checks(uart))
+        checks.update(linux_checks(uart, spec["cpu"]["harts"]))
     checks["engine_exit"] = error is None
     checks["model_exits"] = all(rc == 0 for rc in model_exits.values())
     checks.update(gem5_checks)
@@ -669,6 +706,7 @@ def run(
         "model_exit_codes": model_exits,
         "generated_manifest_sha256": digest(generated / "manifest.json"),
         "ir_sha256": digest(generated / "soc-ir.json"),
+        "native_ir_sha256": digest(generated / "native-ir.json"),
         "firmware_sha256": digest(out / "firmware.elf"),
         "suite": "native-linux-boot"
         if software == "linux"
@@ -700,13 +738,15 @@ def verify(out):
         if record["status"] != "PASSED" or not all(record["checks"].values()):
             raise ContractError("dual-engine native acceptance is incomplete")
         return record
-    spec = load_spec(out / "spec.yaml")
+    from .native_ir import read_ir
+
+    spec = read_ir(out / "native-ir.json").to_spec()
     uart_path = out / (spec["boot"]["console"] + ".uart.log")
     text = uart_path.read_text() if uart_path.exists() else ""
     if record["suite"] == "native-linux-boot":
         from .soc_native_linux import checks as linux_checks
 
-        if not all(linux_checks(text).values()):
+        if not all(linux_checks(text, spec["cpu"]["harts"]).values()):
             raise ContractError("native Linux boot evidence incomplete")
     if record["suite"] == "generated-conformance" and any(
         m not in text.splitlines() for m in expected_markers(spec)
@@ -738,7 +778,10 @@ def accept(generated, models, gem5_build, out, timeout=30, software="baremetal",
     checks = {e + ".accepted": r["status"] == "PASSED" for e, r in reports.items()}
     checks["same_elf"] = reports["qemu"]["firmware_sha256"] == reports["gem5"]["firmware_sha256"]
     checks["same_ir"] = reports["qemu"]["ir_sha256"] == reports["gem5"]["ir_sha256"]
-    spec = load_spec(generated / "spec.yaml")
+    checks["same_canonical_ir"] = (
+        reports["qemu"]["native_ir_sha256"] == reports["gem5"]["native_ir_sha256"]
+    )
+    spec = verify_generated(generated)
     for d in spec["devices"] if software == "baremetal" else []:
         if d["model"] not in {"chipyard.gcd", "opentitan.gpio"} | set(spec["external_models"]):
             continue
@@ -791,6 +834,7 @@ def main(argv):
     for action in ("validate", "generate"):
         sub = commands.add_parser(action)
         sub.add_argument("spec", type=Path)
+        sub.add_argument("--input-format", choices=["yaml", "ipxact"], default="yaml")
         if action == "generate":
             sub.add_argument("--out", type=Path, required=True)
             sub.add_argument("--engine", choices=["qemu", "gem5", "both"], default="both")
@@ -844,6 +888,8 @@ def main(argv):
         elif args.action == "models":
             result = {
                 "engines": ["qemu", "gem5"],
+                "input_formats": ["yaml", "ipxact"],
+                "canonical_ir": "native-ir-v3",
                 "models": sorted(ROLE),
                 "capabilities": {
                     "homogeneous_rv64_harts": {"minimum": 1, "maximum": 8},
@@ -868,7 +914,12 @@ def main(argv):
                 },
             }
         elif args.action == "validate":
-            s = load_spec(args.spec)
+            if args.input_format == "ipxact":
+                from .native_ipxact import import_design
+
+                s = import_design(args.spec)[0]
+            else:
+                s = load_spec(args.spec)
             result = {
                 "status": "PASSED",
                 "name": s["name"],
@@ -876,7 +927,7 @@ def main(argv):
                 "scope": "native spec semantics/model capability",
             }
         elif args.action == "generate":
-            result = generate(args.spec.resolve(), args.out, args.engine)
+            result = generate(args.spec.resolve(), args.out, args.engine, args.input_format)
         elif args.action == "linux-build":
             from .soc_native_linux import build as build_linux
 

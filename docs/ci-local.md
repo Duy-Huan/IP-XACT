@@ -1,5 +1,14 @@
 # Local CI before publishing
 
+Application alpha releases additionally require the direct-IP-XACT native roots
+and flags in scripts/promote.sh. The successful gate writes a version-matched
+receipt with the exact candidate/tree, all required flags and full JUnit. Use that
+receipt as the annotated application tag message only after checked promotion;
+validate it with python -m socsim.release check-tag TAG --main-ref main before
+publishing. The hosted release workflow checks origin/main and publishes distinct
+local versus hosted-minimal evidence. Source tags do not assert hosted native,
+all-engine cold or new SDK/OCI acceptance. See canonical-native-ir.md.
+
 The owner requires relevant local checks to pass before another push. Commit the
 candidate locally, record its SHA, run workflow lint, the hosted minimal Debian
 job and the required native gate, then publish only that tested tree. Local

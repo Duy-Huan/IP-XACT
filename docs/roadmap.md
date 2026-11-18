@@ -4,6 +4,10 @@ The objective in agent.md takes precedence over the original bare-metal-only
 baseline. Phase completion means executable acceptance, not directories or claims.
 Detailed observed status and evidence are maintained in verification-status.md.
 
+The owner approved the versioned programme on 2026-11-18; see
+versioned-upgrade-plan.md for M1-M9 and release gates. First delivery is a scoped
+0.3.0a1 canonical-IR/direct-IP-XACT increment, not final v0.3.0 completion.
+
 Owner priority: native generation precedes CHIA/agent orchestration. The frontend
 emits real IP-XACT/IR, custom QEMU/native gem5 graphs, per-hart IRQ/memory wiring
 and software from design data. In addition to the 13/11-instance base cases, the

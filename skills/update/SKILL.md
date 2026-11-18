@@ -5,6 +5,13 @@ description: Update platform dependencies and model profiles with reproducible r
 
 # Update workflow
 
+The owner approved versioned implementation/releases on 2026-11-18. Follow
+docs/versioned-upgrade-plan.md and canonical-native-ir.md. That explicit session
+authorization governs pushes/releases; the generic no-automatic-publication rule
+below does not require asking again. Use actual mandatory local promotion,
+version-matched notes and annotated release receipts. Do not pre-tag future
+milestones or infer hosted/OCI/cold-build acceptance from a source tag.
+
 Native generalization changes also require docs/native-design-capabilities.md and
 docs/native-external-models.md. Promotion requires all real SMP/Linux, maximum-hart
 and external model/driver/bus-error cases; unsupported CPU/ABI/bus conversions

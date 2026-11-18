@@ -13,6 +13,11 @@ instances. `usp soc` provides generation, build, run and evidence verification.
 `usp soc accept` runs the generated machine/ELF on QEMU and native gem5 concurrently,
 with per-instance SystemC IPs and native gem5 counters. Generic OS lowering remains open.
 
+The 0.3.0 alpha programme adds [one native IR and direct IP-XACT input](docs/canonical-native-ir.md).
+Original direct examples are in specs/ipxact/AI_SOC, AIZ_SOC and AI_SOC-hierarchy.
+The [approved versioned plan](docs/versioned-upgrade-plan.md) defines M1-M9 and
+the evidence required before each immutable application tag.
+
 The implemented reference path generates and compiles an RV64 machine, generates
 an external Zephyr board, builds Zephyr and checks real CLINT timer and UART/PLIC
 interrupts. A FreeRTOS BSP verifies actual tick preemption, saved registers and

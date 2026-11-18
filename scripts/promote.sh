@@ -21,6 +21,10 @@ export USP_REQUIRE_RTL_PLATFORM=1
 export USP_REQUIRE_NATIVE_SOC=1
 export USP_REQUIRE_NATIVE_SMP=1
 export USP_REQUIRE_NATIVE_EXTERNAL=1
+export USP_REQUIRE_NATIVE_IPXACT=1
+: "${USP_NATIVE_AI_SOC_IPXACT_BUILD:?Promotion requires direct IP-XACT AI_SOC execution}"
+: "${USP_NATIVE_AIZ_SOC_IPXACT_BUILD:?Promotion requires direct IP-XACT AIZ_SOC execution}"
+: "${USP_NATIVE_HIERARCHY_IPXACT_BUILD:?Promotion requires direct hierarchical IP-XACT execution}"
 : "${USP_NATIVE_MAX_HART_BUILD:?Promotion requires the maximum-hart native boundary build}"
 : "${USP_NATIVE_EXTERNAL_ROOT:?Promotion requires the compiled external SystemC model and user driver}"
 : "${USP_NATIVE_AI_SOC_SMP_BUILD:?Promotion requires the native multi-hart AI_SOC and Linux build}"
@@ -63,3 +67,5 @@ else
 fi
 git switch dev
 git merge --ff-only main
+"$PWD/.venv/bin/python" -m socsim.release receipt --candidate "$candidate" --junit build/junit.xml \
+    --out "${USP_PROMOTION_RECEIPT:-build/promotion-receipt.json}"

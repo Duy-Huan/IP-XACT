@@ -1,0 +1,58 @@
+name: Versioned application prerelease
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  source-release:
+    runs-on: ubuntu-24.04
+    container: debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - name: Install pinned reference runtime
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git gh ca-certificates procps python3 python3-venv \
+            qemu-system-riscv=1:10.0.13+ds-0+deb13u1 qemu-system-data=1:10.0.13+ds-0+deb13u1 \
+            gcc-riscv64-unknown-elf=14.2.0+19 binutils-riscv64-unknown-elf=2.44-3+7+b1
+          python3 -m venv /opt/ci-uv
+          /opt/ci-uv/bin/pip install uv==0.13.5
+          echo /opt/ci-uv/bin >> "$GITHUB_PATH"
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify immutable tag and full local qualification
+        run: |
+          uv python install 3.12.14
+          uv sync --frozen --all-extras --python 3.12.14
+          .venv/bin/python -m socsim.release check-tag "$GITHUB_REF_NAME" --out dist
+      - name: Hosted minimal regression and wheel smoke
+        run: |
+          bash scripts/regression.sh
+          cp build/junit.xml dist/hosted-minimal-junit.xml
+          uv build --out-dir dist
+          uv venv /tmp/release-wheel --python 3.12.14
+          uv pip install --python /tmp/release-wheel/bin/python dist/*.whl
+          (cd /tmp && /tmp/release-wheel/bin/usp --version)
+          (cd /tmp && /tmp/release-wheel/bin/usp soc models)
+          /tmp/release-wheel/bin/usp soc generate specs/AI_SOC-smp.yaml --engine both --out build/wheel-native
+          (cd dist && sha256sum ./*.whl ./*.tar.gz ./*.xml qualification.json > SHA256SUMS)
+      - name: Publish version-matched source artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          case "$GITHUB_REF_NAME" in *-alpha.*|*-beta.*|*-rc.*) flags=(--prerelease) ;; *) flags=() ;; esac
+          gh release create "$GITHUB_REF_NAME" --verify-tag "${flags[@]}" \
+            --title "$GITHUB_REF_NAME" --notes-file "docs/releases/$GITHUB_REF_NAME.md" \
+            dist/*.whl dist/*.tar.gz dist/*.xml dist/qualification.json dist/SHA256SUMS
