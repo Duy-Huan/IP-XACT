@@ -1,5 +1,10 @@
 # Native SoC generator: spec to executable hardware and software
 
+`--input-format fabric` accepts the static address-decoder source in specs/fabric/.
+It produces canonical IR v4 and lowers its checked physical projection through
+the same native engine/software path. See native-address-decoder.md for supported
+translation semantics, real qualification requirements and explicit limits.
+
 The platform's first priority is an executable SoC generator. The native frontend
 accepts a strict YAML specification with CPU choice, boot ownership, memory and
 device instances, addresses, sizes and IRQs. It generates real IEEE 1685-2022

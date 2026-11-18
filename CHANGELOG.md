@@ -5,7 +5,7 @@
 Remaining M1-M9 work is tracked in docs/versioned-upgrade-plan.md. Future
 version tags are created only after their stated acceptance gates.
 
-## 0.3.0a3 — 2026-11-18 (candidate)
+## 0.3.0a3 — 2026-11-18 (v0.3.0-alpha.3)
 
 - Preserve typed local address spaces, bridge apertures and local placements in
   native IR v4; validate and lower static decoder trees to the CPU physical map.
