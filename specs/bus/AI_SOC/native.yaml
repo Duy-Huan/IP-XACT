@@ -1,0 +1,60 @@
+schema_version: native-ipxact-bus-1
+design: ipxact/design.xml
+name: AI_SOC_fabric
+cpu:
+  name: application_core
+  model: qemu.rv64
+  gem5_model: gem5.RiscvTimingSimpleCPU
+  timebase_hz: 10000000
+  harts: 1
+  clock_hz: 1000000000
+  memory_latency_ns: 10
+boot:
+  ram: main_sram
+  rom: boot_code
+  console: debug_console
+  entry: 2147483648
+bindings:
+- instance: application_core
+  model: cpu
+- instance: main_sram
+  model: ram
+- instance: scratch_sram
+  model: ram
+- instance: boot_code
+  model: rom
+- instance: timer_controller
+  model: clint
+- instance: interrupt_controller
+  model: plic
+- instance: simulation_exit
+  model: finisher
+- instance: debug_console
+  model: uart
+  irq: 10
+- instance: service_console
+  model: uart
+  irq: 11
+- instance: accelerator_a
+  model: chipyard.gcd
+  irq: 12
+- instance: accelerator_b
+  model: chipyard.gcd
+  irq: 14
+- instance: control_gpio
+  model: opentitan.gpio
+  irq: 13
+- instance: status_gpio
+  model: opentitan.gpio
+  irq: 15
+- instance: io_decode
+  model: decoder
+- instance: math_decode
+  model: decoder
+- instance: security_decode
+  model: decoder
+space_aliases:
+  application_core.physical: physical
+  io_decode.out: io
+  math_decode.out: math
+  security_decode.out: security

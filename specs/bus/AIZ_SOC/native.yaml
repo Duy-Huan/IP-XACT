@@ -1,0 +1,55 @@
+schema_version: native-ipxact-bus-1
+design: ipxact/design.xml
+name: AIZ_SOC_fabric
+cpu:
+  name: control_core
+  model: qemu.max
+  gem5_model: gem5.RiscvAtomicSimpleCPU
+  timebase_hz: 5000000
+  harts: 1
+  clock_hz: 1000000000
+  memory_latency_ns: 10
+boot:
+  ram: working_memory
+  rom: reset_memory
+  console: trace_port
+  entry: 2164264960
+bindings:
+- instance: control_core
+  model: cpu
+- instance: working_memory
+  model: ram
+- instance: reset_memory
+  model: rom
+- instance: time_unit
+  model: clint
+- instance: irq_unit
+  model: plic
+- instance: result_port
+  model: finisher
+- instance: trace_port
+  model: uart
+  irq: 3
+- instance: math_0
+  model: chipyard.gcd
+  irq: 5
+- instance: math_1
+  model: chipyard.gcd
+  irq: 9
+- instance: math_2
+  model: chipyard.gcd
+  irq: 17
+- instance: event_pins
+  model: opentitan.gpio
+  irq: 19
+- instance: io_decode
+  model: decoder
+- instance: math_decode
+  model: decoder
+- instance: security_decode
+  model: decoder
+space_aliases:
+  control_core.physical: physical
+  io_decode.out: io
+  math_decode.out: math
+  security_decode.out: security

@@ -1,0 +1,12 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<busDefinition xmlns="http://www.accellera.org/XMLSchema/IPXACT/1685-2022">
+  <vendor>socsim.native</vendor>
+  <library>bus</library>
+  <name>mmio</name>
+  <version>1.0</version>
+  <directConnection>true</directConnection>
+  <broadcast>false</broadcast>
+  <isAddressable>true</isAddressable>
+  <maxInitiators>1</maxInitiators>
+  <maxTargets>64</maxTargets>
+</busDefinition>

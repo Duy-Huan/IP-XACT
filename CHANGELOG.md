@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0a4 — 2026-11-18 (v0.3.0-alpha.4)
+
+- Import real 2022 bus/abstraction/interface/address-space/segment/subspace/
+  interconnection XML into typed native IR v5 and checked static projection.
+- Export qualified fabric designs to validated standard XML; include public
+  AI_SOC/AIZ_SOC XML flows and mandatory real dual-engine/kernel acceptance.
+- Add workflow-published Git notes with exact source/job outcomes and source
+  release asset hashes; missing evidence remains UNOBSERVED. No REST access needed.
+- Preserve v3/v4, original qualified engines and immutable SDK/source releases.
+  General bus timing, RTL CPUs/MMU, Yocto and complete M1-M9 exits stay open.
+
 ## Unreleased
 
 Remaining M1-M9 work is tracked in docs/versioned-upgrade-plan.md. Future

@@ -13,6 +13,10 @@ def import_design(overlay_path):
     overlay_path = overlay_path.resolve()
     root = overlay_path.parent
     data = read_yaml(overlay_path)
+    if isinstance(data, dict) and data.get("schema_version") == "native-ipxact-bus-1":
+        from .native_bus_xml import import_bus_design
+
+        return import_bus_design(overlay_path)
     keys(
         data,
         {"schema_version", "design", "name", "cpu", "boot", "placements", "bindings"}

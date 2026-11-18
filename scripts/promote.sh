@@ -24,6 +24,9 @@ export USP_REQUIRE_NATIVE_EXTERNAL=1
 export USP_REQUIRE_NATIVE_IPXACT=1
 export USP_REQUIRE_NATIVE_FLOW=1
 export USP_REQUIRE_NATIVE_FABRIC=1
+export USP_REQUIRE_BUS_XML=1
+: "${USP_BUS_XML_AI_SOC:?Promotion requires standard bus XML AI_SOC execution}"
+: "${USP_BUS_XML_AIZ_SOC:?Promotion requires standard bus XML AIZ_SOC execution}"
 : "${USP_NATIVE_FABRIC_AI_SOC:?Promotion requires the translated AI_SOC HW/SW flow}"
 : "${USP_NATIVE_FABRIC_AIZ_SOC:?Promotion requires the translated AIZ_SOC HW/SW flow}"
 : "${USP_NATIVE_FLOW_SMP_PROFILE:?Promotion requires actual multi-hart QEMU/gem5 counters}"
