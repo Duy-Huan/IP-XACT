@@ -18,6 +18,7 @@ from .domain import (
     SoCIR,
     Window,
 )
+from .native_fabric import Routing
 from .registers import verify_model_registers
 from .soc_spec import ROLE, WIDTH, catalog, cpu_instances, model_descriptor, selected, validate_spec
 
@@ -90,9 +91,13 @@ class NativeIR:
     memory_latency_ns: int
     external_models: tuple[ExternalModel, ...]
     sources: tuple[tuple[str, str], ...]
+    routing: Routing | None = None
 
     def to_dict(self):
-        return json.loads(json.dumps(asdict(self)))
+        data = asdict(self)
+        if self.routing is None:
+            data.pop("routing")
+        return json.loads(json.dumps(data))
 
     def to_spec(self):
         """Projection for existing native adapters; never re-read source YAML."""
@@ -230,7 +235,15 @@ def read_ir(path):
         if path.stat().st_size > 8 * 1024**2:
             raise ContractError("E_NATIVE_IR input exceeds 8 MiB")
         data = json.loads(path.read_text())
-        validate(data, json.loads(SCHEMA.read_text()))
+        if not isinstance(data, dict):
+            raise ContractError("E_NATIVE_IR canonical graph must be a mapping")
+        schema = json.loads(SCHEMA.read_text())
+        if data.get("schema_version") == "4":
+            schema["properties"]["schema_version"] = {"const": "4"}
+            schema["properties"]["fabric"] = {"const": "hierarchical-static-decode-v1"}
+            schema["properties"]["routing"] = {"type": "object"}
+            schema["required"].append("routing")
+        validate(data, schema)
 
         def instance(d):
             windows = []
@@ -271,7 +284,7 @@ def read_ir(path):
             Region(instance(r["instance"]), r["model"], r["irq"]) for r in data["regions"]
         )
         ir = NativeIR(
-            "3",
+            data["schema_version"],
             data["name"],
             data["vlnv"],
             cpus,
@@ -289,6 +302,11 @@ def read_ir(path):
             tuple(ExternalModel(**m) for m in data["external_models"]),
             tuple(tuple(s) for s in data["sources"]),
         )
+        if data["schema_version"] == "4":
+            from .native_fabric import parse_routing, verify_projection
+
+            ir = replace(ir, routing=parse_routing(data["routing"]))
+            verify_projection(ir.routing, ir.to_spec())
         if not re.fullmatch(r"[A-Za-z0-9_.-]+(:[A-Za-z0-9_.-]+){3}", ir.vlnv):
             raise ContractError("E_NATIVE_IR invalid design VLNV")
         for n, sha in ir.sources:
@@ -299,6 +317,13 @@ def read_ir(path):
             ):
                 raise ContractError("E_NATIVE_IR invalid source provenance")
         expected = compile_design(ir.to_spec(), ir.structural_ir())
+        if ir.routing is not None:
+            expected = replace(
+                expected,
+                schema_version="4",
+                fabric="hierarchical-static-decode-v1",
+                routing=ir.routing,
+            )
         if expected.to_dict() != data:
             raise ContractError(
                 "E_NATIVE_IR unsupported/inconsistent CPU/clock/reset/fabric/IRQ graph"

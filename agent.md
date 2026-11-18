@@ -307,3 +307,13 @@ checked main promotion and version-matched tag). Do not run/publish a release af
 each milestone. Failures require a corrected candidate and rerun; no skipped mandatory
 exits, invented models or speculative milestone/version tags. Record blocked and
 partial exits honestly and preserve all prior acceptance evidence.
+
+## 17. Static address-decoder qualification
+
+Preserve local address spaces and bridge translations in native IR v4. Lower only
+qualified static decoder trees to the engine's physical map; reject aliases,
+cycles, clipped/overlapping windows, unsupported protocols and width overflow.
+The native flat v3 IR remains compatible. Require actual translated Chipyard and
+OpenTitan MMIO/IRQ plus all four native RTOS BSPs on both engines before promotion
+(USP_REQUIRE_NATIVE_FABRIC). This does not implement AXI/TileLink timing, DMA,
+multiple initiator views or asynchronous reset/clock bridges. Keep those exits open.

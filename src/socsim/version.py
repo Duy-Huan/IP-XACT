@@ -1,4 +1,4 @@
 """Application release identity, separate from hardware compiler semantics."""
 
-__version__ = "0.3.0a2"
-RELEASE_TAG = "v0.3.0-alpha.2"
+__version__ = "0.3.0a3"
+RELEASE_TAG = "v0.3.0-alpha.3"

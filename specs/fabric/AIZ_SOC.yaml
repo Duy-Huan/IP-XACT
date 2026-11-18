@@ -1,0 +1,112 @@
+schema_version: native-fabric-1
+name: AIZ_SOC_fabric
+cpu:
+  name: control_core
+  model: qemu.max
+  gem5_model: gem5.RiscvAtomicSimpleCPU
+  timebase_hz: 5000000
+boot:
+  ram: working_memory
+  rom: reset_memory
+  console: trace_port
+  entry: 2164264960
+devices:
+- name: working_memory
+  model: ram
+  size: 8388608
+- name: reset_memory
+  model: rom
+  size: 8192
+- name: time_unit
+  model: clint
+  size: 65536
+- name: irq_unit
+  model: plic
+  size: 67108864
+- name: result_port
+  model: finisher
+  size: 4096
+- name: trace_port
+  model: uart
+  size: 256
+  irq: 3
+- name: math_0
+  model: chipyard.gcd
+  size: 4096
+  irq: 5
+- name: math_1
+  model: chipyard.gcd
+  size: 4096
+  irq: 9
+- name: math_2
+  model: chipyard.gcd
+  size: 4096
+  irq: 17
+- name: event_pins
+  model: opentitan.gpio
+  size: 4096
+  irq: 19
+routing:
+  root: physical
+  spaces:
+  - name: physical
+    address_bits: 48
+  - name: io
+    address_bits: 32
+  - name: math
+    address_bits: 20
+  - name: security
+    address_bits: 20
+  bridges:
+  - name: io_decode
+    source: physical
+    target: io
+    source_base: 5497558138880
+    target_base: 1073741824
+    size: 2097152
+    protocol: static-address-decoder-v1
+  - name: math_decode
+    source: io
+    target: math
+    source_base: 1073745920
+    target_base: 65536
+    size: 65536
+    protocol: static-address-decoder-v1
+  - name: security_decode
+    source: io
+    target: security
+    source_base: 1073872896
+    target_base: 65536
+    size: 65536
+    protocol: static-address-decoder-v1
+  placements:
+  - instance: working_memory
+    space: physical
+    address: 2164260864
+  - instance: reset_memory
+    space: physical
+    address: 32768
+  - instance: time_unit
+    space: physical
+    address: 34603008
+  - instance: irq_unit
+    space: physical
+    address: 201326592
+  - instance: result_port
+    space: physical
+    address: 1114112
+  - instance: trace_port
+    space: physical
+    address: 369098752
+  - instance: math_0
+    space: math
+    address: 65536
+  - instance: math_1
+    space: math
+    address: 77824
+  - instance: math_2
+    space: math
+    address: 90112
+  - instance: event_pins
+    space: security
+    address: 65536

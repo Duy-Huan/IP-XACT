@@ -4,6 +4,9 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 required = [
+    "docs/native-address-decoder.md",
+    "docs/releases/v0.3.0-alpha.3.md",
+    "upgrade/address-decoder-batch.md",
     "upgrade/README.md",
     "upgrade/native-flow-batch.md",
     "docs/native-flow.md",

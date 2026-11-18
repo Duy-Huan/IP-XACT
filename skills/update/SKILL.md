@@ -177,6 +177,12 @@ to bypass a stale build. Preserve BSD/Apache notices in model/run bundles.
 
 ## Sequential aggregate upgrade qualification
 
+Static decoder changes require docs/native-address-decoder.md, exact local-to-
+physical projection checks and actual translated Chipyard/OpenTitan MMIO/IRQ plus
+all native kernels on both engines. Require USP_REQUIRE_NATIVE_FABRIC and both
+verified USP_NATIVE_FABRIC_AI_SOC/AIZ_SOC roots. Regenerate affected manifests;
+reuse QEMU/kernel binaries only with unchanged checked compilation inputs.
+
 Owner instruction 2026-11-18: save M1-M9 in upgrade/, implement in dependency order
 and freeze the whole batch before the single aggregate CI/CD cycle. Focused
 engineering probes are allowed; do not publish after each milestone. Read

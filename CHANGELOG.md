@@ -5,6 +5,19 @@
 Remaining M1-M9 work is tracked in docs/versioned-upgrade-plan.md. Future
 version tags are created only after their stated acceptance gates.
 
+## 0.3.0a3 — 2026-11-18 (candidate)
+
+- Preserve typed local address spaces, bridge apertures and local placements in
+  native IR v4; validate and lower static decoder trees to the CPU physical map.
+- Reject cycles, aliases, missing nodes, clipped/overlapping intervals, unknown
+  protocols, misalignment and address-width overflow before generating output.
+- Add native fabric intake to the existing HW/SW lifecycle and translated
+  Chipyard/OpenTitan qualification fixtures for both engines and native kernels.
+- Keep flat IR v3 compatibility, exact build identities and all prior regression
+  gates. General bus timing, DMA, heterogeneous CPUs and full milestones stay open.
+- Tag v0.3.0-alpha.3 is reserved for a completed mandatory local gate; no future
+  tag or observed hosted/OCI/cold acceptance is created by this candidate entry.
+
 ## 0.3.0a2 — 2026-11-18 (v0.3.0-alpha.2)
 
 - Save the complete approved M1-M9 dependency/checklist ledger under upgrade/;

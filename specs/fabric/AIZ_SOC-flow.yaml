@@ -1,0 +1,21 @@
+schema_version: native-flow-1
+spec: AIZ_SOC.yaml
+input_format: fabric
+engine: both
+packages: []
+software:
+- id: baremetal
+  kind: baremetal
+  timeout: 90
+- id: freertos
+  kind: freertos
+  timeout: 90
+- id: zephyr
+  kind: zephyr
+  timeout: 90
+- id: ucos2
+  kind: ucos2
+  timeout: 90
+- id: ucos3
+  kind: ucos3
+  timeout: 90

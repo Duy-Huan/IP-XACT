@@ -65,7 +65,11 @@ def plan(path):
         or data["engine"] not in {"qemu", "gem5", "both"}
     ):
         raise ContractError("unsupported native flow version/engine")
-    if not isinstance(data["input_format"], str) or data["input_format"] not in {"yaml", "ipxact"}:
+    if not isinstance(data["input_format"], str) or data["input_format"] not in {
+        "yaml",
+        "ipxact",
+        "fabric",
+    }:
         raise ContractError("unsupported native flow input format")
     spec_path = inside(root, data["spec"])
     inputs = {path.name: digest(path), data["spec"]: digest(spec_path)}
@@ -79,6 +83,14 @@ def plan(path):
         spec, canonical = import_design(spec_path)[:2]
         for name, sha in canonical.sources:
             inputs[(spec_path.parent / name).relative_to(root).as_posix()] = sha
+    elif data["input_format"] == "fabric":
+        if data["packages"]:
+            raise ContractError(
+                "fabric source packages require explicit materialized model bindings"
+            )
+        from .native_fabric import read_source
+
+        spec, _ = read_source(spec_path)
     else:
         spec = read_yaml(spec_path)
     if not isinstance(data["packages"], list) or len(data["packages"]) > 16:
@@ -353,6 +365,13 @@ def build_flow(path, out, options):
     if config["input_format"] == "ipxact":
         source_spec = inside(root, config["spec"])
         shutil.copytree(source_spec.parent / "ipxact", materialized / "ipxact")
+        shutil.copy2(source_spec, materialized / "spec.yaml")
+    elif config["input_format"] == "fabric":
+        from .native_external import stage
+        from .native_fabric import read_source
+
+        source_spec = inside(root, config["spec"])
+        stage(read_source(source_spec)[0], source_spec.parent, materialized)
         shutil.copy2(source_spec, materialized / "spec.yaml")
     else:
         validate_spec(copy.deepcopy(raw))
