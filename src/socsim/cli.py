@@ -17,6 +17,10 @@ def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     json_errors = "--json" in argv
     argv = [argument for argument in argv if argument != "--json"]
+    if argv and argv[0] == "ci":
+        from .hosted_ci import main as ci_main
+
+        return ci_main(argv[1:])
     if argv and argv[0] == "upgrade":
         from .upgrade import main as upgrade_main
 
@@ -101,6 +105,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="usp (socsim compatibility)")
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("ci", help="read workflow-published Git-note evidence; use --help")
     commands.add_parser("upgrade", help="validate sequential milestone status/evidence; use --help")
     commands.add_parser("package", help="build/verify a pinned source model package; use --help")
     commands.add_parser("flow", help="plan/build/software/run/verify a native SoC; use --help")

@@ -317,3 +317,17 @@ The native flat v3 IR remains compatible. Require actual translated Chipyard and
 OpenTitan MMIO/IRQ plus all four native RTOS BSPs on both engines before promotion
 (USP_REQUIRE_NATIVE_FABRIC). This does not implement AXI/TileLink timing, DMA,
 multiple initiator views or asynchronous reset/clock bridges. Keep those exits open.
+
+## 18. Standard bus intake and observed hosted evidence
+
+Compile supported IEEE 1685-2022 bus/interface/segment/subspace/interconnection
+XML into original typed graph facts and a checked native IR v5 projection. Do
+not duplicate XML placements in overlays or infer AXI/TileLink behaviour from
+VLNV names. Preserve v3/v4 compatibility and require real both-engine, all-five-
+workload AI_SOC/AIZ_SOC XML acceptance (USP_REQUIRE_BUS_XML and both verified
+USP_BUS_XML_AI_SOC/AIZ_SOC roots) before aggregate promotion.
+
+Workflow Git notes report actual job conclusions, exact source/run/ref and asset
+hashes where REST access is unavailable. Missing notes are UNOBSERVED; do not
+fabricate hosted results. Keep main/dev as the only development branches; notes
+are evidence refs. Repository-published reports are not independent API proof.

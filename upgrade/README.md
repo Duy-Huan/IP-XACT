@@ -77,8 +77,9 @@ or blocked dependency stays visible; metadata does not replace a missing model.
 
 ## Current sequential batch
 
-The next candidate is [address-decoder-batch.md](address-decoder-batch.md),
-0.3.0a3: typed local address spaces and checked static physical lowering. Actual
+The current candidate is [bus-xml-batch.md](bus-xml-batch.md), 0.3.0a4:
+standard XML bus graphs and checked native IR v5 static physical lowering.
+The prior [address-decoder-batch.md](address-decoder-batch.md) qualifies v4. Actual
 native qualification is required before its source tag; broad M1-M9 stay partial.
 
 See [native-flow-batch.md](native-flow-batch.md) for 0.3.0a2 deliverables and remaining

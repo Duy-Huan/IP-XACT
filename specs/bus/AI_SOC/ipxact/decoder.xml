@@ -1,0 +1,84 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<component xmlns="http://www.accellera.org/XMLSchema/IPXACT/1685-2022">
+  <vendor>socsim.native</vendor>
+  <library>fabric</library>
+  <name>static_decoder</name>
+  <version>1.0</version>
+  <busInterfaces>
+    <busInterface>
+      <name>target</name>
+      <busType vendor="socsim.native" library="bus" name="mmio" version="1.0"/>
+      <abstractionTypes>
+        <abstractionType>
+          <abstractionRef vendor="socsim.native" library="abstraction" name="mmio" version="1.0"/>
+        </abstractionType>
+      </abstractionTypes>
+      <target>
+        <memoryMapRef memoryMapRef="map"/>
+      </target>
+      <connectionRequired>true</connectionRequired>
+      <bitsInLau>8</bitsInLau>
+      <bitSteering>0</bitSteering>
+      <endianness>little</endianness>
+    </busInterface>
+    <busInterface>
+      <name>out</name>
+      <busType vendor="socsim.native" library="bus" name="mmio" version="1.0"/>
+      <abstractionTypes>
+        <abstractionType>
+          <abstractionRef vendor="socsim.native" library="abstraction" name="mmio" version="1.0"/>
+        </abstractionType>
+      </abstractionTypes>
+      <initiator>
+        <addressSpaceRef addressSpaceRef="out"/>
+      </initiator>
+      <connectionRequired>true</connectionRequired>
+      <bitsInLau>8</bitsInLau>
+      <bitSteering>0</bitSteering>
+      <endianness>little</endianness>
+    </busInterface>
+  </busInterfaces>
+  <addressSpaces>
+    <addressSpace>
+      <name>out</name>
+      <range>CAPACITY</range>
+      <width>64</width>
+      <segments>
+        <segment>
+          <name>aperture</name>
+          <addressOffset>TARGET_BASE</addressOffset>
+          <range>SIZE</range>
+        </segment>
+      </segments>
+      <addressUnitBits>8</addressUnitBits>
+    </addressSpace>
+  </addressSpaces>
+  <memoryMaps>
+    <memoryMap>
+      <name>map</name>
+      <subspaceMap initiatorRef="out" segmentRef="aperture">
+        <name>forward</name>
+        <baseAddress>SOURCE_BASE</baseAddress>
+      </subspaceMap>
+      <addressUnitBits>8</addressUnitBits>
+    </memoryMap>
+  </memoryMaps>
+  <parameters>
+    <parameter parameterId="SOURCE_BASE" type="longint" sign="unsigned" resolve="user">
+      <name>SOURCE_BASE</name>
+      <value>0</value>
+    </parameter>
+    <parameter parameterId="TARGET_BASE" type="longint" sign="unsigned" resolve="user">
+      <name>TARGET_BASE</name>
+      <value>0</value>
+    </parameter>
+    <parameter parameterId="SIZE" type="longint" sign="unsigned" resolve="user">
+      <name>SIZE</name>
+      <value>4096</value>
+    </parameter>
+    <parameter parameterId="CAPACITY" type="longint" sign="unsigned" resolve="user">
+      <name>CAPACITY</name>
+      <value>4294967296</value>
+    </parameter>
+  </parameters>
+</component>

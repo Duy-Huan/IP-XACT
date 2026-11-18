@@ -1,0 +1,187 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<design xmlns="http://www.accellera.org/XMLSchema/IPXACT/1685-2022">
+  <vendor>socsim.native</vendor>
+  <library>generated</library>
+  <name>AI_SOC_fabric</name>
+  <version>1.0</version>
+  <componentInstances>
+    <componentInstance>
+      <instanceName>application_core</instanceName>
+      <componentRef vendor="socsim.example" library="reference" name="rv64" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>main_sram</instanceName>
+      <componentRef vendor="socsim.example" library="reference" name="ram" version="1.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="BASE">2147483648</configurableElementValue>
+          <configurableElementValue referenceId="SIZE">16777216</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>scratch_sram</instanceName>
+      <componentRef vendor="socsim.example" library="reference" name="ram" version="1.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="BASE">2415919104</configurableElementValue>
+          <configurableElementValue referenceId="SIZE">65536</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>boot_code</instanceName>
+      <componentRef vendor="socsim.example" library="reference" name="rom" version="1.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="BASE">4096</configurableElementValue>
+          <configurableElementValue referenceId="SIZE">4096</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>timer_controller</instanceName>
+      <componentRef vendor="socsim.example" library="reference" name="clint" version="1.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="BASE">33554432</configurableElementValue>
+          <configurableElementValue referenceId="SIZE">65536</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>interrupt_controller</instanceName>
+      <componentRef vendor="socsim.example" library="reference" name="plic" version="1.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="BASE">201326592</configurableElementValue>
+          <configurableElementValue referenceId="SIZE">67108864</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>simulation_exit</instanceName>
+      <componentRef vendor="socsim.example" library="reference" name="finisher" version="1.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="BASE">1048576</configurableElementValue>
+          <configurableElementValue referenceId="SIZE">4096</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>debug_console</instanceName>
+      <componentRef vendor="socsim.example" library="reference" name="uart" version="1.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="BASE">285212672</configurableElementValue>
+          <configurableElementValue referenceId="SIZE">256</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>service_console</instanceName>
+      <componentRef vendor="socsim.example" library="reference" name="uart" version="1.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="BASE">285216768</configurableElementValue>
+          <configurableElementValue referenceId="SIZE">256</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>accelerator_a</instanceName>
+      <componentRef vendor="ucb-bar" library="chipyard" name="gcd" version="1.13.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="BASE">65536</configurableElementValue>
+          <configurableElementValue referenceId="SIZE">4096</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>accelerator_b</instanceName>
+      <componentRef vendor="ucb-bar" library="chipyard" name="gcd" version="1.13.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="BASE">77824</configurableElementValue>
+          <configurableElementValue referenceId="SIZE">4096</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>control_gpio</instanceName>
+      <componentRef vendor="lowrisc" library="ip" name="gpio" version="silver-v5">
+        <configurableElementValues>
+          <configurableElementValue referenceId="BASE">65536</configurableElementValue>
+          <configurableElementValue referenceId="SIZE">4096</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>status_gpio</instanceName>
+      <componentRef vendor="lowrisc" library="ip" name="gpio" version="silver-v5">
+        <configurableElementValues>
+          <configurableElementValue referenceId="BASE">77824</configurableElementValue>
+          <configurableElementValue referenceId="SIZE">4096</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>io_decode</instanceName>
+      <componentRef vendor="socsim.native" library="fabric" name="static_decoder" version="1.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="SOURCE_BASE">4398046511104</configurableElementValue>
+          <configurableElementValue referenceId="TARGET_BASE">1073741824</configurableElementValue>
+          <configurableElementValue referenceId="SIZE">2097152</configurableElementValue>
+          <configurableElementValue referenceId="CAPACITY">4294967296</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>math_decode</instanceName>
+      <componentRef vendor="socsim.native" library="fabric" name="static_decoder" version="1.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="SOURCE_BASE">1073745920</configurableElementValue>
+          <configurableElementValue referenceId="TARGET_BASE">65536</configurableElementValue>
+          <configurableElementValue referenceId="SIZE">65536</configurableElementValue>
+          <configurableElementValue referenceId="CAPACITY">1048576</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>security_decode</instanceName>
+      <componentRef vendor="socsim.native" library="fabric" name="static_decoder" version="1.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="SOURCE_BASE">1073872896</configurableElementValue>
+          <configurableElementValue referenceId="TARGET_BASE">65536</configurableElementValue>
+          <configurableElementValue referenceId="SIZE">65536</configurableElementValue>
+          <configurableElementValue referenceId="CAPACITY">1048576</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+  </componentInstances>
+  <interconnections>
+    <interconnection>
+      <name>net0</name>
+      <activeInterface componentInstanceRef="io_decode" busRef="out"/>
+      <activeInterface componentInstanceRef="math_decode" busRef="target"/>
+      <activeInterface componentInstanceRef="security_decode" busRef="target"/>
+    </interconnection>
+    <interconnection>
+      <name>net1</name>
+      <activeInterface componentInstanceRef="math_decode" busRef="out"/>
+      <activeInterface componentInstanceRef="accelerator_a" busRef="target"/>
+      <activeInterface componentInstanceRef="accelerator_b" busRef="target"/>
+    </interconnection>
+    <interconnection>
+      <name>net2</name>
+      <activeInterface componentInstanceRef="application_core" busRef="initiator"/>
+      <activeInterface componentInstanceRef="boot_code" busRef="target"/>
+      <activeInterface componentInstanceRef="debug_console" busRef="target"/>
+      <activeInterface componentInstanceRef="interrupt_controller" busRef="target"/>
+      <activeInterface componentInstanceRef="main_sram" busRef="target"/>
+      <activeInterface componentInstanceRef="scratch_sram" busRef="target"/>
+      <activeInterface componentInstanceRef="service_console" busRef="target"/>
+      <activeInterface componentInstanceRef="simulation_exit" busRef="target"/>
+      <activeInterface componentInstanceRef="timer_controller" busRef="target"/>
+      <activeInterface componentInstanceRef="io_decode" busRef="target"/>
+    </interconnection>
+    <interconnection>
+      <name>net3</name>
+      <activeInterface componentInstanceRef="security_decode" busRef="out"/>
+      <activeInterface componentInstanceRef="control_gpio" busRef="target"/>
+      <activeInterface componentInstanceRef="status_gpio" busRef="target"/>
+    </interconnection>
+  </interconnections>
+</design>

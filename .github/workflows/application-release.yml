@@ -13,6 +13,8 @@ defaults:
 
 jobs:
   source-release:
+    outputs:
+      artifacts: ${{ steps.inventory.outputs.artifacts }}
     runs-on: ubuntu-24.04
     container: debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
     timeout-minutes: 20
@@ -48,6 +50,9 @@ jobs:
           (cd /tmp && /tmp/release-wheel/bin/usp soc models)
           /tmp/release-wheel/bin/usp soc generate specs/AI_SOC-smp.yaml --engine both --out build/wheel-native
           (cd dist && sha256sum ./*.whl ./*.tar.gz ./*.xml qualification.json > SHA256SUMS)
+      - name: Record actual source artifact identities
+        id: inventory
+        run: .venv/bin/python -m socsim.hosted_ci inventory --directory dist
       - name: Publish version-matched source artifacts
         env:
           GH_TOKEN: ${{ github.token }}
@@ -56,3 +61,30 @@ jobs:
           gh release create "$GITHUB_REF_NAME" --verify-tag "${flags[@]}" \
             --title "$GITHUB_REF_NAME" --notes-file "docs/releases/$GITHUB_REF_NAME.md" \
             dist/*.whl dist/*.tar.gz dist/*.xml dist/qualification.json dist/SHA256SUMS
+
+  hosted-receipt:
+    if: always()
+    needs: [source-release]
+    runs-on: ubuntu-24.04
+    container: debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    concurrency:
+      group: usp-release-evidence
+      cancel-in-progress: false
+    steps:
+      - name: Install receipt transport
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git ca-certificates python3 gh
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Publish observed release job and artifact identities
+        env:
+          GH_TOKEN: ${{ github.token }}
+          USP_NEEDS: ${{ toJSON(needs) }}
+        run: PYTHONPATH=src python3 -m socsim.hosted_ci publish --kind source-release

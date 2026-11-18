@@ -190,3 +190,9 @@ docs/native-flow.md for source-package locks, native software ABI and performanc
 scopes. Require USP_REQUIRE_NATIVE_FLOW and all four verified flow roots at
 promotion, including gem5-only and actual multi-hart counters. Preserve prior
 evidence, unsupported exits and immutable source/version tags.
+
+Standard bus changes require docs/native-bus-xml.md and original graph/projection
+consistency, XML/fabric equivalence and real five-workload both-engine tests for
+both maps. Require USP_REQUIRE_BUS_XML and the two verified USP_BUS_XML_* roots.
+Read docs/hosted-ci-receipts.md for Git notes: isolated fixture transport is a
+unit test, never an actual hosted observation or permission to fabricate notes.

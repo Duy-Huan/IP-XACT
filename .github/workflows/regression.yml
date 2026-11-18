@@ -34,6 +34,11 @@ jobs:
   branch-policy:
     runs-on: ubuntu-24.04
     steps:
+      - name: Require an authorized development or promotion branch
+        if: github.event_name != 'pull_request'
+        env:
+          SOURCE_REF: ${{ github.ref }}
+        run: test "$SOURCE_REF" = refs/heads/dev || test "$SOURCE_REF" = refs/heads/main
       - name: Require same-repository dev promotion into main
         if: github.event_name == 'pull_request' && github.base_ref == 'main'
         env:
@@ -71,6 +76,33 @@ jobs:
           path: build/junit.xml
           if-no-files-found: ignore
           retention-days: 7
+
+  hosted-receipt:
+    if: always() && github.event_name != 'pull_request'
+    needs: [workflow-lint, branch-policy, regression, custom-zephyr, gem5-se]
+    runs-on: ubuntu-24.04
+    container: debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    concurrency:
+      group: usp-ci-evidence
+      cancel-in-progress: false
+    steps:
+      - name: Install receipt transport
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git ca-certificates python3 gh
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Publish actual required-job outcomes through Git notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          USP_NEEDS: ${{ toJSON(needs) }}
+        run: PYTHONPATH=src python3 -m socsim.hosted_ci publish --kind regression
 
   custom-zephyr:
     runs-on: ubuntu-24.04

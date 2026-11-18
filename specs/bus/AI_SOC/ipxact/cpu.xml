@@ -1,0 +1,33 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<component xmlns="http://www.accellera.org/XMLSchema/IPXACT/1685-2022">
+  <vendor>socsim.example</vendor>
+  <library>reference</library>
+  <name>rv64</name>
+  <version>1.0</version>
+  <busInterfaces>
+    <busInterface>
+      <name>initiator</name>
+      <busType vendor="socsim.native" library="bus" name="mmio" version="1.0"/>
+      <abstractionTypes>
+        <abstractionType>
+          <abstractionRef vendor="socsim.native" library="abstraction" name="mmio" version="1.0"/>
+        </abstractionType>
+      </abstractionTypes>
+      <initiator>
+        <addressSpaceRef addressSpaceRef="physical"/>
+      </initiator>
+      <connectionRequired>true</connectionRequired>
+      <bitsInLau>8</bitsInLau>
+      <bitSteering>0</bitSteering>
+      <endianness>little</endianness>
+    </busInterface>
+  </busInterfaces>
+  <addressSpaces>
+    <addressSpace>
+      <name>physical</name>
+      <range>281474976710656</range>
+      <width>64</width>
+      <addressUnitBits>8</addressUnitBits>
+    </addressSpace>
+  </addressSpaces>
+</component>

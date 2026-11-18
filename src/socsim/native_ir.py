@@ -18,7 +18,9 @@ from .domain import (
     SoCIR,
     Window,
 )
+from .native_bus_graph import BusGraph
 from .native_fabric import Routing
+from .project import keys
 from .registers import verify_model_registers
 from .soc_spec import ROLE, WIDTH, catalog, cpu_instances, model_descriptor, selected, validate_spec
 
@@ -92,11 +94,14 @@ class NativeIR:
     external_models: tuple[ExternalModel, ...]
     sources: tuple[tuple[str, str], ...]
     routing: Routing | None = None
+    bus_graph: BusGraph | None = None
 
     def to_dict(self):
         data = asdict(self)
         if self.routing is None:
             data.pop("routing")
+        if self.bus_graph is None:
+            data.pop("bus_graph")
         return json.loads(json.dumps(data))
 
     def to_spec(self):
@@ -229,6 +234,36 @@ def compile_design(spec, structural):
     )
 
 
+def instance_from_dict(d):
+    keys(d, set(Instance.__dataclass_fields__), "canonical instance")
+    windows = []
+    for w in d["windows"]:
+        keys(w, set(Window.__dataclass_fields__), "canonical window")
+        for r in w["registers"]:
+            keys(r, set(Register.__dataclass_fields__), "canonical register")
+            for f in r["fields"]:
+                keys(f, set(RegisterField.__dataclass_fields__), "canonical register field")
+        regs = tuple(
+            Register(
+                r["name"],
+                r["offset"],
+                r["size"],
+                r["access"],
+                r["volatile"],
+                tuple(RegisterField(**f) for f in r["fields"]),
+            )
+            for r in w["registers"]
+        )
+        windows.append(Window(w["name"], w["base"], w["size"], w["width"], regs))
+    return Instance(
+        d["name"],
+        d["vlnv"],
+        tuple(windows),
+        tuple(tuple(p) for p in d["parameters"]),
+        tuple(d["hierarchy_path"]),
+    )
+
+
 def read_ir(path):
     """Validate syntax and the entire executable graph, not just a spec projection."""
     try:
@@ -238,39 +273,19 @@ def read_ir(path):
         if not isinstance(data, dict):
             raise ContractError("E_NATIVE_IR canonical graph must be a mapping")
         schema = json.loads(SCHEMA.read_text())
-        if data.get("schema_version") == "4":
-            schema["properties"]["schema_version"] = {"const": "4"}
+        if data.get("schema_version") in {"4", "5"}:
+            schema["properties"]["schema_version"] = {"const": data["schema_version"]}
             schema["properties"]["fabric"] = {"const": "hierarchical-static-decode-v1"}
             schema["properties"]["routing"] = {"type": "object"}
             schema["required"].append("routing")
+        if data.get("schema_version") == "5":
+            schema["properties"]["bus_graph"] = {"type": "object"}
+            schema["required"].append("bus_graph")
         validate(data, schema)
-
-        def instance(d):
-            windows = []
-            for w in d["windows"]:
-                regs = tuple(
-                    Register(
-                        r["name"],
-                        r["offset"],
-                        r["size"],
-                        r["access"],
-                        r["volatile"],
-                        tuple(RegisterField(**f) for f in r["fields"]),
-                    )
-                    for r in w["registers"]
-                )
-                windows.append(Window(w["name"], w["base"], w["size"], w["width"], regs))
-            return Instance(
-                d["name"],
-                d["vlnv"],
-                tuple(windows),
-                tuple(tuple(p) for p in d["parameters"]),
-                tuple(d["hierarchy_path"]),
-            )
 
         cpus = tuple(
             Cpu(
-                instance(c["instance"]),
+                instance_from_dict(c["instance"]),
                 c["hart_id"],
                 CpuContract(**c["contract"]),
                 c["qemu_model"],
@@ -281,7 +296,7 @@ def read_ir(path):
             for c in data["cpus"]
         )
         regions = tuple(
-            Region(instance(r["instance"]), r["model"], r["irq"]) for r in data["regions"]
+            Region(instance_from_dict(r["instance"]), r["model"], r["irq"]) for r in data["regions"]
         )
         ir = NativeIR(
             data["schema_version"],
@@ -302,11 +317,16 @@ def read_ir(path):
             tuple(ExternalModel(**m) for m in data["external_models"]),
             tuple(tuple(s) for s in data["sources"]),
         )
-        if data["schema_version"] == "4":
+        if data["schema_version"] in {"4", "5"}:
             from .native_fabric import parse_routing, verify_projection
 
             ir = replace(ir, routing=parse_routing(data["routing"]))
             verify_projection(ir.routing, ir.to_spec())
+        if data["schema_version"] == "5":
+            from .native_bus_graph import read_graph, verify_projection
+
+            ir = replace(ir, bus_graph=read_graph(data["bus_graph"]))
+            verify_projection(ir.bus_graph, ir)
         if not re.fullmatch(r"[A-Za-z0-9_.-]+(:[A-Za-z0-9_.-]+){3}", ir.vlnv):
             raise ContractError("E_NATIVE_IR invalid design VLNV")
         for n, sha in ir.sources:
@@ -320,9 +340,10 @@ def read_ir(path):
         if ir.routing is not None:
             expected = replace(
                 expected,
-                schema_version="4",
+                schema_version=ir.schema_version,
                 fabric="hierarchical-static-decode-v1",
                 routing=ir.routing,
+                bus_graph=ir.bus_graph,
             )
         if expected.to_dict() != data:
             raise ContractError(

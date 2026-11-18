@@ -4,6 +4,11 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 required = [
+    "docs/native-bus-xml.md",
+    "docs/hosted-ci-receipts.md",
+    "specs/bus/README.md",
+    "upgrade/bus-xml-batch.md",
+    "docs/releases/v0.3.0-alpha.4.md",
     "docs/native-address-decoder.md",
     "docs/releases/v0.3.0-alpha.3.md",
     "upgrade/address-decoder-batch.md",

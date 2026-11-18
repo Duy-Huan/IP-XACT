@@ -107,3 +107,8 @@ The 0.3.0a2 scope adds source packages, a persisted native lifecycle, real singl
 RV64 RTOS/Zephyr BSPs (both public µC/OS kernels included) and QEMU per-hart event
 estimates. See native-flow.md. Broad M1-M9 states remain partial until every exit
 has matching evidence; no final v0.3/v0.4/v1.0 tag is pre-created.
+
+The 0.3.0a4 scoped batch adds standard native bus XML/IR v5 and workflow Git-note
+observations. See docs/native-bus-xml.md, docs/hosted-ci-receipts.md and
+upgrade/bus-xml-batch.md. Full milestone completion remains separately gated;
+implementation references alone do not constitute release qualification.

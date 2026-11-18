@@ -51,6 +51,8 @@ def compiler_identity():
             "native_ir.py",
             "native_ipxact.py",
             "native_fabric.py",
+            "native_bus_graph.py",
+            "native_bus_xml.py",
             "schemas/native-ir-v3.json",
             "domain.py",
             "ipxact.py",
@@ -462,6 +464,9 @@ def build(out, source, cross_compile, jobs=2, reuse_qemu=None, enable_plugins=Fa
         "-msmall-data-limit=0",
         "-O2",
         "-g",
+        f"-ffile-prefix-map={out}=.",
+        f"-Wa,--debug-prefix-map={out}=.",
+        "-save-temps=obj",
         "-nostdlib",
         "-nostartfiles",
         "-ffreestanding",
@@ -919,6 +924,9 @@ def accept(
 def main(argv):
     parser = argparse.ArgumentParser(prog="usp soc")
     commands = parser.add_subparsers(dest="action", required=True)
+    sub = commands.add_parser("export-bus")
+    sub.add_argument("spec", type=Path)
+    sub.add_argument("--out", type=Path, required=True)
     for action in ("validate", "generate"):
         sub = commands.add_parser(action)
         sub.add_argument("spec", type=Path)
@@ -970,22 +978,29 @@ def main(argv):
     args = parser.parse_args(argv)
     result: dict
     try:
-        if args.action == "gem5-build":
+        if args.action == "export-bus":
+            from .native_bus_export import export_bus
+
+            result = export_bus(args.spec, args.out)
+        elif args.action == "gem5-build":
             from .soc_native_gem5 import build_engine
 
             result = build_engine(args.source_gem5, args.out, args.jobs)
         elif args.action == "models":
             result = {
                 "engines": ["qemu", "gem5"],
-                "input_formats": ["yaml", "ipxact"],
-                "canonical_ir": "native-ir-v3",
+                "input_formats": ["yaml", "ipxact", "fabric"],
+                "canonical_ir": "native-ir-v5; v3/v4 compatible",
                 "models": sorted(ROLE),
                 "capabilities": {
                     "homogeneous_rv64_harts": {"minimum": 1, "maximum": 8},
                     "physical_address_bits": 48,
                     "maximum_instances": 64,
                     "irq_sources": 31,
-                    "fabric": "flat functional memory map; gem5 SystemXBar",
+                    "fabric": (
+                        "qualified static address-space trees lower to a flat functional map; "
+                        "gem5 SystemXBar"
+                    ),
                     "external_models": {
                         "protocol": "usp-mmio32-v1",
                         "aperture_bytes": 4096,
@@ -1007,6 +1022,10 @@ def main(argv):
                 from .native_ipxact import import_design
 
                 s = import_design(args.spec)[0]
+            elif args.input_format == "fabric":
+                from .native_fabric import read_source
+
+                s = read_source(args.spec)[0]
             else:
                 s = load_spec(args.spec)
             result = {
