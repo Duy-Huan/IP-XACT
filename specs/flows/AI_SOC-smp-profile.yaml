@@ -1,0 +1,13 @@
+schema_version: native-flow-1
+spec: inputs/AI_SOC-smp.yaml
+input_format: yaml
+engine: both
+packages: []
+software:
+- id: baremetal
+  kind: baremetal
+  timeout: 90
+performance:
+  qemu_cost_model:
+    base_cpi: 1.5
+    memory_extra_cycles: 2.0

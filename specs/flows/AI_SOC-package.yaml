@@ -1,0 +1,30 @@
+schema_version: native-flow-1
+spec: inputs/AI_SOC-package.yaml
+input_format: yaml
+engine: both
+packages:
+- packages/counter/package.yaml
+software:
+- id: counter-driver
+  kind: package-driver
+  package: user.counter
+  timeout: 60
+- id: freertos
+  kind: freertos
+  timeout: 60
+- id: zephyr
+  kind: zephyr
+  timeout: 60
+- id: ucos2
+  kind: ucos2
+  timeout: 60
+- id: ucos3
+  kind: ucos3
+  timeout: 60
+- id: linux-boot
+  kind: linux
+  timeout: 180
+performance:
+  qemu_cost_model:
+    base_cpi: 1.0
+    memory_extra_cycles: 1.0

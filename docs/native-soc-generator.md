@@ -164,3 +164,11 @@ adapters, coherent DMA/global timing and full inventories remain separate work.
 See [native-design-capabilities.md](native-design-capabilities.md) for the assessed
 contract and remaining industrial boundaries. CHIA orchestration remains deferred
 behind this native generator work.
+
+## One native HW/SW lifecycle
+
+See [native-flow.md](native-flow.md) for usp flow plan/build/all/run/verify,
+source packages, both mapped designs, the gem5-only path and native RV64
+FreeRTOS/Zephyr/µC/OS BSPs. These adapters derive placement/boot/IRQ/timebase from
+the checked canonical IR; they are distinct from older fixed-profile BSPs.
+Software-only tests retain their scope; package peripheral conformance is separate.

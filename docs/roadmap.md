@@ -98,3 +98,12 @@ The owner research direction and nine-paper ledger are in research-direction.md
 and ref/. CHIA v3 was provided and reviewed (ref/notes/chia-2606.27350.md); the other eight
 sources remain unread. Novelty claims await broader related-work review and
 measured evaluation.
+
+## Sequential batch programme
+
+The owner requested the complete milestone ledger under [upgrade/](../upgrade/README.md),
+with sequential implementation and one aggregate CI/CD cycle per frozen batch.
+The 0.3.0a2 scope adds source packages, a persisted native lifecycle, real single-hart
+RV64 RTOS/Zephyr BSPs (both public µC/OS kernels included) and QEMU per-hart event
+estimates. See native-flow.md. Broad M1-M9 states remain partial until every exit
+has matching evidence; no final v0.3/v0.4/v1.0 tag is pre-created.

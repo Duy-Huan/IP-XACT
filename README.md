@@ -142,3 +142,12 @@ public binary release; per-file SPDX identifiers apply to the indicated files.
 
 Actual Chipyard Ibex and normalized custom RTL CPUs run bare-metal with QEMU or
 gem5 memory/peripherals. See [the adapter guide](docs/rtl-cpu-adapters.md).
+
+## Native source-package and software flow
+
+[usp flow](docs/native-flow.md) plans, builds and runs a canonical-IR SoC with
+source-pinned SystemC packages and generated RV64 single-hart FreeRTOS, Zephyr,
+µC/OS-II/III and Linux software. AI_SOC/AIZ_SOC examples and a gem5-only variant
+are in [specs/flows](specs/flows/README.md). Optional QEMU per-hart event costs
+remain distinct from native gem5 cycles. The complete approved milestone ledger
+and one final aggregate CI/CD policy are in [upgrade/](upgrade/README.md).

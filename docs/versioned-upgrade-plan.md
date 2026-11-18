@@ -60,3 +60,9 @@ The same typed IR owns placement/interrupt/boot/engine selection after intake.
 Garnet is a simulator model, not synthesizable RTL. A physical NoC needs a
 qualified RTL counterpart; an ISS-only CPU cannot supply a matching RTL chip.
 Public-library/PDK evaluation is the owner's ASIC scope, not foundry sign-off.
+
+## Execution ledger
+
+The owner requested sequential implementation with a single aggregate CI/CD gate
+per frozen batch. Milestone files and machine-readable state now live under
+[upgrade/](../upgrade/README.md); do not close broad exits from scoped evidence.

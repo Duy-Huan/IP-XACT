@@ -84,3 +84,12 @@ The application-release workflow runs a separate hosted minimal regression,
 builds and installs a wheel in an isolated environment, then publishes source
 assets and distinct local/hosted-minimal evidence. Full hosted native, a cold
 all-engine rebuild and new rootless Podman/OCI acceptance are not inferred.
+
+## Package and software lifecycle binding
+
+The 0.3.0a2 flow retains native IR v3 as the checked hardware authority. Its plan
+records unresolved package compilation without inventing a binary digest. After
+source compilation, package/build/driver/license locks bind the actual executable
+identities into the generated native IR and flow-build.json. BSPs and driver
+bindings use verify_generated/read_ir, not raw source YAML. See native-flow.md.
+General interfaces/translations and heterogeneous execution remain open.

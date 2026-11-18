@@ -4,6 +4,11 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 required = [
+    "upgrade/README.md",
+    "upgrade/native-flow-batch.md",
+    "docs/native-flow.md",
+    "docs/releases/v0.3.0-alpha.2.md",
+    "specs/flows/README.md",
     "docs/versioned-upgrade-plan.md",
     "docs/canonical-native-ir.md",
     "docs/releases/v0.3.0-alpha.1.md",
@@ -49,6 +54,7 @@ required = [
     "skills/setup/SKILL.md",
     "skills/update/SKILL.md",
 ]
+required += [str(p.relative_to(root)) for p in (root / "upgrade").glob("M*.md")]
 required += [f"docs/examples/{p.name}.md" for p in (root / "examples").iterdir() if p.is_dir()]
 for name in required:
     path = root / name

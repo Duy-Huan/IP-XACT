@@ -1,0 +1,231 @@
+schema_version: '1'
+baseline:
+  tag: v0.3.0-alpha.1
+  commit: e3709121444f31a25e80b80ebe3d63ca55022b0f
+  local_passed: 534
+  hosted_ci: unobserved
+policy:
+  execution: sequential
+  aggregate_ci: after_complete_batch
+  completion: all_required_exits_with_actual_evidence
+  future_tags: never_precreate
+milestones:
+- id: M1
+  target_version: 0.3.0
+  document: M1-compiler-ir.md
+  depends_on: []
+  status: partial
+  required_exits:
+  - requirement: Canonical typed IR and equivalent YAML/IP-XACT intake
+    status: open
+    evidence: []
+  - requirement: Explicit CPU, memory, IRQ, clock/reset and hierarchy contracts
+    status: open
+    evidence: []
+  - requirement: General interface/address-space/translation representation and capability-checked
+      lowering
+    status: open
+    evidence: []
+- id: M2
+  target_version: 0.3.0
+  document: M2-model-packages.md
+  depends_on:
+  - M1
+  status: partial
+  required_exits:
+  - requirement: Exact VLNV and immutable source/license/build contracts
+    status: implemented
+    evidence:
+    - kind: implementation-reference
+      path: src/socsim/native_package.py
+      qualification: scoped native contract; final qualification bound by release
+        receipt
+    - kind: implementation-reference
+      path: tests/test_native_flow.py
+      qualification: scoped native contract; final qualification bound by release
+        receipt
+  - requirement: Driver/register/reset/error and transaction capability contracts
+    status: open
+    evidence: []
+  - requirement: An independently authored package executes real MMIO/IRQ/error tests
+      on both engines
+    status: implemented
+    evidence:
+    - kind: implementation-reference
+      path: src/socsim/native_package.py
+      qualification: scoped native contract; final qualification bound by release
+        receipt
+    - kind: implementation-reference
+      path: tests/test_native_flow.py
+      qualification: scoped native contract; final qualification bound by release
+        receipt
+- id: M3
+  target_version: 0.3.0
+  document: M3-lifecycle.md
+  depends_on:
+  - M1
+  - M2
+  status: partial
+  required_exits:
+  - requirement: One generated plan/build/software/run/verify lifecycle
+    status: implemented
+    evidence:
+    - kind: implementation-reference
+      path: src/socsim/native_flow.py
+      qualification: scoped native contract; final qualification bound by release
+        receipt
+    - kind: implementation-reference
+      path: tests/test_native_flow.py
+      qualification: scoped native contract; final qualification bound by release
+        receipt
+  - requirement: Explicit CPU/RAM/peripheral/time ownership and resource preflight
+    status: implemented
+    evidence:
+    - kind: implementation-reference
+      path: src/socsim/native_flow.py
+      qualification: scoped native contract; final qualification bound by release
+        receipt
+    - kind: implementation-reference
+      path: tests/test_native_flow.py
+      qualification: scoped native contract; final qualification bound by release
+        receipt
+  - requirement: Previously unseen supported designs run without compiler edits or
+      ISS substitution
+    status: implemented
+    evidence:
+    - kind: implementation-reference
+      path: src/socsim/native_flow.py
+      qualification: scoped native contract; final qualification bound by release
+        receipt
+    - kind: implementation-reference
+      path: tests/test_native_flow.py
+      qualification: scoped native contract; final qualification bound by release
+        receipt
+- id: M4
+  target_version: 0.3.0
+  document: M4-software.md
+  depends_on:
+  - M3
+  status: partial
+  required_exits:
+  - requirement: IR-derived startup/linker/DTS/BSP and device drivers
+    status: open
+    evidence: []
+  - requirement: Real bare-metal, FreeRTOS, Zephyr, both uCOS kernels and boot sequence
+      tests
+    status: implemented
+    evidence:
+    - kind: implementation-reference
+      path: src/socsim/native_software.py
+      qualification: scoped native contract; final qualification bound by release
+        receipt
+    - kind: implementation-reference
+      path: src/socsim/native_ucos.py
+      qualification: scoped native contract; final qualification bound by release
+        receipt
+    - kind: implementation-reference
+      path: tests/test_native_flow.py
+      qualification: scoped native contract; final qualification bound by release
+        receipt
+  - requirement: OpenSBI/Linux and an actual Yocto image with relocation/IRQ/driver
+      acceptance
+    status: open
+    evidence: []
+- id: M5
+  target_version: 0.4.0
+  document: M5-cpu-bus.md
+  depends_on:
+  - M1
+  - M2
+  - M3
+  - M4
+  status: partial
+  required_exits:
+  - requirement: Real CPU-owned RTL adapters with protocol/reset/IRQ/error tests
+    status: open
+    evidence: []
+  - requirement: Qualified AXI/TileLink and Rocket then BOOM CPU integrations
+    status: open
+    evidence: []
+  - requirement: Explicit complete Earlgrey/subsystem ownership and eligible MMU/OS
+      acceptance
+    status: open
+    evidence: []
+- id: M6
+  target_version: 0.4.0
+  document: M6-network-time.md
+  depends_on:
+  - M3
+  - M5
+  status: partial
+  required_exits:
+  - requirement: IR-generated network topology on the actual transaction path
+    status: open
+    evidence: []
+  - requirement: Qualified DMA/coherence/backpressure/reset/error contracts
+    status: open
+    evidence: []
+  - requirement: Explicit synchronization/ownership and no undisclosed PIO bypass
+    status: open
+    evidence: []
+- id: M7
+  target_version: 0.4.0
+  document: M7-performance.md
+  depends_on:
+  - M3
+  - M6
+  status: partial
+  required_exits:
+  - requirement: Per-hart/IP/network ROI and source-labelled native counters
+    status: open
+    evidence: []
+  - requirement: QEMU measured events with explicit configurable cost estimates
+    status: implemented
+    evidence:
+    - kind: implementation-reference
+      path: src/socsim/native_performance.py
+      qualification: scoped native contract; final qualification bound by release
+        receipt
+    - kind: implementation-reference
+      path: tests/test_native_flow.py
+      qualification: scoped native contract; final qualification bound by release
+        receipt
+  - requirement: Reference calibration, uncertainty and model-error reporting
+    status: open
+    evidence: []
+- id: M8
+  target_version: 1.0.0
+  document: M8-full-designs.md
+  depends_on:
+  - M4
+  - M5
+  - M6
+  - M7
+  status: partial
+  required_exits:
+  - requirement: Source/model/adapter/driver/acceptance for all 46 AI_SOC and 37 AIZ_SOC
+      instances
+    status: open
+    evidence: []
+  - requirement: Matching synthesizable RTL where source implementations exist
+    status: open
+    evidence: []
+  - requirement: Actual mapped firmware execution and public-technology physical evaluation
+    status: open
+    evidence: []
+- id: M9
+  target_version: 1.0.0
+  document: M9-qualification-release.md
+  depends_on:
+  - M8
+  status: partial
+  required_exits:
+  - requirement: Independent unseen design and cold reproducible builds
+    status: open
+    evidence: []
+  - requirement: Rootless Podman SDK build/OCI roundtrip and complete evidence closure
+    status: open
+    evidence: []
+  - requirement: Mandatory local regression and observed hosted CI before final release
+    status: open
+    evidence: []

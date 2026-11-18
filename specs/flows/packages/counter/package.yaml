@@ -1,0 +1,91 @@
+schema_version: native-model-package-1
+id: user.counter
+vlnv: socsim.example:external:counter:1.0
+license:
+  spdx: Apache-2.0
+  file: LICENSE
+  sha256: cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
+sources:
+  tlm-counter.cpp: 1288f89bbfb3b52dd4b0df86e0f5e34141e8f78188244515af058b7c15670d2e
+build:
+  language: systemc-c++17
+  entry: tlm-counter.cpp
+interface:
+  protocol: usp-mmio32-v1
+  access_bits: 32
+  aperture_bytes: 4096
+  endianness: little
+  irq_mask: 1
+  irq_trigger: level-high
+  state_owner: peripheral-process
+  time: annotated-systemc
+registers:
+- name: value
+  offset: 0
+  access: read-write
+  reset: 0
+- name: irq
+  offset: 4
+  access: write-one-clear
+  reset: 0
+driver:
+  source: selftest.c
+  sha256: 4ac9942db5f550abd32dae936a539ce5017f43857aca7df363ed5b41f7be97d1
+  expected_markers:
+  - USP_PACKAGE_RESET_OK
+  - USP_EXTERNAL_IRQ_OK
+conformance:
+- op: 2
+  offset: 0
+  data: 0
+  value: 0
+  status: 0
+  irq: 0
+- op: 0
+  offset: 0
+  data: 0
+  value: 0
+  status: 0
+  irq: 0
+- op: 1
+  offset: 0
+  data: 41
+  value: 41
+  status: 0
+  irq: 1
+- op: 0
+  offset: 0
+  data: 0
+  value: 41
+  status: 0
+  irq: 1
+- op: 1
+  offset: 4
+  data: 1
+  value: 1
+  status: 0
+  irq: 0
+- op: 0
+  offset: 4
+  data: 0
+  value: 0
+  status: 0
+  irq: 0
+- op: 0
+  offset: 8
+  data: 0
+  value: 0
+  status: 1
+  irq: 0
+- op: 2
+  offset: 0
+  data: 0
+  value: 0
+  status: 0
+  irq: 0
+- op: 0
+  offset: 0
+  data: 0
+  value: 0
+  status: 0
+  irq: 0

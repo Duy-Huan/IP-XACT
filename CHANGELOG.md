@@ -5,6 +5,24 @@
 Remaining M1-M9 work is tracked in docs/versioned-upgrade-plan.md. Future
 version tags are created only after their stated acceptance gates.
 
+## 0.3.0a2 — 2026-11-18 (v0.3.0-alpha.2)
+
+- Save the complete approved M1-M9 dependency/checklist ledger under upgrade/;
+  implement sequentially and qualify a frozen batch with one aggregate CI/CD gate.
+- Source-built model packages pin VLNV, license, sources, driver, register/reset
+  and RPC contracts; actual SystemC reset/MMIO/IRQ/error probes qualify each build.
+- Add usp flow plan/build/all/run/verify with explicit CPU/RAM/peripheral/time
+  ownership, selected engines, ordered software and tamper-checked artifact links.
+- Generate native RV64 single-hart FreeRTOS and Zephyr BSPs from canonical IR.
+  Add explicit local LP64 µC/OS-II/III ports with preserved public source pins,
+  64-bit context/stack/pointer adaptation and scheduler/register/UART IRQ tests.
+- Add native QEMU per-hart execution/data counters with configurable analytical
+  costs; retain native gem5 statistics and whole-run/uncalibrated fidelity labels.
+- Qualify AI_SOC/AIZ_SOC flow fixtures and a gem5-only path. These are scoped
+  increments within M1/M2/M3/M4/M7, not completion of all approved milestone exits.
+- Require native lifecycle/software/package/error cases in the final promotion.
+  Preserve existing releases; no new SDK or hosted/cold qualification is implied.
+
 ## 0.3.0a1 — 2026-11-18 (v0.3.0-alpha.1)
 
 - Owner-approved versioned upgrade programme: v0.3 compiler/model/BSP, v0.4

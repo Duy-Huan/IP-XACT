@@ -16,3 +16,11 @@ instances and physical addresses above 4 GiB. validation/smp-max.yaml tests the
 maximum hart bound. These remain original regression fixtures. The external
 counter example builds its descriptor with the actual compiled executable hash;
 run scripts/native_external_bringup.py rather than using a fabricated checksum.
+
+## Source-package and software flows
+
+The original public examples under [flows/](flows/README.md) declare engine and
+software choices as data. AI_SOC-package builds a high-map two-instance SystemC
+model package plus native single-hart RTOS/Zephyr/Linux workloads; AIZ_SOC uses
+different names/maps and source IPs. A separate flow selects only gem5.
+See [the full execution guide](../docs/native-flow.md) for actual checks and limits.
