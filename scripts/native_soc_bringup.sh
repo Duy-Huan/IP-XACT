@@ -34,6 +34,23 @@ done
 usp soc generate specs/validation/smp-max.yaml --out "$native_root/max-hart"
 usp soc build --generated "$native_root/max-hart" --source-qemu "${USP_QEMU_SOURCE:-$PWD/.tools/upstream/qemu}" --cross-compile "${CROSS_COMPILE:-riscv64-unknown-elf-}" --jobs "${USP_JOBS:-2}"
 export USP_NATIVE_MAX_HART_BUILD="$native_root/max-hart"
+for native_name in AI_SOC AIZ_SOC AI_SOC-hierarchy; do
+    usp soc generate "specs/ipxact/$native_name/native.yaml" --input-format ipxact \
+        --out "$native_root/direct-$native_name"
+    usp soc build --generated "$native_root/direct-$native_name" \
+        --source-qemu "${USP_QEMU_SOURCE:-$PWD/.tools/upstream/qemu}" \
+        --cross-compile "${CROSS_COMPILE:-riscv64-unknown-elf-}" --jobs "${USP_JOBS:-2}"
+    if [[ "$native_name" != AI_SOC-hierarchy ]]; then
+        usp soc linux-build --generated "$native_root/direct-$native_name" \
+            --source-linux "${USP_LINUX_SOURCE:-$PWD/.tools/upstream/linux}" \
+            --source-opensbi "${USP_OPENSBI_SOURCE:-$PWD/.tools/upstream/opensbi}" \
+            --cross-compile "${CROSS_COMPILE_LINUX:-riscv64-linux-gnu-}" --jobs "${USP_JOBS:-2}"
+    fi
+done
+export USP_REQUIRE_NATIVE_IPXACT=1
+export USP_NATIVE_AI_SOC_IPXACT_BUILD="$native_root/direct-AI_SOC"
+export USP_NATIVE_AIZ_SOC_IPXACT_BUILD="$native_root/direct-AIZ_SOC"
+export USP_NATIVE_HIERARCHY_IPXACT_BUILD="$native_root/direct-AI_SOC-hierarchy"
 python scripts/native_external_bringup.py --out "$native_root/external" \
     --source-qemu "${USP_QEMU_SOURCE:-$PWD/.tools/upstream/qemu}" \
     --gem5-build "$native_gem5" --jobs "${USP_JOBS:-2}"
@@ -43,4 +60,4 @@ USP_NATIVE_AIZ_SOC_SMP_BUILD="$native_root/AIZ_SOC-smp" \
 USP_REQUIRE_NATIVE_SOC=1 USP_NATIVE_AI_SOC_BUILD="$native_root/AI_SOC" \
 USP_NATIVE_AIZ_SOC_BUILD="$native_root/AIZ_SOC" \
 USP_NATIVE_GEM5_BUILD="$native_gem5" \
-python -m pytest tests/test_native_soc.py tests/test_native_smp.py tests/test_native_external.py -v --junitxml="$native_root/junit.xml"
+python -m pytest tests/test_native_soc.py tests/test_native_smp.py tests/test_native_external.py tests/test_native_ir.py -v --junitxml="$native_root/junit.xml"

@@ -25,6 +25,7 @@ def main(argv):
             sub.add_argument("--generated", type=Path, required=True)
         if name == "build":
             sub.add_argument("--source-qemu", type=Path, required=True)
+            sub.add_argument("--reuse-qemu", type=Path)
             sub.add_argument("--jobs", type=int, choices=range(1, 9), default=4)
         if name in {"run", "test"}:
             sub.add_argument("--out", type=Path, required=True)
@@ -127,7 +128,12 @@ def main(argv):
         if args.command == "generate":
             result = {"status": "GENERATED", "directory": str(generate(project, args.out))}
         elif args.command == "build":
-            binary = build_qemu(project, args.generated.resolve(), args.source_qemu, args.jobs)
+            if args.reuse_qemu:
+                from .legacy_cache import reuse_qemu
+
+                binary = reuse_qemu(project, args.generated, args.source_qemu, args.reuse_qemu)
+            else:
+                binary = build_qemu(project, args.generated.resolve(), args.source_qemu, args.jobs)
             result = {"status": "BUILT", "binary": str(binary)}
         elif args.command == "software":
             if not args.cross_compile:

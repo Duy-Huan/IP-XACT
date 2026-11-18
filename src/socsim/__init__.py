@@ -1,3 +1,3 @@
 """IP-XACT to explicitly supported simulator models."""
 
-__version__ = "0.2.0"
+from .version import __version__ as __version__

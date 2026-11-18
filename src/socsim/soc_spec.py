@@ -51,7 +51,11 @@ def catalog():
 
 
 def load_spec(path):
-    data = read_yaml(path)
+    return validate_spec(read_yaml(path))
+
+
+def validate_spec(data):
+    """Validate and normalize an owned mapping, independent of its input format."""
     keys(
         data,
         {"schema_version", "name", "cpu", "boot", "devices"}
@@ -279,6 +283,12 @@ def emit_ipxact(spec, out):
         sources=tuple(sorted((*ir.sources, ("spec.yaml", digest(out / "spec.yaml"))))),
     )
     write_json(out / "soc-ir.json", ir.to_dict())
+    write_model_lock(spec, out)
+    return ir
+
+
+def write_model_lock(spec, out):
+    """Model lock independent of the structural frontend."""
     bindings = [
         {"instance": n, "model": spec["cpu"]["model"], "source_commit": QEMU_SHA}
         for n in cpu_instances(spec)
@@ -302,7 +312,6 @@ def emit_ipxact(spec, out):
             "execution_bindings": "engine-bindings.json",
         },
     )
-    return ir
 
 
 def model_descriptor(spec, model):

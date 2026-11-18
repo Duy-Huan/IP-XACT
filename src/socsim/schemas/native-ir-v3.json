@@ -1,0 +1,644 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "3"
+    },
+    "name": {
+      "type": "string"
+    },
+    "vlnv": {
+      "type": "string"
+    },
+    "cpus": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "instance": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "vlnv": {
+                "type": "string"
+              },
+              "windows": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "base": {
+                      "type": "integer"
+                    },
+                    "size": {
+                      "type": "integer"
+                    },
+                    "width": {
+                      "type": "integer"
+                    },
+                    "registers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "offset": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 18446744073709551615
+                          },
+                          "size": {
+                            "type": "integer",
+                            "enum": [
+                              8,
+                              16,
+                              32,
+                              64
+                            ]
+                          },
+                          "access": {
+                            "type": "string",
+                            "enum": [
+                              "read-only",
+                              "write-only",
+                              "read-write"
+                            ]
+                          },
+                          "volatile": {
+                            "type": "boolean"
+                          },
+                          "fields": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "lsb": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 18446744073709551615
+                                },
+                                "width": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 18446744073709551615
+                                },
+                                "access": {
+                                  "type": "string",
+                                  "enum": [
+                                    "read-only",
+                                    "write-only",
+                                    "read-write"
+                                  ]
+                                },
+                                "volatile": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "lsb",
+                                "width",
+                                "access",
+                                "volatile"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "minItems": 1
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "offset",
+                          "size",
+                          "access",
+                          "volatile",
+                          "fields"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "base",
+                    "size",
+                    "width",
+                    "registers"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "parameters": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 18446744073709551615
+                    }
+                  ],
+                  "minItems": 2,
+                  "maxItems": 2
+                }
+              },
+              "hierarchy_path": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1
+              }
+            },
+            "required": [
+              "name",
+              "vlnv",
+              "windows",
+              "parameters",
+              "hierarchy_path"
+            ],
+            "additionalProperties": false
+          },
+          "hart_id": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 18446744073709551615
+          },
+          "contract": {
+            "type": "object",
+            "properties": {
+              "isa": {
+                "type": "string"
+              },
+              "privilege": {
+                "type": "string"
+              },
+              "mmu": {
+                "type": "string"
+              },
+              "reset_vector": {
+                "type": "integer"
+              },
+              "entry": {
+                "type": "integer"
+              },
+              "timebase_hz": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "isa",
+              "privilege",
+              "mmu",
+              "reset_vector",
+              "entry",
+              "timebase_hz"
+            ],
+            "additionalProperties": false
+          },
+          "qemu_model": {
+            "type": "string"
+          },
+          "gem5_model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "clock": {
+            "type": "string"
+          },
+          "reset": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "instance",
+          "hart_id",
+          "contract",
+          "qemu_model",
+          "gem5_model",
+          "clock",
+          "reset"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 8
+    },
+    "regions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "instance": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "vlnv": {
+                "type": "string"
+              },
+              "windows": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "base": {
+                      "type": "integer"
+                    },
+                    "size": {
+                      "type": "integer"
+                    },
+                    "width": {
+                      "type": "integer"
+                    },
+                    "registers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "offset": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 18446744073709551615
+                          },
+                          "size": {
+                            "type": "integer",
+                            "enum": [
+                              8,
+                              16,
+                              32,
+                              64
+                            ]
+                          },
+                          "access": {
+                            "type": "string",
+                            "enum": [
+                              "read-only",
+                              "write-only",
+                              "read-write"
+                            ]
+                          },
+                          "volatile": {
+                            "type": "boolean"
+                          },
+                          "fields": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "lsb": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 18446744073709551615
+                                },
+                                "width": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 18446744073709551615
+                                },
+                                "access": {
+                                  "type": "string",
+                                  "enum": [
+                                    "read-only",
+                                    "write-only",
+                                    "read-write"
+                                  ]
+                                },
+                                "volatile": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "lsb",
+                                "width",
+                                "access",
+                                "volatile"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "minItems": 1
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "offset",
+                          "size",
+                          "access",
+                          "volatile",
+                          "fields"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "base",
+                    "size",
+                    "width",
+                    "registers"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "parameters": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 18446744073709551615
+                    }
+                  ],
+                  "minItems": 2,
+                  "maxItems": 2
+                }
+              },
+              "hierarchy_path": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1
+              }
+            },
+            "required": [
+              "name",
+              "vlnv",
+              "windows",
+              "parameters",
+              "hierarchy_path"
+            ],
+            "additionalProperties": false
+          },
+          "model": {
+            "type": "string"
+          },
+          "irq": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 31
+          }
+        },
+        "required": [
+          "instance",
+          "model",
+          "irq"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 5,
+      "maxItems": 63
+    },
+    "clocks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "frequency_hz": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 18446744073709551615
+          }
+        },
+        "required": [
+          "name",
+          "frequency_hz"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "resets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 8
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "targets"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 1
+    },
+    "boot": {
+      "type": "object",
+      "properties": {
+        "ram": {
+          "type": "string"
+        },
+        "rom": {
+          "type": "string"
+        },
+        "console": {
+          "type": "string"
+        },
+        "entry": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        }
+      },
+      "required": [
+        "ram",
+        "rom",
+        "console",
+        "entry"
+      ],
+      "additionalProperties": false
+    },
+    "fabric": {
+      "const": "flat-functional-v1"
+    },
+    "address_spaces": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "initiator": {
+            "type": "string"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "initiator",
+          "targets"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "interrupts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer"
+          },
+          "trigger": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "target",
+          "line",
+          "trigger"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "memory_latency_ns": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 18446744073709551615
+    },
+    "external_models": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "vlnv": {
+            "type": "string"
+          },
+          "executable": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "license": {
+            "type": "string"
+          },
+          "protocol": {
+            "type": "string"
+          },
+          "compatible": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "model",
+          "vlnv",
+          "executable",
+          "sha256",
+          "license",
+          "protocol",
+          "compatible"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 0,
+      "maxItems": 16
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "prefixItems": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "minItems": 2,
+        "maxItems": 2
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "name",
+    "vlnv",
+    "cpus",
+    "regions",
+    "clocks",
+    "resets",
+    "boot",
+    "fabric",
+    "address_spaces",
+    "interrupts",
+    "memory_latency_ns",
+    "external_models",
+    "sources"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

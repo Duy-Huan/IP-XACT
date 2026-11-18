@@ -6,6 +6,12 @@ interfaces; IP-XACT metadata alone does not supply missing hardware behavior.
 Unsupported combinations must fail before claiming success. This contract is
 separate from the older fixed-profile OS, RTL and physical flows.
 
+The 0.3.0a1 increment adds a common native IR and direct structural IP-XACT intake,
+including configured hierarchy/aliases, through these same bounded executable
+contracts. See canonical-native-ir.md and versioned-upgrade-plan.md. It retains
+the native limits below; general bus/translation and heterogeneous CPU lowering
+are not implied by the new serialization or importer.
+
 | Area | Native generator behavior | Remaining boundary |
 |---|---|---|
 | Instance identity | Names/counts, memory, UART and peripheral placement come from the input | Maximum 64 instances and 31 unique peripheral IRQs |

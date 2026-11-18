@@ -17,6 +17,10 @@ Names, counts, memory sizes and maps come from the specification. The existing
 
 ## Input and outputs
 
+Version 0.3.0a1 adds a common native IR and direct structural IP-XACT intake.
+See [canonical-native-ir.md](canonical-native-ir.md) for the overlay, original
+examples, executable graph validation, source identity and release scope.
+
 See [AI_SOC-native.yaml](../specs/AI_SOC-native.yaml) and
 [AIZ_SOC-native.yaml](../specs/AIZ_SOC-native.yaml). These are original generator
 acceptance specifications, not implementations of the 46/37-instance architecture
@@ -37,7 +41,7 @@ references, apertures and IRQs fail before output creation. No silent fallback.
 
 Generated outputs include:
 
-- Parameterized IP-XACT 2022 XML, imported soc-ir.json and models.lock.json.
+- Parameterized IP-XACT 2022 XML, native-ir.json, checked soc-ir.json and models.lock.json.
 - machine.c: a compiled `usp-native` machine instantiating the declared devices.
 - gem5-board.py and engine-bindings.json: native instance graph and per-engine bindings.
 - soc.dts/soc.dtb: memory/I/O and interrupt descriptions from the same design.

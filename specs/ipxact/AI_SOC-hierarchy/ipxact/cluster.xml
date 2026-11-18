@@ -1,0 +1,24 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<design xmlns="http://www.accellera.org/XMLSchema/IPXACT/1685-2022">
+  <vendor>socsim.example</vendor>
+  <library>hierarchy</library>
+  <name>accelerator_cluster</name>
+  <version>1.0</version>
+  <componentInstances><componentInstance>
+      <instanceName>accelerator_a</instanceName>
+      <componentRef vendor="ucb-bar" library="chipyard" name="gcd" version="1.13.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="SIZE">4096</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>accelerator_b</instanceName>
+      <componentRef vendor="ucb-bar" library="chipyard" name="gcd" version="1.13.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="SIZE">4096</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    </componentInstances>
+</design>

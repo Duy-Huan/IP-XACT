@@ -15,6 +15,24 @@ names and counts are design data, independent of model type. Existing board
 profiles are regression fixtures, not the platform abstraction. Qualify this
 compiler path before adding CHIA or other orchestration/agent layers.
 
+Owner-approved upgrade objective, 2026-11-18: implement the versioned programme
+in docs/versioned-upgrade-plan.md. YAML and direct IEEE 1685-2022 intake must
+converge into one canonical design IR; backends and software generation consume
+that IR and an explicit execution plan. A new design made from qualified model
+packages must not need SoC-name branches in the compiler. Missing behaviour,
+protocols or CPU adapters are explicit unsupported/blocked results.
+
+Target v0.3.0 covers general compiler/IR, model packages, a common lifecycle and
+software/BSP generation (M1-M4); v0.4.0 adds qualified RTL CPU/bus, NoC/DMA/time
+and performance integration (M5-M7); v1.0.0 requires complete reference designs,
+eligible matching RTL/physical outputs and independent release qualification
+(M8-M9). Alpha releases are scoped incremental deliveries, not completion of
+their parent version. Publish an immutable version tag only after its exact
+candidate passes the applicable local gates and checked main promotion. Keep
+package/CLI version, changelog, release notes, tag and evidence consistent; never
+pre-create future version tags. The owner explicitly authorizes these versioned
+releases and pushes; the local-before-push rule still applies.
+
 Target ecosystems: QEMU functional emulation; gem5 architectural/timing simulation;
 Chipyard/Chisel and OpenTitan IP/SoC source integration; SystemC/TLM adapters and
 selective RTL co-simulation. Firmware direction: bare-metal, Zephyr first, then

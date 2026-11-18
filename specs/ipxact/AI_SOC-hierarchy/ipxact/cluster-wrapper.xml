@@ -1,0 +1,21 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<component xmlns="http://www.accellera.org/XMLSchema/IPXACT/1685-2022">
+  <vendor>socsim.example</vendor>
+  <library>hierarchy</library>
+  <name>accelerator_wrapper</name>
+  <version>1.0</version>
+  <model>
+    <views>
+      <view>
+        <name>rtl</name>
+        <designInstantiationRef>hier</designInstantiationRef>
+      </view>
+    </views>
+    <instantiations>
+      <designInstantiation>
+        <name>hier</name>
+        <designRef vendor="socsim.example" library="hierarchy" name="accelerator_cluster" version="1.0"/>
+      </designInstantiation>
+    </instantiations>
+  </model>
+</component>

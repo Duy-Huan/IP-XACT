@@ -144,7 +144,13 @@ def verify(generated):
     return record
 
 
-def checks(text):
-    return {marker: marker in text for marker in MARKERS} | {
-        "no_userspace_failure": "USP_LINUX_USERSPACE_FAIL" not in text
-    }
+def checks(text, harts=1):
+    return (
+        {marker: marker in text for marker in MARKERS}
+        | {"no_userspace_failure": "USP_LINUX_USERSPACE_FAIL" not in text}
+        | (
+            {"all_linux_harts_online": f"smp: Brought up 1 node, {harts} CPUs" in text}
+            if harts > 1
+            else {}
+        )
+    )

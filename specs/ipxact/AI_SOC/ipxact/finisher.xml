@@ -1,0 +1,25 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<component xmlns="http://www.accellera.org/XMLSchema/IPXACT/1685-2022">
+  <vendor>socsim.example</vendor>
+  <library>reference</library>
+  <name>finisher</name>
+  <version>1.0</version>
+  <memoryMaps>
+    <memoryMap>
+      <name>map</name>
+      <addressBlock>
+        <name>region</name>
+        <baseAddress>0</baseAddress>
+        <range>SIZE</range>
+        <width>32</width>
+        <usage>register</usage>
+      </addressBlock>
+    </memoryMap>
+  </memoryMaps>
+  <parameters>
+    <parameter parameterId="SIZE" type="longint" sign="unsigned" resolve="user">
+      <name>SIZE</name>
+      <value>4096</value>
+    </parameter>
+  </parameters>
+</component>

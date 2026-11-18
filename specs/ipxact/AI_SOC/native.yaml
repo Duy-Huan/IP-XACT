@@ -1,0 +1,72 @@
+schema_version: native-ipxact-1
+design: ipxact/design.xml
+name: AI_SOC_SMP
+cpu:
+  name: application_cluster
+  model: qemu.rv64
+  gem5_model: gem5.RiscvTimingSimpleCPU
+  timebase_hz: 10000000
+  harts: 4
+  clock_hz: 800000000
+  memory_latency_ns: 25
+boot:
+  ram: main_sram
+  rom: boot_code
+  console: debug_console
+  entry: 6442450944
+placements:
+  application_cluster: 0
+  application_cluster_hart1: 0
+  application_cluster_hart2: 0
+  application_cluster_hart3: 0
+  main_sram: 6442450944
+  scratch_sram: 2415919104
+  boot_code: 4096
+  timer_controller: 33554432
+  interrupt_controller: 201326592
+  simulation_exit: 1048576
+  debug_console: 4580179968
+  service_console: 4580184064
+  accelerator_a: 4613734400
+  accelerator_b: 4613738496
+  control_gpio: 4630511616
+  status_gpio: 4630515712
+bindings:
+- instance: application_cluster
+  model: cpu
+- instance: application_cluster_hart1
+  model: cpu
+- instance: application_cluster_hart2
+  model: cpu
+- instance: application_cluster_hart3
+  model: cpu
+- instance: main_sram
+  model: ram
+- instance: scratch_sram
+  model: ram
+- instance: boot_code
+  model: rom
+- instance: timer_controller
+  model: clint
+- instance: interrupt_controller
+  model: plic
+- instance: simulation_exit
+  model: finisher
+- instance: debug_console
+  model: uart
+  irq: 10
+- instance: service_console
+  model: uart
+  irq: 11
+- instance: accelerator_a
+  model: chipyard.gcd
+  irq: 12
+- instance: accelerator_b
+  model: chipyard.gcd
+  irq: 14
+- instance: control_gpio
+  model: opentitan.gpio
+  irq: 13
+- instance: status_gpio
+  model: opentitan.gpio
+  irq: 15

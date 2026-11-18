@@ -1,5 +1,9 @@
 # Native SoC input specifications
 
+ipxact/AI_SOC, ipxact/AIZ_SOC and ipxact/AI_SOC-hierarchy provide direct structural
+IP-XACT examples with native.yaml runtime bindings. Use --input-format ipxact.
+See docs/canonical-native-ir.md; these share the checked native IR/backend path.
+
 AI_SOC-native.yaml and AIZ_SOC-native.yaml are executable generator acceptance
 inputs. They specify instance identity, model, memory/I/O placement, IRQ and boot
 ownership. They deliberately use different instance counts and maps, independent
