@@ -1,0 +1,64 @@
+# Actual source CPU candidate; explicit one-RAM PMA profile, not full inventory.
+schema_version: '1'
+name: AI_SOC_Rocket_native
+cpu:
+  name: application_core
+  model: chipyard.rocket64-imac-sv39-axi32
+  timebase_hz: 10000000
+  clock_hz: 50000000
+boot:
+  ram: main_sram
+  rom: boot_code
+  console: debug_console
+  entry: 2147483648
+devices:
+- name: main_sram
+  model: ram
+  base: 2147483648
+  size: 16777216
+- name: boot_code
+  model: rom
+  base: 4096
+  size: 4096
+- name: timer_controller
+  model: clint
+  base: 33554432
+  size: 65536
+- name: interrupt_controller
+  model: plic
+  base: 201326592
+  size: 67108864
+- name: simulation_exit
+  model: finisher
+  base: 1048576
+  size: 4096
+- name: debug_console
+  model: uart
+  base: 285212672
+  size: 256
+  irq: 10
+- name: service_console
+  model: uart
+  base: 285216768
+  size: 256
+  irq: 11
+- name: accelerator_a
+  model: chipyard.gcd
+  base: 318767104
+  size: 4096
+  irq: 12
+- name: accelerator_b
+  model: chipyard.gcd
+  base: 318771200
+  size: 4096
+  irq: 14
+- name: control_gpio
+  model: opentitan.gpio
+  base: 335544320
+  size: 4096
+  irq: 13
+- name: status_gpio
+  model: opentitan.gpio
+  base: 335548416
+  size: 4096
+  irq: 15

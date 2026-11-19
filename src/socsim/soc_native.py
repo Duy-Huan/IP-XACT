@@ -49,6 +49,8 @@ def compiler_identity():
             "native_external.py",
             "soc_spec.py",
             "native_ir.py",
+            "native_cpu_binding.py",
+            "schemas/native-cpu-binding-v1.json",
             "native_ipxact.py",
             "native_fabric.py",
             "native_bus_graph.py",
@@ -91,7 +93,9 @@ def generate(spec_path, out, engine="qemu", input_format="yaml"):
 
     preflight(spec, source_root)
     engines = ["qemu", "gem5"] if engine == "both" else [engine]
-    if "gem5" in engines and "gem5_model" not in spec["cpu"]:
+    from .native_cpu_binding import binding, is_rtl
+
+    if "gem5" in engines and "gem5_model" not in spec["cpu"] and not is_rtl(spec["cpu"]):
         raise ContractError("native gem5 requires explicit cpu.gem5_model; no CPU substitution")
     out = out.resolve()
     out.mkdir(parents=True, exist_ok=False)
@@ -113,7 +117,7 @@ def generate(spec_path, out, engine="qemu", input_format="yaml"):
         canonical = compile_design(spec, emit_ipxact(spec, out))
         canonical = replace(
             canonical,
-            schema_version="4",
+            schema_version="6" if canonical.cpu_binding else "4",
             fabric="hierarchical-static-decode-v1",
             routing=routing,
             sources=tuple(
@@ -279,11 +283,26 @@ def generate(spec_path, out, engine="qemu", input_format="yaml"):
     }
     engine_bindings = {}
     for e in engines:
+        cpu_source = binding(spec["cpu"])
         engine_bindings[e] = [
             {
                 "instance": cpu,
-                "implementation": spec["cpu"]["model" if e == "qemu" else "gem5_model"],
-                "source_commit": QEMU_SHA if e == "qemu" else GEM5_SHA,
+                "implementation": spec["cpu"]["model"]
+                if cpu_source
+                else spec["cpu"]["model" if e == "qemu" else "gem5_model"],
+                "source_commit": dict(cpu_source.source_pins)["rocket-chip"]
+                if cpu_source
+                else QEMU_SHA
+                if e == "qemu"
+                else GEM5_SHA,
+                **(
+                    {
+                        "instruction_owner": cpu_source.instruction_owner,
+                        "memory_engine_context": dict(cpu_source.memory_contexts)[e],
+                    }
+                    if cpu_source
+                    else {}
+                ),
             }
             for cpu in cpu_instances(spec)
         ]
@@ -307,6 +326,9 @@ def generate(spec_path, out, engine="qemu", input_format="yaml"):
         {
             "contract": "native-flat-functional-v1",
             "cpu_instances": cpu_instances(spec),
+            **(
+                {"cpu_binding": canonical.to_dict()["cpu_binding"]} if canonical.cpu_binding else {}
+            ),
             "harts": spec["cpu"]["harts"],
             "cpu_clock_hz": spec["cpu"]["clock_hz"],
             "memory_latency_ns": spec["cpu"]["memory_latency_ns"],
@@ -538,6 +560,9 @@ def run(
     gem5_build=None,
     software="baremetal",
     qemu_profile=None,
+    rtl_cpu_build=None,
+    max_cycles=10000000,
+    rtl_markers=None,
 ):
     generated, out = generated.resolve(), out.resolve()
     models = models.resolve() if models is not None else None
@@ -547,6 +572,29 @@ def run(
     if software not in {"baremetal", "linux"} or (software == "linux" and firmware is not None):
         raise ContractError("select generated Linux or bare-metal/user ELF, not both")
     spec = verify_generated(generated)
+    from .native_cpu_binding import is_rtl
+
+    if is_rtl(spec["cpu"]):
+        from .native_rtl import run as run_rtl
+
+        if rtl_cpu_build is None:
+            raise ContractError("source CPU requires --rtl-cpu-build; no ISS substitution")
+        if software != "baremetal" or qemu_profile is not None:
+            raise ContractError("native RTL requires explicit eligible firmware and RTL counters")
+        return run_rtl(
+            generated,
+            rtl_cpu_build,
+            models,
+            engine,
+            out,
+            gem5_build,
+            firmware,
+            rtl_markers,
+            max_cycles,
+            timeout,
+        )
+    if rtl_cpu_build is not None:
+        raise ContractError("RTL CPU build does not match the native ISS CPU selection")
     linux_record = None
     if software == "linux":
         from .soc_native_linux import verify as verify_linux
@@ -798,6 +846,10 @@ def run(
 def verify(out):
     out = out.resolve()
     record = json.loads((out / "report.json").read_text())
+    if record.get("profile") == "native-rtl-cpu-v1":
+        from .native_rtl import verify as verify_rtl
+
+        return verify_rtl(out)
     for filename, sha in record["files"].items():
         if digest(inside(out, filename)) != sha:
             raise ContractError("modified native run evidence: " + filename)
@@ -841,6 +893,9 @@ def accept(
     firmware=None,
     peripheral_acceptance=True,
     qemu_profile=None,
+    rtl_cpu_build=None,
+    max_cycles=10000000,
+    rtl_markers=None,
 ):
     """Run two independent native engines concurrently against the same IR/ELF."""
     generated, out = generated.resolve(), out.resolve()
@@ -863,6 +918,9 @@ def accept(
                 gem5_build,
                 software,
                 qemu_profile,
+                rtl_cpu_build,
+                max_cycles,
+                rtl_markers,
             )
             for e in ("qemu", "gem5")
         }
@@ -961,6 +1019,9 @@ def main(argv):
     sub.add_argument("--software", choices=["baremetal", "linux"], default="baremetal")
     sub.add_argument("--engine", choices=["qemu", "gem5"], default="qemu")
     sub.add_argument("--gem5-build", type=Path)
+    sub.add_argument("--rtl-cpu-build", type=Path)
+    sub.add_argument("--max-cycles", type=int, default=10000000)
+    sub.add_argument("--marker", action="append")
     sub = commands.add_parser("accept")
     sub.add_argument("--generated", type=Path, required=True)
     sub.add_argument("--models", type=Path)
@@ -969,7 +1030,19 @@ def main(argv):
     sub.add_argument("--timeout", type=float, default=30)
     sub.add_argument("--software", choices=["baremetal", "linux"], default="baremetal")
     sub.add_argument("--firmware", type=Path)
+    sub.add_argument("--rtl-cpu-build", type=Path)
+    sub.add_argument("--max-cycles", type=int, default=10000000)
+    sub.add_argument("--marker", action="append")
     sub = commands.add_parser("gem5-build")
+    sub.add_argument("--source-gem5", type=Path, required=True)
+    sub.add_argument("--out", type=Path, required=True)
+    sub.add_argument("--jobs", type=int, default=2)
+    sub = commands.add_parser("cpu-build")
+    sub.add_argument("--generated", type=Path, required=True)
+    for option in ("upstream", "tools", "java-home", "scala-cache", "out"):
+        sub.add_argument("--" + option, type=Path, required=True)
+    sub.add_argument("--jobs", type=int, default=2)
+    sub = commands.add_parser("gem5-rtl-build")
     sub.add_argument("--source-gem5", type=Path, required=True)
     sub.add_argument("--out", type=Path, required=True)
     sub.add_argument("--jobs", type=int, default=2)
@@ -986,6 +1059,22 @@ def main(argv):
             from .soc_native_gem5 import build_engine
 
             result = build_engine(args.source_gem5, args.out, args.jobs)
+        elif args.action == "gem5-rtl-build":
+            from .native_rtl_engine import build as build_engine
+
+            result = build_engine(args.source_gem5, args.out, args.jobs)
+        elif args.action == "cpu-build":
+            from .native_cpu_binding import build_cpu
+
+            result = build_cpu(
+                verify_generated(args.generated.resolve()),
+                args.out,
+                args.upstream,
+                args.tools,
+                args.java_home,
+                args.scala_cache,
+                args.jobs,
+            )
         elif args.action == "models":
             result = {
                 "engines": ["qemu", "gem5"],
@@ -1066,6 +1155,9 @@ def main(argv):
                 args.engine,
                 args.gem5_build.resolve() if args.gem5_build else None,
                 args.software,
+                rtl_cpu_build=args.rtl_cpu_build,
+                max_cycles=args.max_cycles,
+                rtl_markers=args.marker,
             )
         elif args.action == "accept":
             result = accept(
@@ -1076,6 +1168,9 @@ def main(argv):
                 args.timeout,
                 args.software,
                 args.firmware,
+                rtl_cpu_build=args.rtl_cpu_build,
+                max_cycles=args.max_cycles,
+                rtl_markers=args.marker,
             )
         else:
             result = verify(args.out.resolve())

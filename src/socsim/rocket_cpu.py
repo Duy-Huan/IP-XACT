@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -36,6 +37,11 @@ TRACE_PC = {
     "raw_encoding": "upstream vaddrBitsExtended zero-extended into wrapper UInt64",
     "canonical_rule": "sign-extend bit39 to 64 bits; preserve raw event bytes",
 }
+COMMIT_LINE = re.compile(
+    r'\{"cycle":(0|[1-9][0-9]*),"pc":(0|[1-9][0-9]*),'
+    r'"instruction":(0|[1-9][0-9]*),"trap":([01])\}\n?\Z',
+    re.ASCII,
+)
 
 
 def canonical_pc(value):
@@ -328,24 +334,35 @@ def commit_summary(path):
             for line in stream:
                 if len(line) > 4096:
                     return None
-                row = json.loads(line)
-                if (
-                    not isinstance(row, dict)
-                    or any(type(row.get(k)) is not int for k in ("cycle", "pc", "instruction"))
-                    or type(row.get("trap")) not in {int, bool}
-                    or row["trap"] not in {0, 1}
-                    or row["cycle"] <= last
-                    or not 0 <= row["pc"] < 2**40
-                    or not 0 <= row["instruction"] < 2**32
-                ):
+                # The fixed native wire spelling has an allocation-light path.
+                # Other valid JSON spellings retain the same strict typed checks.
+                match = COMMIT_LINE.fullmatch(line)
+                if match:
+                    cycle, pc, instruction, trap = (int(x) for x in match.groups())
+                else:
+                    row = json.loads(line)
+                    if (
+                        not isinstance(row, dict)
+                        or any(type(row.get(k)) is not int for k in ("cycle", "pc", "instruction"))
+                        or type(row.get("trap")) not in {int, bool}
+                        or row["trap"] not in {0, 1}
+                    ):
+                        return None
+                    cycle, pc, instruction, trap = (
+                        row["cycle"],
+                        row["pc"],
+                        row["instruction"],
+                        row["trap"],
+                    )
+                if cycle <= last or not 0 <= pc < 2**40 or not 0 <= instruction < 2**32:
                     return None
-                last = row["cycle"]
-                retired += not row["trap"]
-                traps += bool(row["trap"])
-                if not row["trap"]:
-                    user_virtual |= 0x50000000 <= row["pc"] < 0x50001000
-                    if row["instruction"] & 127 == 0x23:
-                        stores.add((row["instruction"] >> 12) & 7)
+                last = cycle
+                retired += not trap
+                traps += bool(trap)
+                if not trap:
+                    user_virtual |= 0x50000000 <= pc < 0x50001000
+                    if instruction & 127 == 0x23:
+                        stores.add((instruction >> 12) & 7)
     except (OSError, ValueError, EOFError):
         return None
     return (retired, traps, last, stores, user_virtual) if last >= 0 else None

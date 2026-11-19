@@ -268,8 +268,13 @@ def test_actual_rocket_bus_errors_and_execution_budget_cannot_pass(tmp_path, eng
         assert report["counters"]["instructions"] == 0
 
 
-@pytest.mark.parametrize("case", ["valid", "backwards", "negative-pc", "bad-trap", "truncated"])
-def test_streamed_retirement_validation_rejects_partial_or_invalid_evidence(tmp_path, case):
+@pytest.mark.parametrize(
+    "case", ["valid", "backwards", "negative-pc", "bad-trap", "truncated", "wide-pc"]
+)
+@pytest.mark.parametrize("spelling", ["json", "native-wire"])
+def test_streamed_retirement_validation_rejects_partial_or_invalid_evidence(
+    tmp_path, case, spelling
+):
     from socsim.rocket_cpu import commit_summary
 
     rows = [{"cycle": i, "pc": 0x80000000, "instruction": 0x23, "trap": 0} for i in range(5)]
@@ -279,8 +284,11 @@ def test_streamed_retirement_validation_rejects_partial_or_invalid_evidence(tmp_
         rows[-1]["pc"] = -1
     elif case == "bad-trap":
         rows[-1]["trap"] = 7
+    elif case == "wide-pc":
+        rows[-1]["pc"] = 1 << 40
     path = tmp_path / "commit.jsonl"
-    path.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    options = {"separators": (",", ":")} if spelling == "native-wire" else {}
+    path.write_text("".join(json.dumps(r, **options) + "\n" for r in rows))
     if case == "truncated":
         with path.open("a") as stream:
             stream.write('{"cycle":')
@@ -289,6 +297,18 @@ def test_streamed_retirement_validation_rejects_partial_or_invalid_evidence(tmp_
         assert summary == (5, 0, 4, {0}, False)
     else:
         assert summary is None
+
+
+@pytest.mark.parametrize("field", ["cycle", "pc", "instruction", "trap"])
+def test_native_wire_cannot_accept_leading_zero_json_numbers(tmp_path, field):
+    from socsim.rocket_cpu import commit_summary
+
+    line = '{"cycle":1,"pc":1,"instruction":1,"trap":0}\n'
+    value = "0" if field == "trap" else "1"
+    line = line.replace('"' + field + '":' + value, '"' + field + '":0' + value)
+    path = tmp_path / "invalid-wire.jsonl"
+    path.write_text(line)
+    assert commit_summary(path) is None
 
 
 @pytest.mark.parametrize("name", ["rv64-ips", "AI_SOC", "AIZ_SOC"])

@@ -351,3 +351,11 @@ Optional QEMU RAM burst snapshots preserve individual RTL AXI handshakes; qualif
 scalar/burst retirement equivalence, FENCE.I and fault exclusion. Defer actual
 engine finisher writes until accepted AXI transactions finish; no fabricated
 responses after engine exit. This does not close general CPU binding or M5-M9.
+
+Native source CPU changes require docs/native-rtl-cpu.md and actual both-engine
+acceptance of the 12/11-instance arbitrary-name/maps fixtures. Require
+USP_REQUIRE_NATIVE_ROCKET, USP_NATIVE_ROCKET_ROOT, USP_NATIVE_ROCKET_CPU_ROOT and
+USP_NATIVE_RTL_ENGINE before promotion. The v6 source binding must not become
+an ISS substitution, and atomic backing-memory/PA32/one-RAM limits stay explicit.
+Preserve the source-cache executable separately while linking a native engine;
+interrupted copy/controller attempts do not qualify a completed build.

@@ -64,16 +64,20 @@ def validate_cpu(data):
         "native CPU",
     )
     name(cpu["name"])
+    from .native_cpu_binding import ROCKET, is_rtl
+    from .native_cpu_binding import validate_cpu as validate_rtl_cpu
+
+    rtl = is_rtl(cpu)
     for field, default, low, high in (
         ("harts", 1, 1, 8),
-        ("clock_hz", 1000000000, 1000000, 10000000000),
+        ("clock_hz", 50000000 if rtl else 1000000000, 1000000, 10000000000),
         ("memory_latency_ns", 10, 1, 100000),
     ):
         cpu[field] = integer(cpu.get(field, default), "cpu." + field)
         if not low <= cpu[field] <= high:
             raise ContractError(f"unsupported native cpu.{field}: expected {low}..{high}")
-    if not isinstance(cpu["model"], str) or cpu["model"] not in {"qemu.rv64", "qemu.max"}:
-        raise ContractError("native generator currently binds QEMU rv64/max; no CPU substitution")
+    if not isinstance(cpu["model"], str) or cpu["model"] not in {"qemu.rv64", "qemu.max", ROCKET}:
+        raise ContractError("native generator needs a qualified CPU binding; no CPU substitution")
     if "gem5_model" in cpu and (
         not isinstance(cpu["gem5_model"], str)
         or cpu["gem5_model"] not in {"gem5.RiscvTimingSimpleCPU", "gem5.RiscvAtomicSimpleCPU"}
@@ -82,6 +86,7 @@ def validate_cpu(data):
     cpu["timebase_hz"] = integer(cpu["timebase_hz"], "timebase_hz")
     if not 1000 <= cpu["timebase_hz"] <= 100000000:
         raise ContractError("unsupported native timebase")
+    validate_rtl_cpu(cpu)
     return cpu
 
 
@@ -168,6 +173,10 @@ def validate_spec(data):
     ranges = sorted((d["base"], d["base"] + d["size"]) for d in data["devices"])
     if any(b[0] < a[1] for a, b in zip(ranges, ranges[1:], strict=False)):
         raise ContractError("overlapping native memory/IO windows")
+    from .native_cpu_binding import is_rtl, layout
+
+    if is_rtl(cpu):
+        layout(data)
     return data
 
 
@@ -186,7 +195,6 @@ def selected(spec, field):
 
 def emit_ipxact(spec, out):
     """Emit parameterized 2022 XML, then re-import with the existing XSD/IR frontend."""
-    cat = catalog()
     directory = out / "ipxact"
     directory.mkdir()
 
@@ -211,7 +219,7 @@ def emit_ipxact(spec, out):
     for kind in sorted(kinds | {"cpu"}):
         component = root(
             "component",
-            cat["rv64"]["vlnv"] if kind == "cpu" else model_descriptor(spec, kind)["vlnv"],
+            cpu_descriptor(spec)["vlnv"] if kind == "cpu" else model_descriptor(spec, kind)["vlnv"],
         )
         if kind != "cpu":
             block = element(element(element(component, "memoryMaps"), "memoryMap"), "name", "map")
@@ -247,7 +255,7 @@ def emit_ipxact(spec, out):
         instance = element(instances, "componentInstance")
         element(instance, "instanceName", dev["name"])
         vlnv = (
-            cat["rv64"]["vlnv"]
+            cpu_descriptor(spec)["vlnv"]
             if dev["model"] == "cpu"
             else model_descriptor(spec, dev["model"])["vlnv"]
         )
@@ -274,7 +282,7 @@ def emit_ipxact(spec, out):
             "rv64imac_zicsr_zifencei",
             "MSU",
             "sv39",
-            selected(spec, "rom")["base"],
+            cpu_reset(spec),
             spec["boot"]["entry"],
             spec["cpu"]["timebase_hz"],
         ),
@@ -296,8 +304,15 @@ def emit_ipxact(spec, out):
 
 def write_model_lock(spec, out):
     """Model lock independent of the structural frontend."""
+    from .native_cpu_binding import binding
+
+    source = binding(spec["cpu"])
     bindings = [
-        {"instance": n, "model": spec["cpu"]["model"], "source_commit": QEMU_SHA}
+        {
+            "instance": n,
+            "model": spec["cpu"]["model"],
+            "source_commit": dict(source.source_pins)["rocket-chip"] if source else QEMU_SHA,
+        }
         for n in cpu_instances(spec)
     ]
     bindings += [
@@ -314,11 +329,23 @@ def write_model_lock(spec, out):
         out / "models.lock.json",
         {
             "policy": "strict",
-            "catalog_backend": "qemu",
+            "catalog_backend": "native-rtl" if source else "qemu",
             "bindings": bindings,
             "execution_bindings": "engine-bindings.json",
         },
     )
+
+
+def cpu_descriptor(spec):
+    from .native_cpu_binding import ROCKET_VLNV, is_rtl
+
+    return {"vlnv": ROCKET_VLNV} if is_rtl(spec["cpu"]) else catalog()["rv64"]
+
+
+def cpu_reset(spec):
+    from .native_cpu_binding import is_rtl
+
+    return spec["boot"]["entry"] if is_rtl(spec["cpu"]) else selected(spec, "rom")["base"]
 
 
 def model_descriptor(spec, model):

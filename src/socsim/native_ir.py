@@ -19,10 +19,19 @@ from .domain import (
     Window,
 )
 from .native_bus_graph import BusGraph
+from .native_cpu_binding import NativeCpuBinding, binding
 from .native_fabric import Routing
 from .project import keys
 from .registers import verify_model_registers
-from .soc_spec import ROLE, WIDTH, catalog, cpu_instances, model_descriptor, selected, validate_spec
+from .soc_spec import (
+    ROLE,
+    WIDTH,
+    cpu_descriptor,
+    cpu_instances,
+    cpu_reset,
+    model_descriptor,
+    validate_spec,
+)
 
 SCHEMA = Path(__file__).parent / "schemas/native-ir-v3.json"
 
@@ -95,6 +104,7 @@ class NativeIR:
     sources: tuple[tuple[str, str], ...]
     routing: Routing | None = None
     bus_graph: BusGraph | None = None
+    cpu_binding: NativeCpuBinding | None = None
 
     def to_dict(self):
         data = asdict(self)
@@ -102,6 +112,12 @@ class NativeIR:
             data.pop("routing")
         if self.bus_graph is None:
             data.pop("bus_graph")
+        if self.cpu_binding is None:
+            data.pop("cpu_binding")
+        if self.schema_version == "6":
+            for cpu in data["cpus"]:
+                cpu["model"] = cpu.pop("qemu_model")
+                cpu.pop("gem5_model")
         return json.loads(json.dumps(data))
 
     def to_spec(self):
@@ -166,14 +182,14 @@ def compile_design(spec, structural):
         "rv64imac_zicsr_zifencei",
         "MSU",
         "sv39",
-        selected(spec, "rom")["base"],
+        cpu_reset(spec),
         spec["boot"]["entry"],
         spec["cpu"]["timebase_hz"],
     )
     cpus = []
     for h, n in enumerate(names):
         i = by_name[n]
-        if i.vlnv != catalog()["rv64"]["vlnv"] or i.windows or i.parameters:
+        if i.vlnv != cpu_descriptor(spec)["vlnv"] or i.windows or i.parameters:
             raise ContractError(f"E_NATIVE_CPU unsupported CPU declaration: {n}")
         cpus.append(
             Cpu(
@@ -207,7 +223,7 @@ def compile_design(spec, structural):
         irq += [InterruptRoute(clint, n, line, "level-high") for line in (3, 7)]
         irq += [InterruptRoute(controller, n, line, "level-high") for line in (9, 11)]
     return NativeIR(
-        "3",
+        "6" if binding(spec["cpu"]) else "3",
         spec["name"],
         structural.vlnv,
         tuple(cpus),
@@ -231,6 +247,7 @@ def compile_design(spec, structural):
         spec["cpu"]["memory_latency_ns"],
         tuple(ExternalModel(model=k, **v) for k, v in sorted(spec["external_models"].items())),
         tuple(structural.sources),
+        cpu_binding=binding(spec["cpu"]),
     )
 
 
@@ -273,6 +290,25 @@ def read_ir(path):
         if not isinstance(data, dict):
             raise ContractError("E_NATIVE_IR canonical graph must be a mapping")
         schema = json.loads(SCHEMA.read_text())
+        if data.get("schema_version") == "6":
+            schema["properties"]["schema_version"] = {"const": "6"}
+            cpu_schema = schema["properties"]["cpus"]["items"]
+            cpu_schema["properties"]["model"] = cpu_schema["properties"].pop("qemu_model")
+            cpu_schema["properties"].pop("gem5_model")
+            cpu_schema["required"] = [
+                "model" if n == "qemu_model" else n
+                for n in cpu_schema["required"]
+                if n != "gem5_model"
+            ]
+            schema["properties"]["cpu_binding"] = json.loads(
+                SCHEMA.with_name("native-cpu-binding-v1.json").read_text()
+            )
+            schema["required"].append("cpu_binding")
+            schema["properties"]["fabric"] = {
+                "enum": ["flat-functional-v1", "hierarchical-static-decode-v1"]
+            }
+            schema["properties"]["routing"] = {"type": "object"}
+            schema["properties"]["bus_graph"] = {"type": "object"}
         if data.get("schema_version") in {"4", "5"}:
             schema["properties"]["schema_version"] = {"const": data["schema_version"]}
             schema["properties"]["fabric"] = {"const": "hierarchical-static-decode-v1"}
@@ -288,8 +324,8 @@ def read_ir(path):
                 instance_from_dict(c["instance"]),
                 c["hart_id"],
                 CpuContract(**c["contract"]),
-                c["qemu_model"],
-                c["gem5_model"],
+                c["model"] if data["schema_version"] == "6" else c["qemu_model"],
+                None if data["schema_version"] == "6" else c["gem5_model"],
                 c["clock"],
                 c["reset"],
             )
@@ -317,12 +353,29 @@ def read_ir(path):
             tuple(ExternalModel(**m) for m in data["external_models"]),
             tuple(tuple(s) for s in data["sources"]),
         )
-        if data["schema_version"] in {"4", "5"}:
+        if data["schema_version"] == "6":
+            b = data["cpu_binding"]
+            ir = replace(
+                ir,
+                cpu_binding=NativeCpuBinding(
+                    b["provider"],
+                    b["model"],
+                    tuple(tuple(x) for x in b["source_pins"]),
+                    b["protocol"],
+                    b["instruction_owner"],
+                    tuple(tuple(x) for x in b["memory_contexts"]),
+                    b["external_dma_coherence"],
+                    b["timing_correlated"],
+                ),
+            )
+            if (data["fabric"] == "hierarchical-static-decode-v1") != ("routing" in data):
+                raise ContractError("E_NATIVE_IR inconsistent native CPU/fabric capability")
+        if data["schema_version"] in {"4", "5"} or "routing" in data:
             from .native_fabric import parse_routing, verify_projection
 
             ir = replace(ir, routing=parse_routing(data["routing"]))
             verify_projection(ir.routing, ir.to_spec())
-        if data["schema_version"] == "5":
+        if data["schema_version"] == "5" or "bus_graph" in data:
             from .native_bus_graph import read_graph, verify_projection
 
             ir = replace(ir, bus_graph=read_graph(data["bus_graph"]))

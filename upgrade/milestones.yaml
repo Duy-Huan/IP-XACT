@@ -1,8 +1,8 @@
 schema_version: '1'
 baseline:
-  tag: v0.3.0-alpha.1
-  commit: e3709121444f31a25e80b80ebe3d63ca55022b0f
-  local_passed: 534
+  tag: v0.3.0-alpha.4
+  commit: a05dd99a6832f7fc1f8b9342636e5e1e811f2c9d
+  local_passed: 664
   hosted_ci: unobserved
 policy:
   execution: sequential

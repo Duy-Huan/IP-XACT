@@ -2,6 +2,20 @@
 
 ## Unreleased — continuous milestone implementation
 
+- Add native IR v6 with an explicit source CPU binding, pinned Rocket identity,
+  halted QEMU/gem5 IRQ contexts and one-RAM/PA32 capability checks. Preserve
+  v3/v4/v5 ISS designs and strict rejection of unsupported CPU substitutions.
+- Generate arbitrary-instance Rocket memory graphs and source-built firmware
+  through the native CLI; AI_SOC/AIZ_SOC development fixtures execute the same
+  IR/ELF concurrently on QEMU and gem5, with actual multi-instance IP IRQs and
+  zero native gem5 ISS instructions. These 12/11-instance fixtures do not close
+  the full 46/37-instance targets; aggregate qualification remains pending.
+- Extend the persisted flow with source CPU build/verified reuse and eligible
+  kernel selection; its new complete software matrix is still being qualified.
+- Preserve source-cache binaries by atomic rename while linking gem5, retain
+  interrupted outputs and capture completed artifacts without duplicate copies
+  on the same filesystem. Real capacity/parent-cycle/UART-collection failures
+  were preserved and corrected before the passing native dual-engine probe.
 - Build the actual Chipyard-pinned RocketTile with its L1/PTW/TLBroadcast and AXI
   adapters; execute real RTL instructions on QEMU/gem5-owned physical memory.
 - Add explicit CPU ownership/plan lowering, strict RV64IMAC LP64 ELF checks,

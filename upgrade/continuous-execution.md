@@ -55,3 +55,10 @@ was fixed by committing the real engine finisher only after accepted requests
 drain. Focused checks: 60 contract tests and five real all-map scalar/burst/fault
 tests passed with no skips. Linux/complete Rocket native gates remain in progress;
 do not translate this checkpoint into aggregate CI, main promotion or a new tag.
+
+Native source-CPU development now has typed IR v6 and actual arbitrary-instance
+QEMU/gem5 memory graphs. A focused probe passed AI_SOC/AIZ_SOC 12/11-instance
+fixtures concurrently on both engines, with exact shared IR/ELF, independent
+source IP state/IRQs and zero native gem5 ISS counters. The AIZ_SOC execution
+entered through standard bus XML. Full software/reset/error and aggregate gates
+remain pending; the full 46/37 inventories and broad M8–M9 exits stay open.

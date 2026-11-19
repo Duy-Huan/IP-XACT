@@ -1,0 +1,59 @@
+# Actual source CPU candidate; explicit one-RAM PMA profile, not full inventory.
+schema_version: '1'
+name: AIZ_SOC_Rocket_native
+cpu:
+  name: control_core
+  model: chipyard.rocket64-imac-sv39-axi32
+  timebase_hz: 5000000
+  clock_hz: 50000000
+boot:
+  ram: working_memory
+  rom: reset_memory
+  console: trace_port
+  entry: 2164264960
+devices:
+- name: working_memory
+  model: ram
+  base: 2164260864
+  size: 8388608
+- name: reset_memory
+  model: rom
+  base: 32768
+  size: 8192
+- name: time_unit
+  model: clint
+  base: 34603008
+  size: 65536
+- name: irq_unit
+  model: plic
+  base: 201326592
+  size: 67108864
+- name: result_port
+  model: finisher
+  base: 1114112
+  size: 4096
+- name: trace_port
+  model: uart
+  base: 369098752
+  size: 256
+  irq: 3
+- name: math_0
+  model: chipyard.gcd
+  base: 385875968
+  size: 4096
+  irq: 5
+- name: math_1
+  model: chipyard.gcd
+  base: 385888256
+  size: 4096
+  irq: 9
+- name: math_2
+  model: chipyard.gcd
+  base: 385912832
+  size: 4096
+  irq: 17
+- name: event_pins
+  model: opentitan.gpio
+  base: 402653184
+  size: 4096
+  irq: 19
