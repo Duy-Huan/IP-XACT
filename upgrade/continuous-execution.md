@@ -36,3 +36,8 @@ Development findings, not closed exits:
   identities and exact explicit engine/software reuse; never rewrite hashes.
 - Next CPU work: Linux boot ABI and long-run trace resources, generic native IR
   binding, reset/error coverage, then BOOM. Full M5 and M8 remain open.
+
+`49381fe` focused Rocket checkpoint: 101/101 passed, zero skips, 644.58 seconds;
+all raw outputs are in an exact verified archive with JUnit/provenance. This is
+not the aggregate gate. Following work adds lossless long-trace storage and an
+actual OpenSBI/Linux RTL boot investigation; no userspace success is claimed yet.

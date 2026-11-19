@@ -105,3 +105,22 @@ ELF32 prototype is retained. Large retirement logs are validated as streams; the
 verifier recomputes actual CPI/IPC and rejects modified IR, binary dependencies,
 partial AXI responses or mixed software origins. None of these checks calibrates
 the atomic memory timing model to silicon.
+
+Focused checkpoint `49381fe`: 101 actual tests passed in 644.58 seconds with no
+skips, covering all three low-PA profiles and both physical-memory engines.
+Raw logs/JUnit and a hash-verified archive of 1,235 native output files are kept
+in `results/continuous-upgrade-20261119/ROCKET-CHECKPOINT.json`. This scoped
+checkpoint is independent of the aggregate release gate and main remains unchanged.
+
+Subsequent long-boot work adds optional `--compress-trace`: actual CPU stdout and
+all commit records pass through bounded pipe buffers into lossless gzip streams.
+Gzip/raw hashes and EOF completion are recorded; missing/truncated streams cannot
+pass retirement checks. This changes storage, not simulated cycles or instruction
+ownership. Existing CPU builds are unchanged. Explicit bounds may select up to
+100 million cycles/1,800 seconds; the default remains one million cycles.
+
+Linux investigation has reached actual OpenSBI and S-mode kernel memory setup,
+not accepted userspace yet. A boot trampoline supplies hart ID and DTB, while a
+fresh pinned OpenSBI build preserves its firmware-region alignment and the Linux
+2 MiB payload alignment. The failed entry/alignment and budget-exhaustion probes
+are preserved. Do not infer Linux acceptance from the banner or this work log.

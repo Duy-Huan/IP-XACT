@@ -20,6 +20,7 @@ from .execution import cleanup_on_termination
 from .gem5 import python_environment
 from .ipblocks import verify_models
 from .ipxact import digest
+from .log_capture import LogCapture, open_log
 from .pipeline import QEMU_SHA, execute, identity, verify_generated
 from .rocket_build import CPU_CONTRACT, PINS, RESOURCES, address_map_contract, verify_build
 from .rtl_cpu import MARKERS, ZERO_COUNTERS, read_rows, unmapped_test_address, wait_socket
@@ -36,6 +37,7 @@ def runtime_identity():
             "rocket_cpu.py",
             "rocket_software.py",
             "rocket_zephyr.py",
+            "log_capture.py",
             "unified.py",
             "rtl_cpu.py",
             "execution.py",
@@ -287,7 +289,7 @@ def commit_summary(path):
     stores = set()
     user_virtual = False
     try:
-        with path.open() as stream:
+        with open_log(path) as stream:
             for line in stream:
                 if len(line) > 4096:
                     return None
@@ -309,7 +311,7 @@ def commit_summary(path):
                     user_virtual |= 0x50000000 <= row["pc"] < 0x50001000
                     if row["instruction"] & 127 == 0x23:
                         stores.add((row["instruction"] >> 12) & 7)
-    except (OSError, ValueError):
+    except (OSError, ValueError, EOFError):
         return None
     return (retired, traps, last, stores, user_virtual) if last >= 0 else None
 
@@ -437,6 +439,7 @@ def run(
     timeout=120,
     axi_latency=0,
     fault_address=None,
+    compressed_trace=False,
 ):
     if engine not in {"qemu", "gem5"}:
         raise ContractError("unsupported Rocket memory engine")
@@ -447,11 +450,12 @@ def run(
         or type(quantum) is not int
         or not 1 <= quantum <= 64
         or type(max_cycles) is not int
-        or not 16 <= max_cycles <= 10000000
+        or not 16 <= max_cycles <= 100000000
+        or type(compressed_trace) is not bool
         or type(axi_latency) is not int
         or not 0 <= axi_latency <= 16
         or type(timeout) not in {int, float}
-        or not 1 <= timeout <= 300
+        or not 1 <= timeout <= 1800
     ):
         raise ContractError("invalid Rocket execution bounds")
     cpu_build, generated, models, out = (p.resolve() for p in (cpu_build, generated, models, out))
@@ -504,6 +508,9 @@ def run(
     )
     (out / "uart.log").touch()
     processes = []
+    capture = LogCapture(out) if compressed_trace else None
+    if capture:
+        capture.fifo("rtl-counters.json.commit.jsonl")
     logs = []
     commands = []
     driver = backend = None
@@ -511,13 +518,21 @@ def run(
     error = None
 
     def start(command, name, env=None):
-        file = (out / name).open("wb")
-        logs.append(file)
+        compressed = capture is not None and name == "cpu.log"
+        file = None if compressed else (out / name).open("wb")
+        if file is not None:
+            logs.append(file)
         commands.append(command)
         proc = subprocess.Popen(
-            command, stdout=file, stderr=subprocess.STDOUT, env=env, start_new_session=True
+            command,
+            stdout=subprocess.PIPE if compressed else file,
+            stderr=subprocess.STDOUT,
+            env=env,
+            start_new_session=True,
         )
         processes.append(proc)
+        if compressed and capture is not None:
+            capture.capture(proc.stdout, name)
         return proc
 
     with tempfile.TemporaryDirectory(prefix="usp-rocket-") as temp:
@@ -620,6 +635,8 @@ def run(
                         proc.wait()
             for stream in logs:
                 stream.close()
+            if capture:
+                capture.finish()
     if engine == "gem5":
         terminal = list(out.glob("*.terminal"))
         if terminal:
@@ -629,6 +646,7 @@ def run(
     checks, counters = acceptance(
         out, engine, markers, driver_rc, engine_rc, timed_out, axi_latency, fault_address
     )
+    checks["trace_capture_complete"] = capture is None or not capture.errors
     checks["unchanged_runtime"] = runtime == runtime_identity()
     checks["unchanged_model_binary"] = model["binary_sha256"] == digest(
         models / "rtl/Vusp_ipblocks"
@@ -658,6 +676,7 @@ def run(
         "runtime_identity": runtime,
         "max_cycles": max_cycles,
         "timeout_seconds": timeout,
+        "compressed_trace": compressed_trace,
         "base_io_ir_sha256": identity(project),
         "derived_ir_sha256": digest(out / "soc-ir.json"),
         "firmware_sha256": digest(out / "firmware.elf"),
@@ -705,10 +724,14 @@ def verify_run(project, cpu_build, out):
         "firmware.elf",
         "rtl-counters.json",
         "uart.log",
-        "rtl-counters.json.commit.jsonl",
+        "rtl-counters.json.commit.jsonl.gz"
+        if report["compressed_trace"]
+        else "rtl-counters.json.commit.jsonl",
         "rtl-counters.json.axi.jsonl",
         "bus-trace.jsonl",
     }
+    if report["compressed_trace"]:
+        required.update({"capture.json", "cpu.log.gz"})
     if not required.issubset(report["files"]):
         raise ContractError("incomplete Rocket run artifact closure")
     if report["derived_ir_sha256"] != digest(out / "soc-ir.json") or report[
@@ -751,6 +774,18 @@ def verify_run(project, cpu_build, out):
             )
         }
     )
+    checks["trace_capture_complete"] = True
+    if report["compressed_trace"]:
+        record = json.loads((out / "capture.json").read_text())
+        checks["trace_capture_complete"] = (
+            record["complete"] is True
+            and record["errors"] == []
+            and set(record["streams"]) == {"cpu.log", "rtl-counters.json.commit.jsonl"}
+        )
+        for name, captured in record["streams"].items():
+            checks["trace_capture_complete"] &= captured["codec"] == "gzip" and captured[
+                "compressed_sha256"
+            ] == digest(out / (name + ".gz"))
     entry = validate_elf(out / "firmware.elf", build["ram"])
     if (
         json.loads((out / "soc-ir.json").read_text())
@@ -1042,6 +1077,7 @@ def main(argv):
             p.add_argument("--timeout", type=float, default=120)
             p.add_argument("--axi-latency", type=int, default=0)
             p.add_argument("--inject-bus-error-address", type=lambda s: int(s, 0))
+            p.add_argument("--compress-trace", action="store_true")
     args = parser.parse_args(argv)
     try:
         root = args.project.resolve()
@@ -1117,6 +1153,7 @@ def main(argv):
                 args.timeout,
                 args.axi_latency,
                 args.inject_bus_error_address,
+                args.compress_trace,
             )
         print(json.dumps(report, indent=2))
         return 0 if report["status"] == "PASSED" else 1
