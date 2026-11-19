@@ -4,6 +4,7 @@ import hashlib
 import re
 from functools import lru_cache
 from pathlib import Path
+from threading import Lock
 
 from lxml import etree
 
@@ -13,6 +14,7 @@ from .parameters import expression, resolve_parameters
 NS = "http://www.accellera.org/XMLSchema/IPXACT/1685-2022"
 PREFIX = f"{{{NS}}}"
 SCHEMAS = Path(__file__).parent / "schemas" / "1685-2022"
+SCHEMA_LOCK = Lock()
 
 
 def digest(path: Path) -> str:
@@ -38,8 +40,15 @@ def _parser() -> etree.XMLParser:
 
 
 @lru_cache(maxsize=1)
-def schema() -> etree.XMLSchema:
+def _compiled_schema() -> etree.XMLSchema:
     return etree.XMLSchema(etree.parse(str(SCHEMAS / "index.xsd"), _parser()))
+
+
+def schema() -> etree.XMLSchema:
+    # lru_cache alone allows simultaneous first calls to execute the factory.
+    # libxml schema imports share initialization state; construct exactly once.
+    with SCHEMA_LOCK:
+        return _compiled_schema()
 
 
 def read_xml(path: Path) -> etree._Element:

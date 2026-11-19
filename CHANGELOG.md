@@ -2,6 +2,10 @@
 
 ## Unreleased — continuous milestone implementation
 
+- Serialize cold XSD construction and reuse one fully initialized validator;
+  verify concurrent first intake in a fresh four-thread process. Regenerate
+  parser-identity-bound artifacts with explicit verified cache reuse.
+
 - Add native IR v6 with an explicit source CPU binding, pinned Rocket identity,
   halted QEMU/gem5 IRQ contexts and one-RAM/PA32 capability checks. Preserve
   v3/v4/v5 ISS designs and strict rejection of unsupported CPU substitutions.

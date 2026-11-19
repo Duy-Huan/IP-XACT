@@ -29,11 +29,11 @@ Development findings, not closed exits:
   twelve expected-negative engine/map outcomes with durable exact archives.
 - Original RV64IMAC Zephyr BSPs (smoke/timer-disabled) build for all three maps;
   actual expanded CPU/software/protocol suite is in progress.
-- Cold concurrent first-in-process XML schema compilation failed in one threaded
-  engineering harness (raw failure retained). Preloading validated inputs avoids
-  that harness race, but does not qualify concurrent cold intake. Address schema
-  construction synchronization in the next compiler batch with fresh generated
-  identities and exact explicit engine/software reuse; never rewrite hashes.
+- Cold concurrent first-in-process XML schema compilation failed in an earlier
+  threaded engineering harness (raw failure retained). The current candidate
+  serializes factory initialization and passes fresh-process four-thread intake.
+  Fresh generated identities and exact explicit engine/software reuse are still
+  required for the aggregate qualification; never rewrite prior hashes.
 - Next CPU work: Linux boot ABI and long-run trace resources, generic native IR
   binding, reset/error coverage, then BOOM. Full M5 and M8 remain open.
 
