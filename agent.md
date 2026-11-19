@@ -331,3 +331,13 @@ Workflow Git notes report actual job conclusions, exact source/run/ref and asset
 hashes where REST access is unavailable. Missing notes are UNOBSERVED; do not
 fabricate hosted results. Keep main/dev as the only development branches; notes
 are evidence refs. Repository-published reports are not independent API proof.
+
+## 19. Continuous milestone execution, owner direction 2026-11-19
+
+Continue the dependency-ordered programme autonomously towards M8-M9. Do not
+stop after proposing another plan or treat a partial alpha as full completion.
+Use brief progress/checkpoint updates; completion reporting for M8-M9 requires
+actual full exits. Commit progress on dev, preserve real execution/failure
+evidence, and batch CI/promotion according to the existing local-before-push
+policy. Missing source behaviour, resource/network constraints or unsupported
+adapters stay explicit; never mark them passed to reach a target version.
