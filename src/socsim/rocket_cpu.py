@@ -23,10 +23,13 @@ from .ipxact import digest
 from .log_capture import LogCapture, open_log
 from .pipeline import QEMU_SHA, execute, identity, verify_generated
 from .rocket_build import CPU_CONTRACT, PINS, RESOURCES, address_map_contract, verify_build
-from .rtl_cpu import MARKERS, ZERO_COUNTERS, unmapped_test_address, wait_socket
+from .rtl_cpu import MARKERS as RV32_MARKERS
+from .rtl_cpu import ZERO_COUNTERS, unmapped_test_address, wait_socket
 from .rtl_cpu_build import verify_engine
 from .runner import tool_version, write_json
 from .unified import board_contract, trace_checks
+
+MARKERS = [*RV32_MARKERS, "USP_ROCKET_FENCEI_OK"]
 
 TRACE_PC = {
     "source_bits": 40,
@@ -49,6 +52,7 @@ def runtime_identity():
             "rocket_cpu.py",
             "rocket_software.py",
             "rocket_zephyr.py",
+            "rocket_linux.py",
             "log_capture.py",
             "unified.py",
             "rtl_cpu.py",
@@ -392,6 +396,7 @@ def acceptance(
             "max_burst_beats",
             "axi_request_stalls",
             "axi_latency",
+            "ram_bulk_reads",
         )
     )
     uart = (out / "uart.log").read_text(errors="replace") if (out / "uart.log").exists() else ""
@@ -471,9 +476,12 @@ def run(
     axi_latency=0,
     fault_address=None,
     compressed_trace=False,
+    qemu_ram_burst=False,
 ):
     if engine not in {"qemu", "gem5"}:
         raise ContractError("unsupported Rocket memory engine")
+    if type(qemu_ram_burst) is not bool or (qemu_ram_burst and engine != "qemu"):
+        raise ContractError("optional atomic normal-RAM block read requires QEMU")
     if (
         type(clock_hz) is not int
         or not 100000 <= clock_hz <= 500000000
@@ -642,6 +650,9 @@ def run(
                     str(quantum),
                     str(axi_latency),
                     str(fault_address) if fault_address is not None else "none",
+                    str(build["ram"]["base"]),
+                    str(build["ram"]["size"]),
+                    "1" if qemu_ram_burst else "0",
                 ],
                 "cpu.log",
             )
@@ -679,6 +690,11 @@ def run(
     checks, counters = acceptance(
         out, engine, markers, driver_rc, engine_rc, timed_out, axi_latency, fault_address
     )
+    checks["actual_ram_transport"] = (
+        counters.get("ram_bulk_reads", 0) > 0
+        if qemu_ram_burst
+        else counters.get("ram_bulk_reads") == 0
+    )
     checks["trace_capture_complete"] = capture is None or not capture.errors
     checks["unchanged_runtime"] = runtime == runtime_identity()
     checks["unchanged_model_binary"] = model["binary_sha256"] == digest(
@@ -711,6 +727,10 @@ def run(
         "max_cycles": max_cycles,
         "timeout_seconds": timeout,
         "compressed_trace": compressed_trace,
+        "qemu_ram_burst": qemu_ram_burst,
+        "ram_read_contract": "atomic snapshot at first AXI beat"
+        if qemu_ram_burst
+        else "aligned scalar MMIO32 reads per AXI beat",
         "base_io_ir_sha256": identity(project),
         "derived_ir_sha256": digest(out / "soc-ir.json"),
         "firmware_sha256": digest(out / "firmware.elf"),
@@ -811,6 +831,11 @@ def verify_run(project, cpu_build, out):
             )
         }
     )
+    checks["actual_ram_transport"] = (
+        counters.get("ram_bulk_reads", 0) > 0
+        if report["qemu_ram_burst"]
+        else counters.get("ram_bulk_reads") == 0
+    )
     checks["trace_capture_complete"] = True
     if report["compressed_trace"]:
         record = json.loads((out / "capture.json").read_text())
@@ -850,7 +875,7 @@ def selection(config, engine):
         raise ContractError("unsupported Rocket memory engine")
     if "rtl_manifest" in cpu or "qemu_cost_model" in config:
         raise ContractError("Rocket uses its pinned source profile and actual RTL counters")
-    if set(config["workloads"]) - {"baremetal", "freertos", "zephyr"}:
+    if set(config["workloads"]) - {"baremetal", "freertos", "zephyr", "linux", "boot-sequence"}:
         raise ContractError("selected Rocket software/MMU port is not yet qualified")
     if set(config.get("software_builds", {})) != set(config["workloads"]) - {"baremetal"}:
         raise ContractError(
@@ -861,6 +886,8 @@ def selection(config, engine):
     hz = cpu.get("clock_hz", 50000000)
     if type(hz) is not int or not 100000 <= hz <= 500000000 or 1000000000 % hz:
         raise ContractError("Rocket clock requires an integral 2..10000ns period")
+    if set(config["workloads"]) - {"baremetal"} and hz != 50000000:
+        raise ContractError("source-built Rocket kernel profiles require the verified 50MHz clock")
     return {
         "provider": "chipyard",
         "model": CPU_CONTRACT["model"],
@@ -994,14 +1021,22 @@ def run_platform(project, config, generated, models, bridge, cpu_build, out):
             if "dtb" in artifact or digest(elf) != artifact["sha256"]:
                 raise ContractError("modified or incompatible Rocket external software")
             markers = artifact["expected_markers"]
-        if workload in {"freertos", "zephyr"}:
+        if workload in {"freertos", "zephyr", "linux", "boot-sequence"}:
+            from .rocket_linux import verify_build as verify_linux
             from .rocket_software import verify_software
             from .rocket_zephyr import verify_build as verify_zephyr
 
             software = Path(config["software_builds"][workload])
-            verifier = verify_zephyr if workload == "zephyr" else verify_software
+            verifier = (
+                verify_linux
+                if workload in {"linux", "boot-sequence"}
+                else verify_zephyr
+                if workload == "zephyr"
+                else verify_software
+            )
             sw = verifier(project, cpu_build, software)
-            if sw["kind"] != workload or sw["case"] != "smoke":
+            kind = "linux" if workload == "boot-sequence" else workload
+            if sw["kind"] != kind or sw["case"] != "smoke":
                 raise ContractError("Rocket platform requires positive matching kernel acceptance")
             software_sources[workload] = {
                 "path": str(software),
@@ -1019,7 +1054,14 @@ def run_platform(project, config, generated, models, bridge, cpu_build, out):
             elf=elf,
             markers=markers,
             clock_hz=selected["clock_hz"],
-            max_cycles=10000000 if workload in {"freertos", "zephyr"} else 1000000,
+            max_cycles=100000000
+            if workload in {"linux", "boot-sequence"}
+            else 10000000
+            if workload in {"freertos", "zephyr"}
+            else 1000000,
+            timeout=1800 if workload in {"linux", "boot-sequence"} else 120,
+            compressed_trace=True,
+            qemu_ram_burst=config["engine"] == "qemu",
         )
     report = {
         "schema_version": "1",
@@ -1061,13 +1103,28 @@ def verify_platform(out):
         if digest(inside(out, name)) != sha:
             raise ContractError("modified Rocket platform evidence")
     for workload, source in report["software_sources"].items():
+        from .rocket_linux import verify_build as verify_linux
         from .rocket_software import verify_software
         from .rocket_zephyr import verify_build as verify_zephyr
 
         sw_path = Path(source["path"])
         if digest(sw_path / "software-build.json") != source["record_sha256"]:
             raise ContractError("modified Rocket platform kernel provenance")
-        (verify_zephyr if workload == "zephyr" else verify_software)(project, cpu_build, sw_path)
+        verifier = (
+            verify_linux
+            if workload in {"linux", "boot-sequence"}
+            else verify_zephyr
+            if workload == "zephyr"
+            else verify_software
+        )
+        sw = verifier(project, cpu_build, sw_path)
+        kind = "linux" if workload == "boot-sequence" else workload
+        if (
+            sw["kind"] != kind
+            or sw["case"] != "smoke"
+            or digest(sw_path / "firmware.elf") != digest(out / workload / "firmware.elf")
+        ):
+            raise ContractError("mixed Rocket platform software acceptance/ELF")
     if set(report["software_sources"]) != set(report["results"]) - {"baremetal"}:
         raise ContractError("missing Rocket platform kernel provenance")
     for workload, result in report["results"].items():
@@ -1097,13 +1154,19 @@ def main(argv):
             p.add_argument("--cpu-build", type=Path, required=True)
             p.add_argument("--out", type=Path, required=True)
         if name == "build-software":
-            p.add_argument("--kind", choices=("mmu", "freertos", "zephyr"), required=True)
+            p.add_argument("--kind", choices=("mmu", "freertos", "zephyr", "linux"), required=True)
             p.add_argument("--generated", type=Path)
             p.add_argument("--upstream", type=Path)
             p.add_argument(
                 "--case", choices=("smoke", "assert-failure", "tick-disabled"), default="smoke"
             )
             p.add_argument("--jobs", type=int, default=2)
+            p.add_argument(
+                "--linux-memory-mib",
+                type=int,
+                default=32,
+                help="explicit Linux software RAM limit; 0 uses all hardware RAM",
+            )
         if name == "run":
             for option in ("generated", "models", "bridge", "elf"):
                 p.add_argument("--" + option, type=Path, required=option in {"generated", "models"})
@@ -1116,6 +1179,7 @@ def main(argv):
             p.add_argument("--axi-latency", type=int, default=0)
             p.add_argument("--inject-bus-error-address", type=lambda s: int(s, 0))
             p.add_argument("--compress-trace", action="store_true")
+            p.add_argument("--qemu-ram-burst", action="store_true")
     args = parser.parse_args(argv)
     try:
         root = args.project.resolve()
@@ -1142,6 +1206,7 @@ def main(argv):
                 "out": str(args.out.resolve()),
             }
         elif args.command == "build-software":
+            from .rocket_linux import build as build_linux
             from .rocket_software import build_freertos, build_mmu
             from .rocket_zephyr import build as build_zephyr
 
@@ -1160,6 +1225,19 @@ def main(argv):
                         args.upstream.resolve() / "freertos",
                         args.out,
                         args.case,
+                    )
+                elif args.kind == "linux":
+                    if args.case != "smoke":
+                        raise ContractError("Linux boot build has only the explicit smoke profile")
+                    record = build_linux(
+                        project,
+                        args.cpu_build.resolve(),
+                        args.generated.resolve(),
+                        args.upstream.resolve() / "linux",
+                        args.upstream.resolve() / "opensbi",
+                        args.out,
+                        None if args.linux_memory_mib == 0 else args.linux_memory_mib * 1024**2,
+                        args.jobs,
                     )
                 else:
                     record = build_zephyr(
@@ -1192,6 +1270,7 @@ def main(argv):
                 args.axi_latency,
                 args.inject_bus_error_address,
                 args.compress_trace,
+                args.qemu_ram_burst,
             )
         print(json.dumps(report, indent=2))
         return 0 if report["status"] == "PASSED" else 1

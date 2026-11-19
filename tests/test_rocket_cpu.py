@@ -339,3 +339,60 @@ def test_sv39_trace_pc_encoding_is_explicit_without_rewriting_raw_events(raw, ca
     assert canonical_pc(raw) == canonical
     with pytest.raises(ContractError):
         canonical_pc(1 << 40)
+
+
+@pytest.mark.parametrize("name", ["rv64-ips", "AI_SOC", "AIZ_SOC"])
+def test_actual_qemu_ram_snapshot_keeps_scalar_retirement_and_axi_responses(tmp_path, name):
+    p, cpu, _, generated, models, bridge = native_inputs(name)
+    reports = []
+    captures = []
+    for bulk in (False, True):
+        out = tmp_path / ("bulk" if bulk else "scalar")
+        report = run(
+            p,
+            cpu,
+            generated,
+            models,
+            "qemu",
+            out,
+            bridge,
+            axi_latency=3,
+            compressed_trace=True,
+            qemu_ram_burst=bulk,
+        )
+        assert report["status"] == "PASSED", report
+        assert "USP_ROCKET_FENCEI_OK" in (out / "uart.log").read_text()
+        assert verify_run(p, cpu, out)["status"] == "PASSED"
+        counters = report["counters"]
+        assert (counters["ram_bulk_reads"] > 0) is bulk
+        reports.append({k: v for k, v in counters.items() if k != "ram_bulk_reads"})
+        captures.append(json.loads((out / "capture.json").read_text())["streams"])
+    assert reports[0] == reports[1]
+    for stream in ("rtl-counters.json.commit.jsonl", "rtl-counters.json.axi.jsonl"):
+        assert captures[0][stream]["raw_sha256"] == captures[1][stream]["raw_sha256"]
+
+
+@pytest.mark.parametrize("fault", ["ram", "mmio"])
+def test_actual_bulk_mode_does_not_bypass_diagnostic_bus_faults(tmp_path, fault):
+    p, cpu, _, generated, models, bridge = native_inputs("rv64-ips")
+    address = (
+        0x80000000
+        if fault == "ram"
+        else next(i.windows[0].base for i in p.ir.instances if i.name == "cygcd")
+    )
+    report = run(
+        p,
+        cpu,
+        generated,
+        models,
+        "qemu",
+        tmp_path / "run",
+        bridge,
+        max_cycles=50000,
+        compressed_trace=True,
+        qemu_ram_burst=True,
+        fault_address=address,
+    )
+    assert report["status"] == "FAILED", report
+    assert report["counters"]["axi_errors"] > 0
+    assert not report["checks"]["no_downstream_bus_error"]

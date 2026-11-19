@@ -6,6 +6,7 @@
 #define UART(n) (*(volatile uint8_t *)(USP_UART_BASE+(n)))
 static volatile unsigned fault_expected,fault_hits;
 static volatile unsigned timer_hits,gpio_hits,gcd_hits,last_gcd;
+static volatile uint32_t code[16] __attribute__((aligned(64)));
 static void puts_uart(const char *s) {
  while(*s) { while(!(UART(5)&0x20)){} UART(0)=*s++; }
 }
@@ -41,6 +42,14 @@ int main(void) {
  if(bytes!=0xbeef5a00) fail();
  volatile uint64_t wide=UINT64_C(0xfedcba9876543210); if(wide!=UINT64_C(0xfedcba9876543210)) fail();
  puts_uart("USP_BAREMETAL_MEMORY_OK\n");
+ code[0]=0x02a00513; code[1]=0x00008067;
+ __asm__ volatile("fence rw,rw; fence.i":::"memory");
+ int (*generated)(void)=(int(*)(void))(uintptr_t)code;
+ if(generated()!=42) fail();
+ code[0]=0x06300513;
+ __asm__ volatile("fence rw,rw; fence.i":::"memory");
+ if(generated()!=99) fail();
+ puts_uart("USP_ROCKET_FENCEI_OK\n");
  fault_expected=1;
  __asm__ volatile(".option push; .option norvc; lw zero,0(%0); .option pop"::"r"(USP_FAULT_ADDRESS):"memory");
  if(fault_expected || fault_hits!=1) fail();

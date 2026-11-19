@@ -8,6 +8,14 @@
   raw AXI/commit verification, deliberate backpressure/error diagnostics and
   source-built FreeRTOS plus PMP/Sv39 M/S/U conformance firmware.
 - Broad M1–M9 exits remain partial. No new release tag or hosted result is implied.
+- Add a source-bound Rocket OpenSBI/Linux builder, explicit boot/memory profile
+  and platform/CLI selection; require actual both-engine/mapped-profile Linux
+  acceptance at promotion. The original gem5 userspace probe is preserved;
+  qualification of the current implementation is ongoing.
+- Preserve RTL assertions while disabling upstream commit printf, add real
+  FENCE.I conformance and explicit optional QEMU RAM burst snapshots. Defer the
+  actual engine finisher write until outstanding AXI responses finish; a real
+  simultaneous-read/shutdown failure motivated this correction.
 
 ## 0.3.0a4 — 2026-11-18 (v0.3.0-alpha.4)
 

@@ -119,11 +119,9 @@ pass retirement checks. This changes storage, not simulated cycles or instructio
 ownership. Existing CPU builds are unchanged. Explicit bounds may select up to
 100 million cycles/1,800 seconds; the default remains one million cycles.
 
-Linux investigation has reached actual OpenSBI and S-mode kernel memory setup,
-not accepted userspace yet. A boot trampoline supplies hart ID and DTB, while a
-fresh pinned OpenSBI build preserves its firmware-region alignment and the Linux
-2 MiB payload alignment. The failed entry/alignment and budget-exhaustion probes
-are preserved. Do not infer Linux acceptance from the banner or this work log.
+A boot trampoline supplies hart ID and DTB, while a fresh pinned OpenSBI build
+preserves its firmware-region alignment and the Linux 2 MiB payload alignment.
+The failed entry/alignment and budget-exhaustion probes are preserved.
 
 Long-trace follow-up also compresses AXI, memory bus and QEMU qtest records;
 protocol validation now streams those records too. A relative gem5 bridge path
@@ -135,5 +133,33 @@ The 128MiB Linux long probe timed out at 900 seconds after actual kernel/PLIC
 initialization. A subsequent functional boot investigation explicitly selects
 Linux `mem=32M` and publishes the current DT ISA properties; the hardware RAM
 map remains 128MiB. That software working-set choice is recorded as a separate
-profile, not a full-RAM or full-design acceptance result. Userspace and the
-matching gem5 boot still require actual successful execution.
+profile, not a full-RAM or full-design acceptance result. The gem5 engineering
+probe at `fd2735b` subsequently booted Linux and executed the fork/exec userspace
+workload, powered off, and passed independent run verification: 73,709,602 actual
+RTL cycles and 34,170,663 retired instructions, with zero native ISS counters.
+Its exact reversible raw archive and hashes are under
+`results/continuous-upgrade-20261119/rocket-linux-gem5-r5-archive.json`.
+The corresponding QEMU run timed out; it is not qualified by the gem5 result.
+
+The current candidate adds `usp rocket build-software --kind linux`, binding a
+verified original Image/config/init/workload to the exact CPU and I/O map, with
+new source-built OpenSBI, modern DT ISA properties and an owned boot trampoline.
+`--linux-memory-mib 32` is the explicit default software profile; `0` selects all
+hardware RAM and requires its own execution evidence. Platform workloads `linux`
+and `boot-sequence` require their matching `software_builds` entries; boot sequence
+executes the same real M -> S -> U/poweroff path. These are developer interfaces;
+the current all-map/both-engine Linux gate is still in progress.
+
+Long runs keep Verilator assertions enabled and disable only upstream commit
+printf. Optional `--qemu-ram-burst` reads a normal-RAM burst snapshot through
+qtest/SystemC; individual native AXI beats, responses and backpressure remain.
+MMIO, ROM and fault-injected intersections keep scalar transactions. There is
+no external-DMA/coherence promise for this optional snapshot contract. The guest
+checks actual self-modifying instructions with FENCE.I. Native tests compare
+scalar/burst commit and AXI traces and retain real bus-fault negatives.
+
+An actual simultaneous AXI read and finisher write exposed premature QEMU exit.
+The adapter now stops accepting new addresses, completes accepted transactions,
+then commits the actual engine finisher write. It records no fabricated memory
+responses after shutdown. Fresh CPU/software builds are required after these
+adapter changes; old result hashes remain immutable.

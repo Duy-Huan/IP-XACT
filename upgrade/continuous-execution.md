@@ -41,3 +41,17 @@ Development findings, not closed exits:
 all raw outputs are in an exact verified archive with JUnit/provenance. This is
 not the aggregate gate. Following work adds lossless long-trace storage and an
 actual OpenSBI/Linux RTL boot investigation; no userspace success is claimed yet.
+
+Rocket follow-up: the original gem5 Linux probe at `fd2735b` reached actual
+fork/exec userspace and native poweroff, with 73,709,602 RTL edges and 34,170,663
+retired instructions and independently passing verification. Its exact reversible
+archive is retained; the corresponding QEMU probe timed out. This is a scoped
+32MiB software-memory boot profile on 128MiB hardware RAM, not full M5/M8.
+
+The next development checkpoint adds source-bound Linux builds/platform selection,
+mandatory both-engine/all-map Linux promotion inputs, FENCE.I and optional QEMU
+RAM burst snapshots. An actual simultaneous AXI read/finisher shutdown failure
+was fixed by committing the real engine finisher only after accepted requests
+drain. Focused checks: 60 contract tests and five real all-map scalar/burst/fault
+tests passed with no skips. Linux/complete Rocket native gates remain in progress;
+do not translate this checkpoint into aggregate CI, main promotion or a new tag.

@@ -240,6 +240,7 @@ def elaborate(out, upstream, tools, java_home, scala_cache, ram_base, ram_size, 
             "--exe",
             "--build",
             "--assert",
+            "-DPRINTF_COND=0",
             "--top-module",
             "UspRocket",
             "--Mdir",
@@ -291,7 +292,9 @@ def elaborate(out, upstream, tools, java_home, scala_cache, ram_base, ram_size, 
         "irq_order": ["debug-disabled", "msip", "mtip", "meip", "seip"],
         "reset_vector": "explicit ELF entry inside RAM",
         "coherence": "upstream TLBroadcast for tile-internal clients; no external DMA coherence",
-        "memory_transport": "aligned MMIO32 operations; explicit split of 64-bit AXI beats",
+        "memory_transport": "MMIO32 or explicit qtest RAM burst snapshots; RTL beats preserved",
+        "verilator_assertions": True,
+        "commit_printf_enabled": False,
         "adapter_identity": identity,
         "tools": {
             "java": java_version,
@@ -319,6 +322,11 @@ def verify_build(out):
         for key, value in CPU_CONTRACT.items()
     ):
         raise ContractError("Rocket CPU capabilities differ from its qualified source profile")
+    if (
+        record.get("verilator_assertions") is not True
+        or record.get("commit_printf_enabled") is not False
+    ):
+        raise ContractError("Rocket assertion/logging compilation contract mismatch")
     ram_contract(record["ram"]["base"], record["ram"]["size"])
     address_map_contract(record["ram"], record["regions"])
     for name, expected in record["files"].items():

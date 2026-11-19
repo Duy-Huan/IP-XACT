@@ -25,6 +25,7 @@ bash scripts/setup_rocket_tools.sh
 export USP_ROCKET_ROOT=${USP_ROCKET_ROOT:-$repo/build/rocket-cpu}
 export USP_ROCKET_SOFTWARE_ROOT=${USP_ROCKET_SOFTWARE_ROOT:-$repo/build/rocket-software}
 export USP_ROCKET_ZEPHYR_ROOT=${USP_ROCKET_ZEPHYR_ROOT:-$repo/build/rocket-zephyr}
+export USP_ROCKET_LINUX_ROOT=${USP_ROCKET_LINUX_ROOT:-$repo/build/rocket-linux}
 export USP_IP_GENERATED_DIR=${USP_IP_GENERATED_DIR:-$repo/build/rv64-ips}
 export USP_DUAL_BUILD_ROOT=${USP_DUAL_BUILD_ROOT:-$repo/build}
 export USP_IP_MODELS_DIR=${USP_IP_MODELS_DIR:-$repo/build/source-ip-models}
@@ -47,6 +48,7 @@ from pathlib import Path
 from socsim.project import load_project
 from socsim.rocket_software import build_freertos, build_mmu
 from socsim.rocket_zephyr import build as build_zephyr
+from socsim.rocket_linux import build as build_linux
 project = load_project(Path(sys.argv[1]))
 generated = Path(sys.argv[2]).resolve()
 name, upstream = sys.argv[3], Path(sys.argv[4]).resolve()
@@ -58,8 +60,11 @@ for case in ('smoke', 'assert-failure', 'tick-disabled'):
 for case in ('smoke', 'tick-disabled'):
     build_zephyr(project, cpu, generated, upstream / 'zephyr',
                  Path(os.environ['USP_ROCKET_ZEPHYR_ROOT']) / name / case, case)
+build_linux(project, cpu, generated, upstream / 'linux', upstream / 'opensbi',
+            Path(os.environ['USP_ROCKET_LINUX_ROOT']) / name)
 PY
 done
 export USP_REQUIRE_ROCKET=1
-python -m pytest tests/test_rocket_build.py tests/test_rocket_elaboration.py tests/test_rocket_cpu.py \
+export USP_REQUIRE_ROCKET_LINUX=1
+python -m pytest tests/test_rocket_build.py tests/test_rocket_elaboration.py tests/test_rocket_cpu.py tests/test_rocket_linux.py \
     -v --junitxml=build/rocket-junit.xml

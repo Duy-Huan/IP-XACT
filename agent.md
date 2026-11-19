@@ -341,3 +341,13 @@ actual full exits. Commit progress on dev, preserve real execution/failure
 evidence, and batch CI/promotion according to the existing local-before-push
 policy. Missing source behaviour, resource/network constraints or unsupported
 adapters stay explicit; never mark them passed to reach a target version.
+
+The Rocket Linux extension must retain source-bound kernel/config/userspace,
+an owned reset trampoline/DTB and source-built OpenSBI. Explicit software RAM
+limits are separate from physical RAM capacity. Promotion requires
+USP_REQUIRE_ROCKET_LINUX/USP_ROCKET_LINUX_ROOT and actual OpenSBI -> Sv39 Linux
+-> userspace -> native poweroff on both engines and all three mapped profiles.
+Optional QEMU RAM burst snapshots preserve individual RTL AXI handshakes; qualify
+scalar/burst retirement equivalence, FENCE.I and fault exclusion. Defer actual
+engine finisher writes until accepted AXI transactions finish; no fabricated
+responses after engine exit. This does not close general CPU binding or M5-M9.
