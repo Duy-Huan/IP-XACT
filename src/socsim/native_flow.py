@@ -13,6 +13,7 @@ import yaml
 from .domain import ContractError
 from .execution import execute_build
 from .ipxact import digest, integer
+from .native_cpu_binding import ROCKET, is_rtl
 from .native_ir import read_ir
 from .native_package import build_package, read_package, verify_package
 from .native_software import build_software, check_run, verify_software
@@ -36,6 +37,7 @@ def flow_identity():
             "native_software.py",
             "native_ucos.py",
             "native_performance.py",
+            "native_cpu_binding.py",
         )
     }
 
@@ -112,13 +114,23 @@ def plan(path):
     if not isinstance(spec, dict):
         raise ContractError("flow input must be a design mapping")
     cpu = validate_cpu(copy.deepcopy(spec.get("cpu")))
-    if cpu.get("model") not in {"qemu.rv64", "qemu.max"}:
+    rtl = is_rtl(cpu)
+    if cpu.get("model") not in {"qemu.rv64", "qemu.max", ROCKET}:
         raise ContractError("requested CPU needs an adapter; ISS substitution is forbidden")
-    if data["engine"] in {"gem5", "both"} and cpu.get("gem5_model") not in {
-        "gem5.RiscvTimingSimpleCPU",
-        "gem5.RiscvAtomicSimpleCPU",
-    }:
+    if (
+        not rtl
+        and data["engine"] in {"gem5", "both"}
+        and cpu.get("gem5_model")
+        not in {
+            "gem5.RiscvTimingSimpleCPU",
+            "gem5.RiscvAtomicSimpleCPU",
+        }
+    ):
         raise ContractError("explicit qualified gem5 CPU binding required")
+    if rtl and "performance" in data:
+        raise ContractError(
+            "actual RTL uses clock/retirement counters, not QEMU ISS cost estimates"
+        )
     harts = integer(cpu.get("harts", 1), "cpu.harts")
     if not 1 <= harts <= 8:
         raise ContractError("native flow requires 1..8 qualified homogeneous RV64 harts")
@@ -145,6 +157,16 @@ def plan(path):
         ):
             raise ContractError("invalid/duplicate software workload or bounded timeout")
         names.add(item["id"])
+        if rtl and item["kind"] == "linux":
+            raise ContractError(
+                "native Rocket Linux needs its owned boot BSP; no implicit ISS port"
+            )
+        if (
+            rtl
+            and item["kind"] in {"freertos", "zephyr", "ucos2", "ucos3"}
+            and cpu["clock_hz"] != 50000000
+        ):
+            raise ContractError("native source CPU kernels require the verified 50MHz BSP clock")
         if item["kind"] in {"freertos", "zephyr", "ucos2", "ucos3"} and harts != 1:
             raise ContractError("native FreeRTOS/Zephyr software needs a single-hart BSP")
         if (item["kind"] == "package-driver") != ("package" in item):
@@ -169,12 +191,13 @@ def plan(path):
         "cpu_contract": cpu,
         "gem5_cpu_model": cpu.get("gem5_model"),
         "ownership": {
-            "instructions": "selected engine ISS",
+            "instructions": "actual-RocketTile-RTL" if rtl else "selected engine ISS",
             "ram": "selected engine",
             "peripherals": "one isolated state-owning process per external/RTL instance",
             "time": "engine-local; functional external MMIO with annotated SystemC time",
         },
         "required_resources": {
+            **({"source_rtl_cpu": True} if rtl else {}),
             "qemu_source": data["engine"] in {"qemu", "both"},
             "native_gem5_build": data["engine"] in {"gem5", "both"},
             "source_ip_models": any(
@@ -185,6 +208,7 @@ def plan(path):
             "package-build",
             "materialize-bindings",
             "canonical-ir-lowering",
+            *(["source-cpu-build-or-verified-reuse"] if rtl else []),
             "selected-engine-build",
             "software-build",
             "execute",
@@ -196,6 +220,14 @@ def plan(path):
         ],
         "full_master_objective_complete": False,
     }
+
+
+def flow_engine_verifier(cpu):
+    if is_rtl(cpu):
+        from .native_rtl_engine import verify
+
+        return verify
+    return verify_engine
 
 
 def firmware_build(generated, cross_compile):
@@ -340,7 +372,23 @@ def build_flow(path, out, options):
         }.get(item["kind"], ()):
             if not options.get(name):
                 raise ContractError("flow software requires --" + name.replace("_", "-"))
-    gem5 = verify_engine(options["gem5_build"]) if required["native_gem5_build"] else None
+    rtl = is_rtl(p["cpu_contract"])
+    if (
+        rtl
+        and not options.get("rtl_cpu_build")
+        and not all(
+            options.get(k)
+            for k in ("cpu_upstream", "cpu_tools", "cpu_java_home", "cpu_scala_cache")
+        )
+    ):
+        raise ContractError(
+            "source CPU needs --rtl-cpu-build or all four --cpu-* source tool paths"
+        )
+    gem5 = (
+        flow_engine_verifier(p["cpu_contract"])(options["gem5_build"])
+        if required["native_gem5_build"]
+        else None
+    )
     out.mkdir(parents=True, exist_ok=False)
     write_json(out / "plan.json", p)
     materialized = out / "input"
@@ -386,6 +434,23 @@ def build_flow(path, out, options):
             shutil.copy2(inside(root, config["spec"]), materialized / "spec.yaml")
     generated = out / "generated"
     generate(materialized / "spec.yaml", generated, config["engine"], config["input_format"])
+    cpu_build = None
+    if rtl:
+        from .native_cpu_binding import build_cpu, verify_cpu
+
+        cpu_build = options.get("rtl_cpu_build")
+        if cpu_build is None:
+            cpu_build = out / "cpu-build"
+            build_cpu(
+                verify_generated(generated),
+                cpu_build,
+                options["cpu_upstream"],
+                options["cpu_tools"],
+                options["cpu_java_home"],
+                options["cpu_scala_cache"],
+                min(options["jobs"], 4),
+            )
+        verify_cpu(verify_generated(generated), cpu_build)
     if required["qemu_source"]:
         build(
             generated,
@@ -465,6 +530,14 @@ def build_flow(path, out, options):
             "gem5_build": str(options["gem5_build"]) if gem5 else None,
             "gem5_binary_sha256": gem5["binary_sha256"] if gem5 else None,
             "models": str(options["models"]) if options.get("models") else None,
+            **(
+                {
+                    "rtl_cpu_build": str(cpu_build),
+                    "rtl_cpu_build_sha256": digest(cpu_build / "rocket-build.json"),
+                }
+                if cpu_build is not None
+                else {}
+            ),
         },
         "qemu_profile": profile,
         "auxiliary_files": {
@@ -537,6 +610,17 @@ def verify_build(out):
         if sw["firmware"] and digest(inside(out, sw["firmware"])) != sw["elf_sha256"]:
             raise ContractError("modified flow workload ELF")
     binding = r["engine_bindings"]
+    if is_rtl(spec["cpu"]):
+        from .native_cpu_binding import verify_cpu
+
+        if not binding.get("rtl_cpu_build"):
+            raise ContractError("native source CPU build owner is missing")
+        cpu = Path(binding["rtl_cpu_build"])
+        verify_cpu(spec, cpu)
+        if digest(cpu / "rocket-build.json") != binding["rtl_cpu_build_sha256"]:
+            raise ContractError("native flow source CPU build identity changed")
+    elif "rtl_cpu_build" in binding:
+        raise ContractError("native ISS plan cannot substitute a source CPU")
     if p["required_resources"]["source_ip_models"]:
         from .ipblocks import verify_models
 
@@ -554,7 +638,7 @@ def verify_build(out):
         verify_counter(inside(out, r["qemu_profile"]["counter"]))
     if p["engine"] in {"gem5", "both"}:
         if (
-            verify_engine(Path(binding["gem5_build"]))["binary_sha256"]
+            flow_engine_verifier(spec["cpu"])(Path(binding["gem5_build"]))["binary_sha256"]
             != binding["gem5_binary_sha256"]
         ):
             raise ContractError("modified selected gem5 engine")
@@ -568,6 +652,7 @@ def execute_flow(built, out):
     binding = record["engine_bindings"]
     models = Path(binding["models"]) if binding["models"] else None
     gem5 = Path(binding["gem5_build"]) if binding["gem5_build"] else None
+    cpu = Path(binding["rtl_cpu_build"]) if binding.get("rtl_cpu_build") else None
     generated = built / "generated"
     profile = record.get("qemu_profile")
     if profile:
@@ -577,6 +662,25 @@ def execute_flow(built, out):
         firmware = inside(built, sw["firmware"]) if sw["firmware"] else None
         software = "linux" if sw["kind"] == "linux" else "baremetal"
         dest = out / name
+        markers = sw.get("expected_markers")
+        if cpu is not None and sw["kind"] in {"freertos", "zephyr", "ucos2", "ucos3"}:
+            from .freertos import MARKERS as FREERTOS_MARKERS
+            from .native_software import ZEPHYR_MARKERS
+
+            markers = (
+                list(FREERTOS_MARKERS)
+                if sw["kind"] == "freertos"
+                else (
+                    list(ZEPHYR_MARKERS)
+                    if sw["kind"] == "zephyr"
+                    else [
+                        "USP_UCOS_BOOT_OK",
+                        "USP_UCOS_TIMER_PREEMPTION_REGISTERS_OK",
+                        "USP_UCOS_UART_PLIC_IRQ_OK",
+                        "USP_TEST_PASS",
+                    ]
+                )
+            )
         if p["engine"] == "both":
             accept(
                 generated,
@@ -588,6 +692,8 @@ def execute_flow(built, out):
                 firmware,
                 sw["kind"] not in {"freertos", "zephyr", "ucos2", "ucos3"},
                 profile,
+                rtl_cpu_build=cpu,
+                rtl_markers=markers,
             )
         else:
             run(
@@ -600,6 +706,8 @@ def execute_flow(built, out):
                 gem5,
                 software,
                 profile,
+                rtl_cpu_build=cpu,
+                rtl_markers=markers,
             )
     checks = collect_checks(generated, record, p, out)
     r = {
@@ -710,6 +818,11 @@ def main(argv):
                 "source-freertos",
                 "source-zephyr",
                 "ucos-upstream",
+                "rtl-cpu-build",
+                "cpu-upstream",
+                "cpu-tools",
+                "cpu-java-home",
+                "cpu-scala-cache",
             ):
                 sub.add_argument("--" + flag, type=Path)
             sub.add_argument("--cross-compile", default="riscv64-unknown-elf-")

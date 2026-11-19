@@ -39,7 +39,7 @@
     },
     "software_builds": {
       "type": "object",
-      "propertyNames": {"enum": ["freertos", "ucos2", "ucos3", "zephyr"]},
+      "propertyNames": {"enum": ["freertos", "ucos2", "ucos3", "zephyr", "linux", "boot-sequence"]},
       "additionalProperties": {"type": "string", "minLength": 1, "maxLength": 1000}
     },
     "qemu_cost_model": {

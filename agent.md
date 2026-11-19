@@ -331,3 +331,37 @@ Workflow Git notes report actual job conclusions, exact source/run/ref and asset
 hashes where REST access is unavailable. Missing notes are UNOBSERVED; do not
 fabricate hosted results. Keep main/dev as the only development branches; notes
 are evidence refs. Repository-published reports are not independent API proof.
+
+## 19. Continuous milestone execution, owner direction 2026-11-19
+
+Continue the dependency-ordered programme autonomously towards M8-M9. Do not
+stop after proposing another plan or treat a partial alpha as full completion.
+Use brief progress/checkpoint updates; completion reporting for M8-M9 requires
+actual full exits. Commit progress on dev, preserve real execution/failure
+evidence, and batch CI/promotion according to the existing local-before-push
+policy. Missing source behaviour, resource/network constraints or unsupported
+adapters stay explicit; never mark them passed to reach a target version.
+
+The Rocket Linux extension must retain source-bound kernel/config/userspace,
+an owned reset trampoline/DTB and source-built OpenSBI. Explicit software RAM
+limits are separate from physical RAM capacity. Promotion requires
+USP_REQUIRE_ROCKET_LINUX/USP_ROCKET_LINUX_ROOT and actual OpenSBI -> Sv39 Linux
+-> userspace -> native poweroff on both engines and all three mapped profiles.
+Optional QEMU RAM burst snapshots preserve individual RTL AXI handshakes; qualify
+scalar/burst retirement equivalence, FENCE.I and fault exclusion. Defer actual
+engine finisher writes until accepted AXI transactions finish; no fabricated
+responses after engine exit. This does not close general CPU binding or M5-M9.
+
+Native source CPU changes require docs/native-rtl-cpu.md and actual both-engine
+acceptance of the 12/11-instance arbitrary-name/maps fixtures. Require
+USP_REQUIRE_NATIVE_ROCKET, USP_NATIVE_ROCKET_ROOT, USP_NATIVE_ROCKET_CPU_ROOT and
+USP_NATIVE_RTL_ENGINE before promotion. The v6 source binding must not become
+an ISS substitution, and atomic backing-memory/PA32/one-RAM limits stay explicit.
+Preserve the source-cache executable separately while linking a native engine;
+interrupted copy/controller attempts do not qualify a completed build.
+
+Require USP_NATIVE_ROCKET_FLOW_ROOT and the two actual native five-workload
+flows on both engines. Their bounded M-mode BSP eligibility does not infer
+native Linux, BOOM, coherent DMA or complete inventories. Distributions must
+include the native RTL board resource; source-checkout execution alone is not
+installed-package acceptance.

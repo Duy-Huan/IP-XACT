@@ -1,0 +1,8 @@
+# Actual Rocket instructions; gem5's native CPU is a passive IRQ context.
+schema_version: '1'
+cpu:
+  provider: chipyard
+  model: rocket64-imac-sv39-axi32
+  clock_hz: 50000000
+engine: gem5
+workloads: [baremetal]

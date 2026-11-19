@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["provider", "model", "source_pins", "protocol", "instruction_owner", "memory_contexts", "external_dma_coherence", "timing_correlated"],
+  "properties": {
+    "provider": {"const": "chipyard"},
+    "model": {"const": "rocket64-imac-sv39-axi32"},
+    "protocol": {"const": "axi4-le64-pa32-to-systemc-mmio32-v1"},
+    "instruction_owner": {"const": "actual-RocketTile-RTL"},
+    "source_pins": {"type": "array", "minItems": 5, "maxItems": 5, "items": {"type": "array", "minItems": 2, "maxItems": 2, "prefixItems": [{"type": "string"}, {"type": "string", "pattern": "^[0-9a-f]{40}$"}]}},
+    "memory_contexts": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "string"}}},
+    "external_dma_coherence": {"const": false},
+    "timing_correlated": {"const": false}
+  }
+}

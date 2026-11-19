@@ -110,6 +110,8 @@ def _uint(value, label, positive=False):
 
 def project(graph):
     """Derive executable regions from graph facts, without re-reading XML."""
+    from .native_cpu_binding import ROCKET_VLNV
+
     definition = graph.definition
     if (
         definition.vlnv != BUS
@@ -213,7 +215,7 @@ def project(graph):
         targets = [i for i in own if i.mode == "target"]
         if node.model == "cpu":
             if (
-                instance.vlnv != catalog()["rv64"]["vlnv"]
+                instance.vlnv not in {catalog()["rv64"]["vlnv"], ROCKET_VLNV}
                 or instance.windows
                 or instance.parameters
                 or len(own) != 1

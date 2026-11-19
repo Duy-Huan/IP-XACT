@@ -1,0 +1,21 @@
+schema_version: native-flow-1
+spec: AI_SOC-rocket.yaml
+input_format: yaml
+engine: both
+packages: []
+software:
+- id: baremetal
+  kind: baremetal
+  timeout: 180
+- id: freertos
+  kind: freertos
+  timeout: 180
+- id: zephyr
+  kind: zephyr
+  timeout: 180
+- id: ucos2
+  kind: ucos2
+  timeout: 180
+- id: ucos3
+  kind: ucos3
+  timeout: 180

@@ -1,0 +1,77 @@
+# SPDX-License-Identifier: Apache-2.0
+# Native per-instance memory graph, with a halted IRQ context and actual RTL CPU.
+import json
+import sys
+import m5
+from m5.objects import (
+    AddrRange, Clint, HiFiveBase, NativeSocDevice, PMAChecker, Plic,
+    RiscvRTC, RiscvAtomicSimpleCPU, RiscvUart8250, Root, StubWorkload,
+    SimpleMemory, SrcClockDomain, System, SystemXBar, Terminal, UspRtlMaster,
+    VoltageDomain,
+)
+c = json.load(open(sys.argv[1]))
+s = c['spec']
+by_name = {d['name']: d for d in s['devices']}
+one = lambda kind: next(d for d in s['devices'] if d['model'] == kind)
+system = System()
+system.voltage_domain = VoltageDomain()
+system.clk_domain = SrcClockDomain(clock=str(s['cpu']['clock_hz'])+'Hz', voltage_domain=system.voltage_domain)
+system.mem_mode = 'atomic'
+ram = by_name[s['boot']['ram']]
+rom = by_name[s['boot']['rom']]
+system.mem_ranges = [AddrRange(ram['base'], size=ram['size'])]
+system.ram = SimpleMemory(range=system.mem_ranges[0], image_file=c['elf'],
+                          latency=str(s['cpu']['memory_latency_ns'])+'ns')
+system.rom = SimpleMemory(range=AddrRange(rom['base'], size=rom['size']), image_file='',
+                          latency=str(s['cpu']['memory_latency_ns'])+'ns', writeable=False)
+system.bus = SystemXBar()
+system.system_port = system.bus.cpu_side_ports
+for memory in (system.ram, system.rom):
+    memory.port = system.bus.mem_side_ports
+# No workload/reset vector activates this native context. Its only role is
+# receiving CLINT/PLIC IRQ state for UspRtlMaster to sample.
+system.cpu = [RiscvAtomicSimpleCPU(cpu_id=0, simulate_data_stalls=True, simulate_inst_stalls=True)]
+cpu = system.cpu[0]
+cpu.icache_port = system.bus.cpu_side_ports
+cpu.dcache_port = system.bus.cpu_side_ports
+cpu.createInterruptController()
+cpu.createThreads()
+cpu.isa[0].riscv_type = 'RV64'
+cpu.mmu.itb.walker.port = system.bus.cpu_side_ports
+cpu.mmu.dtb.walker.port = system.bus.cpu_side_ports
+system.platform = HiFiveBase()
+p = system.platform
+p.clint = Clint(pio_addr=one('clint')['base'], num_threads=1,
+                reset_mtimecmp=True, mtimecmp_reset_value=0xffffffffffffffff)
+p.plic = Plic(pio_addr=one('plic')['base'], n_src=32, hart_config='MS')
+p.rtc = RiscvRTC(frequency=str(s['cpu']['timebase_hz'])+'Hz')
+p.clint.int_pin = p.rtc.int_pin
+for d in (p.clint, p.plic):
+    d.pio = system.bus.mem_side_ports
+uarts = [d for d in s['devices'] if d['model'] == 'uart']
+system.uart_platforms = [HiFiveBase(uart_int_id=d['irq'], plic=p.plic, clint=p.clint) for d in uarts]
+for port, d in zip(system.uart_platforms, uarts):
+    port.terminal = Terminal(outfile='file')
+    port.uart = RiscvUart8250(pio_addr=d['base'], platform=port, device=port.terminal)
+    port.uart.pio = system.bus.mem_side_ports
+devices = [d for d in s['devices'] if d['model'] in ('chipyard.gcd', 'opentitan.gpio', 'finisher') or d['model'] in s['external_models']]
+kinds = {'chipyard.gcd': 0, 'opentitan.gpio': 1, 'finisher': 2}
+system.native_ips = [NativeSocDevice(base=d['base'], span=d['size'], kind=kinds.get(d['model'], 0),
+                                    irq=d.get('irq', 0), platform=p,
+                                    socket_path=c['sockets'].get(d['name'], '')) for d in devices]
+for d in system.native_ips:
+    d.pio = system.bus.mem_side_ports
+cpu.mmu.pma_checker = PMAChecker(uncacheable=[AddrRange(d['base'], size=d['size'])
+    for d in s['devices'] if d['model'] not in ('ram', 'rom')])
+system.workload = StubWorkload()
+root = Root(full_system=True, system=system)
+system.rtl = UspRtlMaster(system=system, cpu=cpu, socket_path=c['rtl_socket'])
+system.rtl.port = system.bus.cpu_side_ports
+m5.instantiate()
+json.dump({d['name']: port.terminal.path() for d, port in zip(uarts, system.uart_platforms)},
+          open(c['uart_index'], 'w'), indent=2)
+event = m5.simulate(c['max_ticks'])
+m5.stats.dump()
+json.dump({'cause': event.getCause(), 'code': event.getCode(), 'tick': m5.curTick()},
+          open(c['exit_file'], 'w'), indent=2)
+sys.exit(0 if event.getCause() == 'Native SoC guest finisher' and event.getCode() == 0 else 1)

@@ -1,0 +1,8 @@
+# Actual pinned single RocketTile. Requires a separately verified source build.
+schema_version: '1'
+cpu:
+  provider: chipyard
+  model: rocket64-imac-sv39-axi32
+  clock_hz: 50000000
+engine: qemu
+workloads: [baremetal]

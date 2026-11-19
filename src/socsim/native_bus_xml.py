@@ -409,9 +409,10 @@ def import_bus_design(path):
         tuple(sorted(physical.values(), key=lambda i: i.name)),
         tuple(sorted(sources)),
     )
+    canonical = compile_design(spec, structural)
     canonical = replace(
-        compile_design(spec, structural),
-        schema_version="5",
+        canonical,
+        schema_version="6" if canonical.cpu_binding else "5",
         fabric="hierarchical-static-decode-v1",
         routing=routing,
         bus_graph=graph,

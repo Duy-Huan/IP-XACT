@@ -202,6 +202,7 @@ jobs:
           bash scripts/dual_soc_bringup.sh
           USP_IP_MODELS_DIR="$PWD/build/source-ip-models" bash scripts/native_soc_bringup.sh
           bash scripts/rtl_cpu_bringup.sh
+          USP_RTL_MASTER_BUILD="$PWD/build/rtl-master-gem5" bash scripts/rocket_bringup.sh
           USP_REQUIRE_WORKSPACE=1 .venv/bin/python -m pytest tests/test_workspace.py -v --junitxml=build/workspace-junit.xml
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         if: always()
@@ -213,5 +214,6 @@ jobs:
             build/dual-soc-junit.xml
             build/native-soc/junit.xml
             build/rtl-cpu-junit.xml
+            build/rocket-junit.xml
           if-no-files-found: ignore
           retention-days: 7

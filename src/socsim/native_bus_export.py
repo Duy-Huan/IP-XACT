@@ -10,7 +10,7 @@ from .ipxact import NS, PREFIX, digest, read_xml
 from .native_bus_graph import ABSTRACTION, BUS, DECODER
 from .native_fabric import read_source
 from .runner import write_json
-from .soc_spec import FIXED_SIZE, WIDTH, catalog, model_descriptor
+from .soc_spec import FIXED_SIZE, WIDTH, model_descriptor
 
 
 def export_bus(source, out):
@@ -119,7 +119,9 @@ def export_bus(source, out):
         element(p, "initiative", initiative)
     save(abstraction, "abstraction.xml")
     by_space = {s.name: s for s in routing.spaces}
-    cpu = document("component", catalog()["rv64"]["vlnv"])
+    from .soc_spec import cpu_descriptor
+
+    cpu = document("component", cpu_descriptor(spec)["vlnv"])
     interface(cpu, "initiator", "initiator", "physical")
     space(cpu, "physical", 1 << by_space[routing.root].address_bits)
     save(cpu, "cpu.xml")
@@ -164,7 +166,7 @@ def export_bus(source, out):
             for key, value in values.items():
                 element(overrides, "configurableElementValue", value, referenceId=key)
 
-    add(spec["cpu"]["name"], catalog()["rv64"]["vlnv"], {})
+    add(spec["cpu"]["name"], cpu_descriptor(spec)["vlnv"], {})
     local = {p.instance: p.address for p in routing.placements}
     for d in spec["devices"]:
         add(

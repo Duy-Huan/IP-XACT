@@ -1,0 +1,28 @@
+ThisBuild / scalaVersion := "2.13.12"
+ThisBuild / scalacOptions ++= Seq("-Ymacro-annotations", "-language:reflectiveCalls")
+val rootPath = file("@SOURCE_ROOT@")
+def coreSettings = Seq(
+ libraryDependencies += "org.chipsalliance" %% "chisel" % "6.5.0",
+ libraryDependencies += "org.scala-lang" % "scala-reflect" % scalaVersion.value,
+ addCompilerPlugin("org.chipsalliance" % "chisel-plugin" % "6.5.0" cross CrossVersion.full))
+lazy val cde = project.in(file("libs/cde")).settings(
+ Compile / unmanagedSourceDirectories := Seq(rootPath / "rocket-cde/cde/src"))
+lazy val macros = project.in(file("libs/macros")).settings(
+ Compile / unmanagedSourceDirectories := Seq(rootPath / "rocket-chip/macros/src/main/scala"),
+ libraryDependencies += "org.scala-lang" % "scala-reflect" % scalaVersion.value)
+lazy val diplomacy = project.in(file("libs/diplomacy")).dependsOn(cde).settings(coreSettings).settings(
+ Compile / unmanagedSourceDirectories := Seq(rootPath / "rocket-diplomacy/diplomacy/src"),
+ libraryDependencies += "com.lihaoyi" %% "sourcecode" % "0.3.1")
+lazy val hardfloat = project.in(file("libs/hardfloat")).settings(coreSettings).settings(
+ Compile / unmanagedSourceDirectories := Seq(rootPath / "rocket-hardfloat/hardfloat/src/main/scala"))
+lazy val rocket = project.in(file("libs/rocket")).dependsOn(cde,macros,diplomacy,hardfloat).settings(coreSettings).settings(
+ Compile / unmanagedSourceDirectories := Seq(rootPath / "rocket-chip/src/main/scala"),
+ Compile / unmanagedResourceDirectories := Seq(rootPath / "rocket-chip/src/main/resources"),
+ libraryDependencies ++= Seq("com.lihaoyi" %% "mainargs" % "0.5.0", "org.json4s" %% "json4s-jackson" % "4.0.5", "org.scala-graph" %% "graph-core" % "1.13.5", "org.apache.commons" % "commons-lang3" % "3.12.0", "org.apache.commons" % "commons-text" % "1.9"))
+lazy val generator = project.in(file(".")).dependsOn(rocket).settings(coreSettings)
+
+lazy val inventory = taskKey[Unit]("Record actual Maven and Scala compiler artifacts")
+inventory := {
+ val artifacts = ((update).value.allFiles ++ scalaInstance.value.allJars).distinct
+ IO.write(file("dependencies.paths"), artifacts.map(_.getAbsolutePath).sorted.mkString("\n")+"\n")
+}

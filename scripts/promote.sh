@@ -13,6 +13,17 @@ export USP_REQUIRE_TESTCHIP=1
 export USP_REQUIRE_UNIFIED=1
 export USP_REQUIRE_SW_LAYERS=1
 export USP_REQUIRE_RTL_CPU=1
+export USP_REQUIRE_ROCKET=1
+export USP_REQUIRE_ROCKET_LINUX=1
+export USP_REQUIRE_NATIVE_ROCKET=1
+: "${USP_ROCKET_ROOT:?Promotion requires all three actual Rocket CPU builds}"
+: "${USP_ROCKET_SOFTWARE_ROOT:?Promotion requires source-built Rocket kernels and MMU firmware}"
+: "${USP_ROCKET_ZEPHYR_ROOT:?Promotion requires source-built Rocket Zephyr BSPs}"
+: "${USP_ROCKET_LINUX_ROOT:?Promotion requires verified Rocket OpenSBI/Linux boot builds}"
+: "${USP_NATIVE_ROCKET_ROOT:?Promotion requires native source-CPU design builds}"
+: "${USP_NATIVE_ROCKET_FLOW_ROOT:?Promotion requires source-CPU native kernel flows}"
+: "${USP_NATIVE_ROCKET_CPU_ROOT:?Promotion requires matching native Rocket CPU builds}"
+: "${USP_NATIVE_RTL_ENGINE:?Promotion requires the per-instance gem5 RTL memory engine}"
 export USP_REQUIRE_RTL_OS=1 USP_REQUIRE_UCOS=1
 export USP_REQUIRE_RTL_ZEPHYR=1
 export USP_REQUIRE_LIVE_GARNET=1
