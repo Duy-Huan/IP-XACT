@@ -36,3 +36,33 @@ Deeper tests distinguish PMA access exceptions from downstream AXI errors; the
 latter are not assumed to be precise CPU load exceptions. The current candidate
 is not release qualified: production build, firmware/negative/IRQ/reset/burst/
 backpressure acceptance, plan binding and aggregate mandatory CI remain required.
+
+Development checkpoint, 2026-11-19: the actual mapped source builder has now
+compiled all three low-PA maps (rv64-ips, AI_SOC/AIZ_SOC bring-up). Twelve actual
+runs passed: bare-metal and original PMP/Sv39 M/S/U conformance on both engines
+for each map, with deliberate request backpressure and real AXI 8-beat bursts.
+The firmware checks S-mode virtual alias writes, an unmapped S-mode page fault,
+U-mode page permissions/privileged-instruction rejection and a U-mode AMO. Raw
+commit PCs include virtual user addresses and exactly five conformance traps.
+
+Source-built FreeRTOS 11.2.0 RV64IMAC LP64 then passed its real preemption,
+saved-register and UART/PLIC acceptance on both engines for rv64-ips. Each run
+retired over 1.45 million actual RTL instructions, over 1.65 million clock edges
+and 32 traps. This is source-built scheduler execution, not an ISS replacement.
+The other mapped kernel runs and deliberate failure fixtures are still pending.
+
+`usp rocket build/run/verify` exposes the actual path. Explicit CPU selection
+`provider: chipyard`, `model: rocket64-imac-sv39-axi32` also lowers through the
+common immutable ExecutionPlan; its platform profile requires a verified CPU
+build and eligible source-built software. Platform lifecycle acceptance remains
+pending. Other Rocket configurations, BOOM, full Earlgrey, Linux RTL boot and
+native arbitrary-instance compiler binding remain separate work. No broad
+milestone or release is closed by this checkpoint.
+
+Preserved local engineering evidence: `results/continuous-upgrade-20261119/`
+contains exact build logs and prior failures, 12 per-run bundles under
+`build/rocket-acceptance-r2/`, and the two long FreeRTOS runs under
+`/dev/shm/rocket-freertos-r2/` (durable, hash-verified archives are retained under
+results before cache cleanup). The focused core probe passed 66 tests, with 15
+native cases skipped because this invocation did not supply their opt-in roots;
+that probe is not the mandatory aggregate native gate.

@@ -16,6 +16,7 @@
 #include <cstring>
 #include <cerrno>
 #include <vector>
+#include <array>
 using namespace sc_core;
 class Link {
  int fd=-1; bool binary; uint32_t seq=0;
@@ -80,7 +81,7 @@ struct Bus : sc_module {
  tlm_utils::simple_target_socket<Bus> target;
  Link link;std::ofstream trace;uint32_t finish;bool done=false;uint32_t signature=0;
  std::vector<std::pair<uint32_t,uint64_t>> regions;
- uint64_t accesses=0;
+ uint64_t accesses=0; bool inject=false; uint32_t fault_address=0;
  Bus(sc_module_name name,const char* engine,const char* sock,const char* path,uint32_t f)
  :sc_module(name),target("target"),link(engine,sock),trace(path),finish(f) {
   target.register_b_transport(this,&Bus::transport);
@@ -91,6 +92,7 @@ struct Bus : sc_module {
   bool allowed=false;
   for(auto region:regions)
    if(address>=region.first&&uint64_t(address)+width<=uint64_t(region.first)+region.second)allowed=true;
+  if(inject&&address<=fault_address&&uint64_t(address)+width>fault_address)allowed=false;
   tx.set_response_status(tlm::TLM_ADDRESS_ERROR_RESPONSE);
   if(allowed) {
    uint32_t result=link.call(tx.is_write()?1:0,address,data,width);
@@ -132,6 +134,11 @@ struct Axi {
  Initiator& memory; Burst read,write;
  bool rvalid=false,bvalid=false;uint64_t rdata=0;unsigned rresp=0,bresp=0,rid=0,bid=0;bool rlast=false;
  uint64_t ar=0,aw=0,rbeats=0,wbeats=0,bbeats=0,errors=0,stalls=0,max_burst=0;
+ unsigned latency=0;
+ uint64_t request_stalls=0;
+ std::array<uint64_t,8> previous_ar{},previous_aw{};
+ std::array<uint64_t,3> previous_w{};
+ bool held_ar=false,held_aw=false,held_w=false;
  std::ofstream trace;
  Axi(Initiator& m,const char* path):memory(m),trace(path){}
  void log(const char* channel,uint64_t cycle,uint32_t address,unsigned id,uint64_t data,unsigned response=0) {
@@ -158,15 +165,32 @@ struct Axi {
   }
   return error;
  }
- void drive(VUspRocket& cpu,bool reset,bool finishing=false) {
-  cpu.mem_0_ar_ready=!reset&&!finishing&&!read.active&&!rvalid;
-  cpu.mem_0_aw_ready=!reset&&!finishing&&!write.active&&!bvalid;
-  cpu.mem_0_w_ready=!reset&&write.active&&!bvalid;
+ void drive(VUspRocket& cpu,bool reset,uint64_t cycle,bool finishing=false) {
+  bool available=cycle%(latency+1)==0;
+  cpu.mem_0_ar_ready=!reset&&!finishing&&!read.active&&!rvalid&&available;
+  cpu.mem_0_aw_ready=!reset&&!finishing&&!write.active&&!bvalid&&available;
+  cpu.mem_0_w_ready=!reset&&write.active&&!bvalid&&available;
   cpu.mem_0_r_valid=!reset&&rvalid;cpu.mem_0_r_bits_data=rdata;
   cpu.mem_0_r_bits_id=rid;cpu.mem_0_r_bits_resp=rresp;cpu.mem_0_r_bits_last=rlast;
   cpu.mem_0_b_valid=!reset&&bvalid;cpu.mem_0_b_bits_id=bid;cpu.mem_0_b_bits_resp=bresp;
  }
  void accept(const VUspRocket& cpu,uint64_t cycle) {
+  std::array<uint64_t,8> ar_payload={cpu.mem_0_ar_bits_addr,cpu.mem_0_ar_bits_id,
+    cpu.mem_0_ar_bits_len,cpu.mem_0_ar_bits_size,cpu.mem_0_ar_bits_burst,
+    cpu.mem_0_ar_bits_lock,cpu.mem_0_ar_bits_cache,cpu.mem_0_ar_bits_prot};
+  std::array<uint64_t,8> aw_payload={cpu.mem_0_aw_bits_addr,cpu.mem_0_aw_bits_id,
+    cpu.mem_0_aw_bits_len,cpu.mem_0_aw_bits_size,cpu.mem_0_aw_bits_burst,
+    cpu.mem_0_aw_bits_lock,cpu.mem_0_aw_bits_cache,cpu.mem_0_aw_bits_prot};
+  std::array<uint64_t,3> w_payload={cpu.mem_0_w_bits_data,cpu.mem_0_w_bits_strb,cpu.mem_0_w_bits_last};
+  if((held_ar&&(!cpu.mem_0_ar_valid||previous_ar!=ar_payload))||
+     (held_aw&&(!cpu.mem_0_aw_valid||previous_aw!=aw_payload))||
+     (held_w&&(!cpu.mem_0_w_valid||previous_w!=w_payload)))
+    throw std::runtime_error("AXI payload/VALID changed while blocked");
+  held_ar=cpu.mem_0_ar_valid&&!cpu.mem_0_ar_ready;
+  held_aw=cpu.mem_0_aw_valid&&!cpu.mem_0_aw_ready;
+  held_w=cpu.mem_0_w_valid&&!cpu.mem_0_w_ready;
+  request_stalls+=held_ar+held_aw+held_w;
+  previous_ar=ar_payload;previous_aw=aw_payload;previous_w=w_payload;
   bool ar_fire=cpu.mem_0_ar_valid&&cpu.mem_0_ar_ready;
   bool aw_fire=cpu.mem_0_aw_valid&&cpu.mem_0_aw_ready;
   bool w_fire=cpu.mem_0_w_valid&&cpu.mem_0_w_ready;
@@ -191,14 +215,14 @@ struct Axi {
    bresp|=bad?3:0;errors+=bad;wbeats++;log("W",cycle,write.at(),write.id,cpu.mem_0_w_bits_data,bad?3:0);
    if(write.index==write.len){write.active=false;bvalid=true;}else write.index++;
   }
-  if(read.active&&!rvalid){
+  if(read.active&&!rvalid&&cycle%(latency+1)==0){
    bool bad=false;rdata=load(read.at(),1u<<read.size,bad)<<(8*(read.at()&7));
    rresp=bad?3:0;errors+=bad;rid=read.id;rlast=read.index==read.len;rvalid=true;
   }
  }
 };
 int sc_main(int argc,char** argv) {
- if(argc!=11)return 2;
+ if(argc!=11&&argc!=13)return 2;
  try {
   Verilated::commandArgs(argc,argv);sc_set_time_resolution(1,SC_PS);
   uint32_t boot=std::stoul(argv[5],nullptr,0);uint64_t limit=std::stoull(argv[6]),period=std::stoull(argv[7]);
@@ -209,14 +233,22 @@ int sc_main(int argc,char** argv) {
   unsigned quantum=std::stoul(argv[10]);if(quantum<1||quantum>64)throw std::runtime_error("invalid time quantum");
   Initiator cpu_bus("cpu_bus");cpu_bus.socket.bind(bus.target);sc_start(SC_ZERO_TIME);
   Axi axi(cpu_bus,(std::string(argv[4])+".axi.jsonl").c_str());
-  VUspRocket cpu;cpu.reset_vector=boot;cpu.clock=0;cpu.reset=1;cpu.interrupts=0;axi.drive(cpu,true);cpu.eval();
+  if(argc==13){
+   axi.latency=std::stoul(argv[11]);if(axi.latency>16)throw std::runtime_error("invalid AXI latency");
+   if(std::string(argv[12])!="none"){
+    uint64_t fault=std::stoull(argv[12],nullptr,0);
+    if(fault>0xffffffffULL)throw std::runtime_error("fault address overflow");
+    bus.inject=true;bus.fault_address=uint32_t(fault);
+   }
+  }
+  VUspRocket cpu;cpu.reset_vector=boot;cpu.clock=0;cpu.reset=1;cpu.interrupts=0;axi.drive(cpu,true,0);cpu.eval();
   uint64_t retired=0,traps=0,edges=0;unsigned drain=0;
   std::ofstream commits(std::string(argv[4])+".commit.jsonl");
   for(uint64_t cycle=0;cycle<limit;cycle++){
    bool reset=cycle<16;cpu.clock=0;cpu.reset=reset;
    uint32_t ip=bus.link.irqs;
    cpu.interrupts=((ip>>3)&1)*2|((ip>>7)&1)*4|((ip>>11)&1)*8|((ip>>9)&1)*16;
-   axi.drive(cpu,reset,bus.done);cpu.eval();
+   axi.drive(cpu,reset,cycle,bus.done);cpu.eval();
    if(!reset)axi.accept(cpu,cycle);
    // Inputs remain unchanged through the sampling edge. New slave responses
    // become visible only in the following cycle, and remain stable while stalled.
@@ -233,7 +265,7 @@ int sc_main(int argc,char** argv) {
   result<<"{\"source\":\"Rocket commit trace and actual clock edges\",\"cycles\":"<<edges
         <<",\"instructions\":"<<retired<<",\"traps\":"<<traps<<",\"signature\":"<<bus.signature<<",\"finished\":"<<bus.done
         <<",\"axi_ar\":"<<axi.ar<<",\"axi_aw\":"<<axi.aw<<",\"axi_r_beats\":"<<axi.rbeats<<",\"axi_w_beats\":"<<axi.wbeats
-        <<",\"axi_b\":"<<axi.bbeats<<",\"axi_errors\":"<<axi.errors<<",\"axi_stalls\":"<<axi.stalls<<",\"max_burst_beats\":"<<axi.max_burst<<"}\n";
-  return bus.done&&bus.signature==0x5555&&retired>0?0:5;
+        <<",\"axi_b\":"<<axi.bbeats<<",\"axi_errors\":"<<axi.errors<<",\"axi_stalls\":"<<axi.stalls<<",\"axi_request_stalls\":"<<axi.request_stalls<<",\"axi_latency\":"<<axi.latency<<",\"max_burst_beats\":"<<axi.max_burst<<"}\n";
+  return bus.done&&bus.signature==0x5555&&retired>0&&axi.errors==0?0:5;
  }catch(const std::exception& e){std::cerr<<e.what()<<std::endl;return 3;}
 }

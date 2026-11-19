@@ -68,6 +68,12 @@ def cpu_selection(config, engine, require=True):
     if config["engine"] != engine:
         raise ContractError("CPU configuration and execution engine differ")
     cpu = config["cpu"]
+    from .rocket_build import CPU_CONTRACT
+
+    if cpu["provider"] == "chipyard" and cpu["model"] == CPU_CONTRACT["model"]:
+        from .rocket_cpu import selection
+
+        return selection(config, engine)
     adapter = ADAPTERS.get((cpu["provider"], cpu["model"], engine))
     if cpu["provider"] in {"chipyard", "custom-rtl"} and "rtl_manifest" in cpu:
         from .rtl_cpu_build import load_manifest
@@ -130,6 +136,10 @@ def platform_plan(project, config):
 
     base = binding_plan(project, config["engine"])
     selected = cpu_selection(config, config["engine"], require=False)
+    if selected.get("rocket_profile"):
+        from .rocket_cpu import platform_plan as rocket_plan
+
+        return rocket_plan(project, config, selected, base)
     if selected.get("rtl_manifest"):
         from .rtl_cpu import platform_plan as rtl_plan
 
@@ -152,6 +162,10 @@ def run_platform(project, config, generated, models, bridge, counter, out, rtl_c
     from .runner import write_json
 
     selection = cpu_selection(config, config["engine"])
+    if selection.get("rocket_profile"):
+        from .rocket_cpu import run_platform as run_rocket
+
+        return run_rocket(project, config, generated, models, bridge, rtl_cpu_build, out)
     if selection.get("rtl_manifest"):
         if set(config["workloads"]) - {"baremetal"}:
             from .rtl_platform import run as run_rtl_software
@@ -209,6 +223,10 @@ def verify_platform(out):
 
     out = out.resolve()
     r = json.loads((out / "report.json").read_text())
+    if r.get("profile") == "rocket-cpu-platform-v1":
+        from .rocket_cpu import verify_platform as verify_rocket
+
+        return verify_rocket(out)
     if r.get("profile") == "rtl-software-platform-v1":
         from .rtl_platform import verify as verify_rtl_software
 

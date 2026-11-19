@@ -59,6 +59,10 @@ def main(argv=None) -> int:
         return rtl_os_main(argv[1:])
     if argv[:2] == ["ipxact", "validate"]:
         argv = argv[1:]
+    if argv and argv[0] == "rocket":
+        from .rocket_cpu import main as rocket_main
+
+        return rocket_main(argv[1:])
     if argv and argv[0] == "rtlcpu":
         from .rtl_cpu import main as rtl_cpu_main
 
@@ -112,6 +116,9 @@ def main(argv=None) -> int:
     commands.add_parser("soc", help="generate a native SoC from spec/memory map/IO; use --help")
     commands.add_parser(
         "platform", help="select CPU provider, engine and software workloads; use --help"
+    )
+    commands.add_parser(
+        "rocket", help="source-built Rocket AXI CPU on QEMU/gem5 memory; use --help"
     )
     commands.add_parser("rtlcpu", help="actual RTL CPU/SystemC master adapters; use --help")
     commands.add_parser("rtl-os", help="FreeRTOS on actual RV32 RTL CPU masters; use --help")
