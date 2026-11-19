@@ -40,7 +40,23 @@ usp soc accept --generated build/native-ai --models build/source-ip-models \
 usp soc verify results/native-ai
 ```
 
-`usp flow` can build the source CPU from its explicit `--cpu-*` tool paths or
+`specs/rtl/AI_SOC-rocket-flow.yaml` uses YAML intake; the AIZ_SOC flow uses the
+public `AIZ_SOC-rocket-xml/native.yaml` standard-bus XML input. Both declare
+bare-metal, FreeRTOS, Zephyr, µC/OS-II and µC/OS-III. Their BSP clock is explicitly
+50 MHz. Unsupported native Linux boot fails before creating build output.
+
+```bash
+usp flow build specs/rtl/AI_SOC-rocket-flow.yaml --out build/ai-rocket-flow \
+  --source-qemu .tools/upstream/qemu --gem5-build build/native-rtl-engine \
+  --models build/source-ip-models --rtl-cpu-build build/native-ai-cpu \
+  --source-freertos .tools/upstream/freertos --source-zephyr .tools/upstream/zephyr \
+  --ucos-upstream .tools/upstream
+usp flow run --built build/ai-rocket-flow --out results/ai-rocket-flow
+usp flow verify --built build/ai-rocket-flow --out results/ai-rocket-flow
+```
+
+Check `usp flow --help` for explicit cross-compiler paths. `usp flow` can build
+the source CPU from its explicit `--cpu-*` tool paths or
 reuse an exactly matching `--rtl-cpu-build`. It retains source ownership and
 eligible RV64 M-mode software builds; native RTL Linux still needs its own
 generated boot BSP. The separate legacy Rocket Linux profile is documented in
@@ -63,3 +79,8 @@ does not overwrite their content. Interrupted/partial transfers are unqualified.
 
 This focused evidence is not the complete software/reset/error matrix, aggregate
 local CI, a main promotion, a version tag, observed hosted CI or M8–M9 closure.
+
+Legacy parser-bound profiles may transfer a pinned QEMU/Zephyr/Linux artifact
+only after checking original manifests, every materialized generated input and
+every copied software hash. Transfer writes a new provenance record and preserves
+the original. It is verified cache reuse, not evidence of a cold compilation.

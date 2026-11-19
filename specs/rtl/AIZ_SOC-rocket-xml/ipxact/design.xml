@@ -1,0 +1,119 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<design xmlns="http://www.accellera.org/XMLSchema/IPXACT/1685-2022">
+  <vendor>socsim.native</vendor>
+  <library>generated</library>
+  <name>AIZ_SOC_Rocket_native</name>
+  <version>1.0</version>
+  <componentInstances>
+    <componentInstance>
+      <instanceName>control_core</instanceName>
+      <componentRef vendor="socsim.pinned" library="chipyard" name="rocket64-imac-axi32" version="1.0"/>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>working_memory</instanceName>
+      <componentRef vendor="socsim.example" library="reference" name="ram" version="1.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="BASE">2164260864</configurableElementValue>
+          <configurableElementValue referenceId="SIZE">8388608</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>reset_memory</instanceName>
+      <componentRef vendor="socsim.example" library="reference" name="rom" version="1.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="BASE">32768</configurableElementValue>
+          <configurableElementValue referenceId="SIZE">8192</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>time_unit</instanceName>
+      <componentRef vendor="socsim.example" library="reference" name="clint" version="1.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="BASE">34603008</configurableElementValue>
+          <configurableElementValue referenceId="SIZE">65536</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>irq_unit</instanceName>
+      <componentRef vendor="socsim.example" library="reference" name="plic" version="1.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="BASE">201326592</configurableElementValue>
+          <configurableElementValue referenceId="SIZE">67108864</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>result_port</instanceName>
+      <componentRef vendor="socsim.example" library="reference" name="finisher" version="1.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="BASE">1114112</configurableElementValue>
+          <configurableElementValue referenceId="SIZE">4096</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>trace_port</instanceName>
+      <componentRef vendor="socsim.example" library="reference" name="uart" version="1.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="BASE">369098752</configurableElementValue>
+          <configurableElementValue referenceId="SIZE">256</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>math_0</instanceName>
+      <componentRef vendor="ucb-bar" library="chipyard" name="gcd" version="1.13.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="BASE">385875968</configurableElementValue>
+          <configurableElementValue referenceId="SIZE">4096</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>math_1</instanceName>
+      <componentRef vendor="ucb-bar" library="chipyard" name="gcd" version="1.13.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="BASE">385888256</configurableElementValue>
+          <configurableElementValue referenceId="SIZE">4096</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>math_2</instanceName>
+      <componentRef vendor="ucb-bar" library="chipyard" name="gcd" version="1.13.0">
+        <configurableElementValues>
+          <configurableElementValue referenceId="BASE">385912832</configurableElementValue>
+          <configurableElementValue referenceId="SIZE">4096</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+    <componentInstance>
+      <instanceName>event_pins</instanceName>
+      <componentRef vendor="lowrisc" library="ip" name="gpio" version="silver-v5">
+        <configurableElementValues>
+          <configurableElementValue referenceId="BASE">402653184</configurableElementValue>
+          <configurableElementValue referenceId="SIZE">4096</configurableElementValue>
+        </configurableElementValues>
+      </componentRef>
+    </componentInstance>
+  </componentInstances>
+  <interconnections>
+    <interconnection>
+      <name>net0</name>
+      <activeInterface componentInstanceRef="control_core" busRef="initiator"/>
+      <activeInterface componentInstanceRef="event_pins" busRef="target"/>
+      <activeInterface componentInstanceRef="irq_unit" busRef="target"/>
+      <activeInterface componentInstanceRef="math_0" busRef="target"/>
+      <activeInterface componentInstanceRef="math_1" busRef="target"/>
+      <activeInterface componentInstanceRef="math_2" busRef="target"/>
+      <activeInterface componentInstanceRef="reset_memory" busRef="target"/>
+      <activeInterface componentInstanceRef="result_port" busRef="target"/>
+      <activeInterface componentInstanceRef="time_unit" busRef="target"/>
+      <activeInterface componentInstanceRef="trace_port" busRef="target"/>
+      <activeInterface componentInstanceRef="working_memory" busRef="target"/>
+    </interconnection>
+  </interconnections>
+</design>

@@ -21,6 +21,7 @@ export USP_REQUIRE_NATIVE_ROCKET=1
 : "${USP_ROCKET_ZEPHYR_ROOT:?Promotion requires source-built Rocket Zephyr BSPs}"
 : "${USP_ROCKET_LINUX_ROOT:?Promotion requires verified Rocket OpenSBI/Linux boot builds}"
 : "${USP_NATIVE_ROCKET_ROOT:?Promotion requires native source-CPU design builds}"
+: "${USP_NATIVE_ROCKET_FLOW_ROOT:?Promotion requires source-CPU native kernel flows}"
 : "${USP_NATIVE_ROCKET_CPU_ROOT:?Promotion requires matching native Rocket CPU builds}"
 : "${USP_NATIVE_RTL_ENGINE:?Promotion requires the per-instance gem5 RTL memory engine}"
 export USP_REQUIRE_RTL_OS=1 USP_REQUIRE_UCOS=1

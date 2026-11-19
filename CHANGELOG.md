@@ -5,6 +5,9 @@
 - Serialize cold XSD construction and reuse one fully initialized validator;
   verify concurrent first intake in a fresh four-thread process. Regenerate
   parser-identity-bound artifacts with explicit verified cache reuse.
+- Include the native RTL board resource in installed wheels and add public
+  YAML/XML source-CPU five-workload flow fixtures. Check software cache transfers
+  against complete generated inputs and preserve their original provenance.
 
 - Add native IR v6 with an explicit source CPU binding, pinned Rocket identity,
   halted QEMU/gem5 IRQ contexts and one-RAM/PA32 capability checks. Preserve

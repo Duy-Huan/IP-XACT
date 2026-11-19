@@ -1,0 +1,48 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<component xmlns="http://www.accellera.org/XMLSchema/IPXACT/1685-2022">
+  <vendor>lowrisc</vendor>
+  <library>ip</library>
+  <name>gpio</name>
+  <version>silver-v5</version>
+  <busInterfaces>
+    <busInterface>
+      <name>target</name>
+      <busType vendor="socsim.native" library="bus" name="mmio" version="1.0"/>
+      <abstractionTypes>
+        <abstractionType>
+          <abstractionRef vendor="socsim.native" library="abstraction" name="mmio" version="1.0"/>
+        </abstractionType>
+      </abstractionTypes>
+      <target>
+        <memoryMapRef memoryMapRef="map"/>
+      </target>
+      <connectionRequired>true</connectionRequired>
+      <bitsInLau>8</bitsInLau>
+      <bitSteering>0</bitSteering>
+      <endianness>little</endianness>
+    </busInterface>
+  </busInterfaces>
+  <memoryMaps>
+    <memoryMap>
+      <name>map</name>
+      <addressBlock>
+        <name>region</name>
+        <baseAddress>BASE</baseAddress>
+        <range>SIZE</range>
+        <width>32</width>
+        <usage>register</usage>
+      </addressBlock>
+      <addressUnitBits>8</addressUnitBits>
+    </memoryMap>
+  </memoryMaps>
+  <parameters>
+    <parameter parameterId="BASE" type="longint" sign="unsigned" resolve="user">
+      <name>BASE</name>
+      <value>0</value>
+    </parameter>
+    <parameter parameterId="SIZE" type="longint" sign="unsigned" resolve="user">
+      <name>SIZE</name>
+      <value>4096</value>
+    </parameter>
+  </parameters>
+</component>

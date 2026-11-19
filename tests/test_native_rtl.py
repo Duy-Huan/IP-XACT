@@ -105,3 +105,57 @@ def test_actual_native_source_cpu_and_all_ip_instances_on_both_engines(tmp_path,
     row = json.loads((tmp_path / "run/gem5/report.json").read_text())
     assert row["checks"]["no_native_iss"] is True
     assert row["counters"]["instructions"] > 100
+
+
+@pytest.mark.parametrize("case", ["linux", "clock", "cost", "missing-tools"])
+def test_native_source_cpu_flow_rejects_unqualified_boot_timing_and_builds(tmp_path, case):
+    import shutil
+
+    from socsim.native_flow import build_flow, plan
+
+    root = tmp_path / "input"
+    shutil.copytree(ROOT / "specs/rtl", root)
+    path = root / "AI_SOC-rocket-flow.yaml"
+    data = yaml.safe_load(path.read_text())
+    if case == "linux":
+        data["software"][0]["kind"] = "linux"
+    elif case == "clock":
+        spec = root / data["spec"]
+        c = yaml.safe_load(spec.read_text())
+        c["cpu"]["clock_hz"] = 100000000
+        spec.write_text(yaml.safe_dump(c))
+    elif case == "cost":
+        data["performance"] = {"qemu": {"base_cpi": 1, "memory_extra_cycles": 1}}
+    path.write_text(yaml.safe_dump(data))
+    out = tmp_path / "built"
+    with pytest.raises(ContractError):
+        if case == "missing-tools":
+            build_flow(path, out, {})
+        else:
+            plan(path)
+    assert not out.exists()
+
+
+@pytest.mark.parametrize("name", ["AI_SOC", "AIZ_SOC"])
+def test_actual_native_source_cpu_flow_runs_all_eligible_kernels(tmp_path, name):
+    from socsim.native_flow import execute_flow, verify_build, verify_flow
+
+    root = os.environ.get("USP_NATIVE_ROCKET_FLOW_ROOT")
+    if not root:
+        if os.environ.get("USP_REQUIRE_NATIVE_ROCKET") == "1":
+            pytest.fail("mandatory native source-CPU software flow builds missing")
+        pytest.skip("actual native source-CPU flow roots not supplied")
+    built = Path(root).resolve() / name
+    record, p = verify_build(built)
+    assert p["engine"] == "both"
+    assert record["software_order"] == ["baremetal", "freertos", "zephyr", "ucos2", "ucos3"]
+    out = tmp_path / "run"
+    assert execute_flow(built, out)["status"] == "PASSED"
+    assert verify_flow(built, out)["status"] == "PASSED"
+    for kind in record["software_order"]:
+        for engine in ("qemu", "gem5"):
+            row = json.loads((out / kind / engine / "report.json").read_text())
+            assert row["counters"]["instructions"] > 100
+            assert row["performance"]["source"] == "actual Rocket clock edges and commit trace"
+            if engine == "gem5":
+                assert row["checks"]["no_native_iss"] is True

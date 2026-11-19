@@ -359,3 +359,9 @@ USP_NATIVE_RTL_ENGINE before promotion. The v6 source binding must not become
 an ISS substitution, and atomic backing-memory/PA32/one-RAM limits stay explicit.
 Preserve the source-cache executable separately while linking a native engine;
 interrupted copy/controller attempts do not qualify a completed build.
+
+Require USP_NATIVE_ROCKET_FLOW_ROOT and the two actual native five-workload
+flows on both engines. Their bounded M-mode BSP eligibility does not infer
+native Linux, BOOM, coherent DMA or complete inventories. Distributions must
+include the native RTL board resource; source-checkout execution alone is not
+installed-package acceptance.
