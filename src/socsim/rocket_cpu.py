@@ -23,10 +23,22 @@ from .ipxact import digest
 from .log_capture import LogCapture, open_log
 from .pipeline import QEMU_SHA, execute, identity, verify_generated
 from .rocket_build import CPU_CONTRACT, PINS, RESOURCES, address_map_contract, verify_build
-from .rtl_cpu import MARKERS, ZERO_COUNTERS, read_rows, unmapped_test_address, wait_socket
+from .rtl_cpu import MARKERS, ZERO_COUNTERS, unmapped_test_address, wait_socket
 from .rtl_cpu_build import verify_engine
 from .runner import tool_version, write_json
 from .unified import board_contract, trace_checks
+
+TRACE_PC = {
+    "source_bits": 40,
+    "raw_encoding": "upstream vaddrBitsExtended zero-extended into wrapper UInt64",
+    "canonical_rule": "sign-extend bit39 to 64 bits; preserve raw event bytes",
+}
+
+
+def canonical_pc(value):
+    if type(value) is not int or not 0 <= value < 2**40:
+        raise ContractError("invalid Rocket extended Sv39 trace PC")
+    return value | (0xFFFFFF << 40) if value & (1 << 39) else value
 
 
 def runtime_identity():
@@ -203,13 +215,12 @@ def build_firmware(project, out):
 
 
 def axi_checks(path, counters):
-    rows = events(path)
     counts = {k: 0 for k in ("AR", "AW", "R", "W", "B")}
     read = write = None
     maximum = 0
     previous_cycle = -1
     try:
-        for row in rows:
+        for row in iter_events(path):
             channel = row["channel"]
             if (
                 any(
@@ -254,7 +265,7 @@ def axi_checks(path, counters):
                     return False
                 write = None
         return (
-            bool(rows)
+            sum(counts.values()) > 0
             and read is None
             and write is None
             and maximum == counters["max_burst_beats"]
@@ -269,16 +280,36 @@ def axi_checks(path, counters):
                 )
             )
         )
-    except (KeyError, TypeError):
+    except (KeyError, TypeError, ValueError, OSError, EOFError):
         return False
+
+
+def captured_streams(engine):
+    streams = {
+        "cpu.log",
+        "rtl-counters.json.commit.jsonl",
+        "rtl-counters.json.axi.jsonl",
+        "bus-trace.jsonl",
+    }
+    return streams | {"qtest.log"} if engine == "qemu" else streams
+
+
+def iter_events(path):
+    with open_log(path) as stream:
+        for line in stream:
+            if len(line) > 4096:
+                raise ValueError("oversized native trace record")
+            row = json.loads(line)
+            if not isinstance(row, dict):
+                raise ValueError("native trace event must be an object")
+            yield row
 
 
 def events(path):
     """A truncated/crashed raw log cannot become successful partial evidence."""
     try:
-        rows = read_rows(path)
-        return rows if all(isinstance(row, dict) for row in rows) else []
-    except (OSError, ValueError):
+        return list(iter_events(path))
+    except (OSError, ValueError, EOFError):
         return []
 
 
@@ -300,7 +331,7 @@ def commit_summary(path):
                     or type(row.get("trap")) not in {int, bool}
                     or row["trap"] not in {0, 1}
                     or row["cycle"] <= last
-                    or not 0 <= row["pc"] < 2**64
+                    or not 0 <= row["pc"] < 2**40
                     or not 0 <= row["instruction"] < 2**32
                 ):
                     return None
@@ -488,8 +519,9 @@ def run(
     else:
         if bridge is None:
             raise ContractError("verified gem5 external memory master required")
+        bridge = bridge.resolve()
         backend_record = verify_engine(bridge)
-        backend_binary = bridge.resolve() / "gem5.opt"
+        backend_binary = bridge / "gem5.opt"
     engine_sha = digest(backend_binary)
     out.mkdir(parents=True)
     if elf is None:
@@ -510,7 +542,8 @@ def run(
     processes = []
     capture = LogCapture(out) if compressed_trace else None
     if capture:
-        capture.fifo("rtl-counters.json.commit.jsonl")
+        for name in captured_streams(engine) - {"cpu.log"}:
+            capture.fifo(name)
     logs = []
     commands = []
     driver = backend = None
@@ -660,6 +693,7 @@ def run(
     report = {
         "status": "PASSED" if error is None and all(checks.values()) else "FAILED",
         "cpu_model": CPU_CONTRACT["model"],
+        "trace_pc_encoding": TRACE_PC,
         "engine": engine,
         "checks": checks,
         "counters": counters,
@@ -731,7 +765,10 @@ def verify_run(project, cpu_build, out):
         "bus-trace.jsonl",
     }
     if report["compressed_trace"]:
-        required.update({"capture.json", "cpu.log.gz"})
+        required -= {"rtl-counters.json.axi.jsonl", "bus-trace.jsonl"}
+        required.update(
+            {"capture.json", *(name + ".gz" for name in captured_streams(report["engine"]))}
+        )
     if not required.issubset(report["files"]):
         raise ContractError("incomplete Rocket run artifact closure")
     if report["derived_ir_sha256"] != digest(out / "soc-ir.json") or report[
@@ -780,7 +817,7 @@ def verify_run(project, cpu_build, out):
         checks["trace_capture_complete"] = (
             record["complete"] is True
             and record["errors"] == []
-            and set(record["streams"]) == {"cpu.log", "rtl-counters.json.commit.jsonl"}
+            and set(record["streams"]) == captured_streams(report["engine"])
         )
         for name, captured in record["streams"].items():
             checks["trace_capture_complete"] &= captured["codec"] == "gzip" and captured[
@@ -792,6 +829,7 @@ def verify_run(project, cpu_build, out):
         != json.loads(json.dumps(target_ir(project, build, entry).to_dict()))
         or report["cpu_source_pins"] != PINS
         or report["cpu_model"] != CPU_CONTRACT["model"]
+        or report["trace_pc_encoding"] != TRACE_PC
         or report["performance"] != rtl_metrics(counters if checks["valid_counters"] else {})
         or counters.get("cycles", 0) > report["max_cycles"]
     ):

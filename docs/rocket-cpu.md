@@ -124,3 +124,16 @@ not accepted userspace yet. A boot trampoline supplies hart ID and DTB, while a
 fresh pinned OpenSBI build preserves its firmware-region alignment and the Linux
 2 MiB payload alignment. The failed entry/alignment and budget-exhaustion probes
 are preserved. Do not infer Linux acceptance from the banner or this work log.
+
+Long-trace follow-up also compresses AXI, memory bus and QEMU qtest records;
+protocol validation now streams those records too. A relative gem5 bridge path
+is normalized before containment checks. Raw upstream trace addresses contain
+40 extended Sv39 bits zero-extended into the wrapper's UInt64; reports declare
+that encoding and canonical presentation sign-extends bit39, retaining raw bytes.
+
+The 128MiB Linux long probe timed out at 900 seconds after actual kernel/PLIC
+initialization. A subsequent functional boot investigation explicitly selects
+Linux `mem=32M` and publishes the current DT ISA properties; the hardware RAM
+map remains 128MiB. That software working-set choice is recorded as a separate
+profile, not a full-RAM or full-design acceptance result. Userspace and the
+matching gem5 boot still require actual successful execution.

@@ -169,7 +169,7 @@ def native_roots():
 @pytest.mark.parametrize("kind", ["baremetal", "mmu"])
 def test_actual_rocket_axi_backpressure_and_privilege_paths(tmp_path, name, engine, kind):
     p, cpu, software, generated, models, bridge = native_inputs(name)
-    kw = {"axi_latency": 3}
+    kw = {"axi_latency": 3, "compressed_trace": kind == "mmu" or engine == "qemu"}
     if kind == "mmu":
         sw = software / "mmu"
         r = verify_software(p, cpu, sw)
@@ -256,7 +256,9 @@ def test_actual_rocket_bus_errors_and_execution_budget_cannot_pass(tmp_path, eng
         kw["fault_address"] = next(i.windows[0].base for i in p.ir.instances if i.name == "cygcd")
     else:
         kw["max_cycles"] = 16
-    report = run(p, cpu, generated, models, engine, tmp_path / "run", bridge, **kw)
+    report = run(
+        p, cpu, generated, models, engine, tmp_path / "run", bridge, compressed_trace=True, **kw
+    )
     assert report["status"] == "FAILED", report
     if failure == "downstream-axi":
         assert report["counters"]["axi_errors"] > 0
@@ -325,3 +327,15 @@ def test_actual_rocket_source_built_zephyr_bsp(tmp_path, name, engine, case):
         assert report["counters"]["finished"] == 0
         assert report["counters"]["cycles"] == 1500000
         assert "USP_TEST_PASS" not in (tmp_path / "run/uart.log").read_text()
+
+
+@pytest.mark.parametrize(
+    "raw,canonical",
+    [(0x80000000, 0x80000000), (0x50000000, 0x50000000), (0xFF80089538, 0xFFFFFFFF80089538)],
+)
+def test_sv39_trace_pc_encoding_is_explicit_without_rewriting_raw_events(raw, canonical):
+    from socsim.rocket_cpu import canonical_pc
+
+    assert canonical_pc(raw) == canonical
+    with pytest.raises(ContractError):
+        canonical_pc(1 << 40)
