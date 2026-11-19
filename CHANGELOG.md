@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased — continuous milestone implementation
+
+- Build the actual Chipyard-pinned RocketTile with its L1/PTW/TLBroadcast and AXI
+  adapters; execute real RTL instructions on QEMU/gem5-owned physical memory.
+- Add explicit CPU ownership/plan lowering, strict RV64IMAC LP64 ELF checks,
+  raw AXI/commit verification, deliberate backpressure/error diagnostics and
+  source-built FreeRTOS plus PMP/Sv39 M/S/U conformance firmware.
+- Broad M1–M9 exits remain partial. No new release tag or hosted result is implied.
+
 ## 0.3.0a4 — 2026-11-18 (v0.3.0-alpha.4)
 
 - Import real 2022 bus/abstraction/interface/address-space/segment/subspace/

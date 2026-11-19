@@ -13,6 +13,10 @@ export USP_REQUIRE_TESTCHIP=1
 export USP_REQUIRE_UNIFIED=1
 export USP_REQUIRE_SW_LAYERS=1
 export USP_REQUIRE_RTL_CPU=1
+export USP_REQUIRE_ROCKET=1
+: "${USP_ROCKET_ROOT:?Promotion requires all three actual Rocket CPU builds}"
+: "${USP_ROCKET_SOFTWARE_ROOT:?Promotion requires source-built Rocket kernels and MMU firmware}"
+: "${USP_ROCKET_ZEPHYR_ROOT:?Promotion requires source-built Rocket Zephyr BSPs}"
 export USP_REQUIRE_RTL_OS=1 USP_REQUIRE_UCOS=1
 export USP_REQUIRE_RTL_ZEPHYR=1
 export USP_REQUIRE_LIVE_GARNET=1

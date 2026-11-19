@@ -20,7 +20,7 @@ from .execution import cleanup_on_termination
 from .gem5 import python_environment
 from .ipblocks import verify_models
 from .ipxact import digest
-from .pipeline import execute, identity, verify_generated
+from .pipeline import QEMU_SHA, execute, identity, verify_generated
 from .rocket_build import CPU_CONTRACT, PINS, RESOURCES, address_map_contract, verify_build
 from .rtl_cpu import MARKERS, ZERO_COUNTERS, read_rows, unmapped_test_address, wait_socket
 from .rtl_cpu_build import verify_engine
@@ -35,6 +35,7 @@ def runtime_identity():
         for name in (
             "rocket_cpu.py",
             "rocket_software.py",
+            "rocket_zephyr.py",
             "unified.py",
             "rtl_cpu.py",
             "execution.py",
@@ -204,6 +205,7 @@ def axi_checks(path, counters):
     counts = {k: 0 for k in ("AR", "AW", "R", "W", "B")}
     read = write = None
     maximum = 0
+    previous_cycle = -1
     try:
         for row in rows:
             channel = row["channel"]
@@ -213,11 +215,14 @@ def axi_checks(path, counters):
                     for k in ("cycle", "address", "id", "data", "response")
                 )
                 or not 0 <= row["cycle"] < counters["cycles"]
+                or row["cycle"] < previous_cycle
+                or not 0 <= row["data"] < 2**64
                 or not 0 <= row["address"] < 2**32
                 or not 0 <= row["id"] < 16
                 or row["response"] != 0
             ):
                 return False
+            previous_cycle = row["cycle"]
             counts[channel] += 1
             if channel in {"AR", "AW"}:
                 if not 1 <= row["data"] <= 256:
@@ -275,6 +280,55 @@ def events(path):
         return []
 
 
+def commit_summary(path):
+    """Bound validation memory independently of guest instruction count."""
+    retired = traps = 0
+    last = -1
+    stores = set()
+    user_virtual = False
+    try:
+        with path.open() as stream:
+            for line in stream:
+                if len(line) > 4096:
+                    return None
+                row = json.loads(line)
+                if (
+                    not isinstance(row, dict)
+                    or any(type(row.get(k)) is not int for k in ("cycle", "pc", "instruction"))
+                    or type(row.get("trap")) not in {int, bool}
+                    or row["trap"] not in {0, 1}
+                    or row["cycle"] <= last
+                    or not 0 <= row["pc"] < 2**64
+                    or not 0 <= row["instruction"] < 2**32
+                ):
+                    return None
+                last = row["cycle"]
+                retired += not row["trap"]
+                traps += bool(row["trap"])
+                if not row["trap"]:
+                    user_virtual |= 0x50000000 <= row["pc"] < 0x50001000
+                    if row["instruction"] & 127 == 0x23:
+                        stores.add((row["instruction"] >> 12) & 7)
+    except (OSError, ValueError):
+        return None
+    return (retired, traps, last, stores, user_virtual) if last >= 0 else None
+
+
+def rtl_metrics(counters):
+    cycles, instructions = counters.get("cycles", 0), counters.get("instructions", 0)
+    if type(cycles) is not int or type(instructions) is not int or min(cycles, instructions) < 0:
+        cycles = instructions = 0
+    return {
+        "source": "actual Rocket clock edges and commit trace",
+        "cycles": cycles,
+        "instructions": instructions,
+        "cpi": cycles / instructions if instructions else None,
+        "ipc": instructions / cycles if cycles else None,
+        "calibrated_to_silicon": False,
+        "scope": "reset through final-response drain; atomic backing memory; bounded quantum",
+    }
+
+
 def acceptance(
     out, engine, markers, cpu_rc, engine_rc, timed_out, axi_latency=0, fault_address=None
 ):
@@ -284,23 +338,9 @@ def acceptance(
         counters = {}
     if not isinstance(counters, dict):
         counters = {}
-    commits = events(out / "rtl-counters.json.commit.jsonl")
-    n = sum(row.get("trap") is False or row.get("trap") == 0 for row in commits)
-    traps = sum(row.get("trap") is True or row.get("trap") == 1 for row in commits)
-    valid = bool(commits) and all(
-        type(x.get("cycle")) is int
-        and type(x.get("pc")) is int
-        and type(x.get("instruction")) is int
-        and type(x.get("trap")) in {int, bool}
-        and x["trap"] in {0, 1}
-        and x["cycle"] >= 0
-        and 0 <= x["pc"] < 2**64
-        and 0 <= x["instruction"] < 2**32
-        for x in commits
-    )
-    valid = valid and all(
-        a["cycle"] < b["cycle"] for a, b in zip(commits, commits[1:], strict=False)
-    )
+    summary = commit_summary(out / "rtl-counters.json.commit.jsonl")
+    valid = summary is not None
+    n, traps, last_cycle, stores, user_virtual = summary or (0, 0, -1, set(), False)
     counter_valid = all(
         type(counters.get(k)) is int and counters[k] >= 0
         for k in (
@@ -317,6 +357,8 @@ def acceptance(
             "axi_errors",
             "axi_stalls",
             "max_burst_beats",
+            "axi_request_stalls",
+            "axi_latency",
         )
     )
     uart = (out / "uart.log").read_text(errors="replace") if (out / "uart.log").exists() else ""
@@ -329,7 +371,7 @@ def acceptance(
         and n > 0
         and counters.get("instructions") == n
         and counters.get("traps") == traps,
-        "clock_edges": valid and counter_valid and counters["cycles"] > commits[-1]["cycle"],
+        "clock_edges": valid and counter_valid and counters["cycles"] > last_cycle,
         "native_finisher": counters.get("finished") == 1 and counters.get("signature") == 0x5555,
         "axi_protocol": axi_checks(out / "rtl-counters.json.axi.jsonl", counters)
         if counter_valid
@@ -341,7 +383,7 @@ def acceptance(
         "actual_request_backpressure": axi_latency == 0
         or (type(counters.get("axi_request_stalls")) is int and counters["axi_request_stalls"] > 0),
     }
-    if markers == MARKERS:
+    if {"USP_CHIPYARD_GCD_IRQ_OK", "USP_OPENTITAN_GPIO_IRQ_OK"}.issubset(markers):
         try:
             checks.update(trace_checks(events(out / "ip-trace.jsonl")))
         except (KeyError, TypeError):
@@ -350,9 +392,8 @@ def acceptance(
         checks["physical_byte_and_word_accesses"] = {1, 4}.issubset(
             {row.get("width") for row in bus}
         )
-        checks["retired_subword_and_wide_stores"] = {0, 1, 3}.issubset(
-            {(x["instruction"] >> 12) & 7 for x in commits if x.get("instruction", 0) & 127 == 0x23}
-        )
+        if markers == MARKERS:
+            checks["retired_subword_and_wide_stores"] = {0, 1, 3}.issubset(stores)
     from .freertos import MARKERS as RTOS_MARKERS
     from .freertos import acceptance as rtos_acceptance
     from .rocket_software import MMU_MARKERS
@@ -360,18 +401,19 @@ def acceptance(
     if markers == list(RTOS_MARKERS):
         checks.update(rtos_acceptance(uart)[0])
     if markers == MMU_MARKERS:
-        checks["actual_virtual_user_retirement"] = any(
-            0x50000000 <= c.get("pc", -1) < 0x50001000 for c in commits
-        )
+        checks["actual_virtual_user_retirement"] = user_virtual
         checks["actual_privilege_faults"] = traps >= 5
     if engine == "gem5":
-        stats = {}
+        stats: dict[str, float | None] = {}
         for line in (
             (out / "stats.txt").read_text().splitlines() if (out / "stats.txt").exists() else []
         ):
             parts = line.split()
             if len(parts) > 1 and parts[0] in ZERO_COUNTERS:
-                stats[parts[0]] = float(parts[1])
+                try:
+                    stats[parts[0]] = float(parts[1])
+                except ValueError:
+                    stats[parts[0]] = None
         checks["no_native_iss"] = set(stats) == ZERO_COUNTERS and all(
             v == 0 for v in stats.values()
         )
@@ -408,11 +450,14 @@ def run(
         or not 16 <= max_cycles <= 10000000
         or type(axi_latency) is not int
         or not 0 <= axi_latency <= 16
+        or type(timeout) not in {int, float}
         or not 1 <= timeout <= 300
     ):
         raise ContractError("invalid Rocket execution bounds")
     cpu_build, generated, models, out = (p.resolve() for p in (cpu_build, generated, models, out))
+    runtime = runtime_identity()
     build = verify_build(cpu_build)
+    cpu_build_sha = digest(cpu_build / "rocket-build.json")
     ir = target_ir(project, build)
     b = board_contract(project)
     if fault_address is not None and (
@@ -429,15 +474,19 @@ def run(
     if engine == "qemu":
         backend_binary = generated / "qemu-build/qemu-system-riscv64"
         backend_record = json.loads((generated / "qemu-build.json").read_text())
-        if backend_record["binary_sha256"] != digest(backend_binary) or backend_record[
-            "generated_manifest_sha256"
-        ] != digest(generated / "manifest.json"):
+        if (
+            backend_record["binary_sha256"] != digest(backend_binary)
+            or backend_record["generated_manifest_sha256"] != digest(generated / "manifest.json")
+            or backend_record["source_commit"] != QEMU_SHA
+            or backend_record["generated_machine_sha256"] != digest(generated / "machine.c")
+        ):
             raise ContractError("modified/stale QEMU memory engine")
     else:
         if bridge is None:
             raise ContractError("verified gem5 external memory master required")
         backend_record = verify_engine(bridge)
         backend_binary = bridge.resolve() / "gem5.opt"
+    engine_sha = digest(backend_binary)
     out.mkdir(parents=True)
     if elf is None:
         elf = build_firmware(project, out / "firmware")
@@ -580,8 +629,16 @@ def run(
     checks, counters = acceptance(
         out, engine, markers, driver_rc, engine_rc, timed_out, axi_latency, fault_address
     )
-    cycles = counters.get("cycles", 0) if checks["valid_counters"] else 0
-    instructions = counters.get("instructions", 0) if checks["valid_counters"] else 0
+    checks["unchanged_runtime"] = runtime == runtime_identity()
+    checks["unchanged_model_binary"] = model["binary_sha256"] == digest(
+        models / "rtl/Vusp_ipblocks"
+    )
+    checks["unchanged_engine_binary"] = engine_sha == digest(backend_binary)
+    checks["unchanged_cpu_build"] = cpu_build_sha == digest(cpu_build / "rocket-build.json")
+    try:
+        verify_build(cpu_build)
+    except (ContractError, OSError, ValueError, KeyError):
+        checks["unchanged_cpu_build"] = False
     report = {
         "status": "PASSED" if error is None and all(checks.values()) else "FAILED",
         "cpu_model": CPU_CONTRACT["model"],
@@ -598,23 +655,25 @@ def run(
         "quantum": quantum,
         "axi_latency_cycles": axi_latency,
         "diagnostic_bus_fault_address": fault_address,
-        "runtime_identity": runtime_identity(),
+        "runtime_identity": runtime,
+        "max_cycles": max_cycles,
+        "timeout_seconds": timeout,
         "base_io_ir_sha256": identity(project),
         "derived_ir_sha256": digest(out / "soc-ir.json"),
         "firmware_sha256": digest(out / "firmware.elf"),
-        "cpu_build_sha256": digest(cpu_build / "rocket-build.json"),
+        "cpu_build_sha256": cpu_build_sha,
         "cpu_source_pins": PINS,
         "models_binary_sha256": model["binary_sha256"],
-        "engine_binary_sha256": digest(backend_binary),
-        "performance": {
-            "source": "actual Rocket clock edges and commit trace",
-            "cycles": cycles,
-            "instructions": instructions,
-            "cpi": cycles / instructions if instructions else None,
-            "ipc": instructions / cycles if cycles else None,
-            "calibrated_to_silicon": False,
-            "scope": "reset through final-response drain; atomic backing memory; bounded quantum",
+        "engine_binary_sha256": engine_sha,
+        "binary_artifacts": {
+            "cpu": {
+                "path": str(cpu_build / "sim/VUspRocket"),
+                "sha256": digest(cpu_build / "sim/VUspRocket"),
+            },
+            "engine": {"path": str(backend_binary), "sha256": engine_sha},
+            "models": {"path": str(models / "rtl/Vusp_ipblocks"), "sha256": model["binary_sha256"]},
         },
+        "performance": rtl_metrics(counters if checks["valid_counters"] else {}),
         "limitations": [
             "single RV64IMAC RocketTile; 32-bit physical addresses",
             "backing RAM/peripherals owned by the selected engine; no native ISS execution",
@@ -633,7 +692,7 @@ def run(
 
 
 def verify_run(project, cpu_build, out):
-    verify_build(cpu_build)
+    build = verify_build(cpu_build)
     report = json.loads((out / "report.json").read_text())
     if (
         report["runtime_identity"] != runtime_identity()
@@ -670,6 +729,38 @@ def verify_run(project, cpu_build, out):
         report["axi_latency_cycles"],
         report["diagnostic_bus_fault_address"],
     )
+    if set(report["binary_artifacts"]) != {"cpu", "engine", "models"}:
+        raise ContractError("incomplete Rocket binary dependency closure")
+    for name, artifact in report["binary_artifacts"].items():
+        if digest(Path(artifact["path"])) != artifact["sha256"]:
+            raise ContractError("modified/missing Rocket binary dependency: " + name)
+    if (
+        report["binary_artifacts"]["cpu"]["sha256"] != digest(cpu_build / "sim/VUspRocket")
+        or report["binary_artifacts"]["engine"]["sha256"] != report["engine_binary_sha256"]
+        or report["binary_artifacts"]["models"]["sha256"] != report["models_binary_sha256"]
+    ):
+        raise ContractError("mixed Rocket binary dependency identity")
+    checks.update(
+        {
+            k: True
+            for k in (
+                "unchanged_runtime",
+                "unchanged_model_binary",
+                "unchanged_engine_binary",
+                "unchanged_cpu_build",
+            )
+        }
+    )
+    entry = validate_elf(out / "firmware.elf", build["ram"])
+    if (
+        json.loads((out / "soc-ir.json").read_text())
+        != json.loads(json.dumps(target_ir(project, build, entry).to_dict()))
+        or report["cpu_source_pins"] != PINS
+        or report["cpu_model"] != CPU_CONTRACT["model"]
+        or report["performance"] != rtl_metrics(counters if checks["valid_counters"] else {})
+        or counters.get("cycles", 0) > report["max_cycles"]
+    ):
+        raise ContractError("invalid Rocket IR/CPU/performance/interval evidence")
     if (
         report["status"] != "PASSED"
         or checks != report["checks"]
@@ -686,7 +777,7 @@ def selection(config, engine):
         raise ContractError("unsupported Rocket memory engine")
     if "rtl_manifest" in cpu or "qemu_cost_model" in config:
         raise ContractError("Rocket uses its pinned source profile and actual RTL counters")
-    if set(config["workloads"]) - {"baremetal", "freertos"}:
+    if set(config["workloads"]) - {"baremetal", "freertos", "zephyr"}:
         raise ContractError("selected Rocket software/MMU port is not yet qualified")
     if set(config.get("software_builds", {})) != set(config["workloads"]) - {"baremetal"}:
         raise ContractError(
@@ -820,6 +911,7 @@ def run_platform(project, config, generated, models, bridge, cpu_build, out):
     write_json(out / "plan.json", compile_plan(project, config))
     write_json(out / "soc-ir.json", target_ir(project, build).to_dict())
     results = {}
+    software_sources = {}
     for workload in config["workloads"]:
         artifact = config.get("artifacts", {}).get(workload)
         elf = None
@@ -829,13 +921,19 @@ def run_platform(project, config, generated, models, bridge, cpu_build, out):
             if "dtb" in artifact or digest(elf) != artifact["sha256"]:
                 raise ContractError("modified or incompatible Rocket external software")
             markers = artifact["expected_markers"]
-        if workload == "freertos":
+        if workload in {"freertos", "zephyr"}:
             from .rocket_software import verify_software
+            from .rocket_zephyr import verify_build as verify_zephyr
 
             software = Path(config["software_builds"][workload])
-            sw = verify_software(project, cpu_build, software)
+            verifier = verify_zephyr if workload == "zephyr" else verify_software
+            sw = verifier(project, cpu_build, software)
             if sw["kind"] != workload or sw["case"] != "smoke":
                 raise ContractError("Rocket platform requires positive matching kernel acceptance")
+            software_sources[workload] = {
+                "path": str(software),
+                "record_sha256": digest(software / "software-build.json"),
+            }
             elf, markers = software / "firmware.elf", sw["expected_markers"]
         results[workload] = run(
             project,
@@ -848,7 +946,7 @@ def run_platform(project, config, generated, models, bridge, cpu_build, out):
             elf=elf,
             markers=markers,
             clock_hz=selected["clock_hz"],
-            max_cycles=10000000 if workload == "freertos" else 1000000,
+            max_cycles=10000000 if workload in {"freertos", "zephyr"} else 1000000,
         )
     report = {
         "schema_version": "1",
@@ -861,6 +959,7 @@ def run_platform(project, config, generated, models, bridge, cpu_build, out):
             k: {n: r[n] for n in ("status", "checks", "performance")} for k, r in results.items()
         },
         "full_architecture_complete": False,
+        "software_sources": software_sources,
         "files": {
             p.relative_to(out).as_posix(): digest(p) for p in sorted(out.rglob("*")) if p.is_file()
         },
@@ -888,6 +987,16 @@ def verify_platform(out):
     for name, sha in report["files"].items():
         if digest(inside(out, name)) != sha:
             raise ContractError("modified Rocket platform evidence")
+    for workload, source in report["software_sources"].items():
+        from .rocket_software import verify_software
+        from .rocket_zephyr import verify_build as verify_zephyr
+
+        sw_path = Path(source["path"])
+        if digest(sw_path / "software-build.json") != source["record_sha256"]:
+            raise ContractError("modified Rocket platform kernel provenance")
+        (verify_zephyr if workload == "zephyr" else verify_software)(project, cpu_build, sw_path)
+    if set(report["software_sources"]) != set(report["results"]) - {"baremetal"}:
+        raise ContractError("missing Rocket platform kernel provenance")
     for workload, result in report["results"].items():
         verify_run(project, cpu_build, out / workload)
         row = json.loads((out / workload / "report.json").read_text())
@@ -904,7 +1013,7 @@ def main(argv):
 
     parser = argparse.ArgumentParser(prog="usp rocket")
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("build", "run", "verify"):
+    for name in ("build", "build-software", "run", "verify"):
         p = sub.add_parser(name)
         p.add_argument("project", type=Path)
         if name == "build":
@@ -914,6 +1023,14 @@ def main(argv):
         else:
             p.add_argument("--cpu-build", type=Path, required=True)
             p.add_argument("--out", type=Path, required=True)
+        if name == "build-software":
+            p.add_argument("--kind", choices=("mmu", "freertos", "zephyr"), required=True)
+            p.add_argument("--generated", type=Path)
+            p.add_argument("--upstream", type=Path)
+            p.add_argument(
+                "--case", choices=("smoke", "assert-failure", "tick-disabled"), default="smoke"
+            )
+            p.add_argument("--jobs", type=int, default=2)
         if name == "run":
             for option in ("generated", "models", "bridge", "elf"):
                 p.add_argument("--" + option, type=Path, required=option in {"generated", "models"})
@@ -950,6 +1067,37 @@ def main(argv):
                 "model": record["model"],
                 "out": str(args.out.resolve()),
             }
+        elif args.command == "build-software":
+            from .rocket_software import build_freertos, build_mmu
+            from .rocket_zephyr import build as build_zephyr
+
+            if args.kind == "mmu":
+                if args.case != "smoke":
+                    raise ContractError("MMU conformance has only its explicit smoke profile")
+                record = build_mmu(project, args.cpu_build.resolve(), args.out)
+            else:
+                if args.generated is None or args.upstream is None:
+                    raise ContractError("kernel source build needs --generated and --upstream")
+                if args.kind == "freertos":
+                    record = build_freertos(
+                        project,
+                        args.cpu_build.resolve(),
+                        args.generated.resolve(),
+                        args.upstream.resolve() / "freertos",
+                        args.out,
+                        args.case,
+                    )
+                else:
+                    record = build_zephyr(
+                        project,
+                        args.cpu_build.resolve(),
+                        args.generated.resolve(),
+                        args.upstream.resolve() / "zephyr",
+                        args.out,
+                        args.case,
+                        args.jobs,
+                    )
+            report = {"status": "PASSED", "kind": record["kind"], "out": str(args.out.resolve())}
         elif args.command == "verify":
             report = verify_run(project, args.cpu_build.resolve(), args.out.resolve())
         else:

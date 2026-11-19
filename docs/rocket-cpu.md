@@ -66,3 +66,42 @@ contains exact build logs and prior failures, 12 per-run bundles under
 results before cache cleanup). The focused core probe passed 66 tests, with 15
 native cases skipped because this invocation did not supply their opt-in roots;
 that probe is not the mandatory aggregate native gate.
+
+## Reproduce the development path
+
+Prerequisites are the existing verified source-IP engines/models and clean public
+source pins. `scripts/rocket_bringup.sh` acquires the exact Rocket gitlinks and
+JDK/SBT, creates fresh CPU and software builds, then executes the focused native
+suite. Existing output is deliberately preserved; choose fresh root paths for a
+new candidate. It is an engineering gate, distinct from aggregate release CI.
+
+```bash
+bash scripts/setup_rocket_tools.sh
+usp rocket build examples/rv64-ips --out build/my-rocket \
+  --upstream .tools/upstream --tools .tools/chipyard \
+  --java-home .tools/rocket/jdk-17.0.17+10 --scala-cache .cache/scala
+usp platform run examples/rv64-ips \
+  --config platforms/chipyard-rocket-axi32-gem5.yaml \
+  --generated build/rv64-ips --models build/source-ip-models \
+  --bridge build/rtl-master-gem5 --rtl-cpu-build build/my-rocket \
+  --out results/my-rocket-run
+usp platform verify results/my-rocket-run
+usp rocket build-software examples/rv64-ips --kind zephyr \
+  --cpu-build build/my-rocket --generated build/rv64-ips \
+  --upstream .tools/upstream --out build/my-rocket-zephyr
+```
+
+Select QEMU with the matching `chipyard-rocket-axi32-qemu.yaml`. Add `freertos`
+or `zephyr` to workloads and supply matching source-built `software_builds`
+directories. Every kernel is bound to the exact CPU build and I/O IR; unrelated
+ELFs are not promoted into kernel qualification. The older generic `Rocket`
+configuration remains an unresolved negative fixture, including Linux/boot
+workloads whose adapter/boot ABI is not qualified yet.
+
+The original Rocket Zephyr BSP declares RV64IMAC and 64-bit context explicitly,
+without an ISS board or FPU. Both smoke and deliberately disabled-timer kernels
+are source-built for all maps; acceptance on both engines is required. The failed
+ELF32 prototype is retained. Large retirement logs are validated as streams; the
+verifier recomputes actual CPI/IPC and rejects modified IR, binary dependencies,
+partial AXI responses or mixed software origins. None of these checks calibrates
+the atomic memory timing model to silicon.

@@ -168,20 +168,18 @@ def native_roots():
 @pytest.mark.parametrize("engine", ["qemu", "gem5"])
 @pytest.mark.parametrize("kind", ["baremetal", "mmu"])
 def test_actual_rocket_axi_backpressure_and_privilege_paths(tmp_path, name, engine, kind):
-    cpu_root, software_root, bridge = native_roots()
-    p = project(name)
-    cpu = cpu_root / name
+    p, cpu, software, generated, models, bridge = native_inputs(name)
     kw = {"axi_latency": 3}
     if kind == "mmu":
-        sw = software_root / name / "mmu"
+        sw = software / "mmu"
         r = verify_software(p, cpu, sw)
         assert r["expected_markers"] == MMU_MARKERS
         kw.update(elf=sw / "firmware.elf", markers=r["expected_markers"])
     report = run(
         p,
         cpu,
-        ROOT / "build" / name,
-        ROOT / "build/source-ip-models",
+        generated,
+        models,
         engine,
         tmp_path / "run",
         bridge,
@@ -191,3 +189,139 @@ def test_actual_rocket_axi_backpressure_and_privilege_paths(tmp_path, name, engi
     assert report["counters"]["max_burst_beats"] == 8
     assert report["counters"]["axi_request_stalls"] > 0
     assert verify_run(p, cpu, tmp_path / "run")["status"] == "PASSED"
+
+
+def native_inputs(name):
+    cpu_root, software_root, bridge = native_roots()
+    generated = Path(os.environ.get("USP_IP_GENERATED_DIR", ROOT / "build/rv64-ips"))
+    if name != "rv64-ips":
+        generated = Path(os.environ.get("USP_DUAL_BUILD_ROOT", ROOT / "build")) / name
+    models = Path(os.environ.get("USP_IP_MODELS_DIR", ROOT / "build/source-ip-models"))
+    return project(name), cpu_root / name, software_root / name, generated, models, bridge
+
+
+@pytest.mark.parametrize("name", ["rv64-ips", "AI_SOC", "AIZ_SOC"])
+@pytest.mark.parametrize("engine", ["qemu", "gem5"])
+@pytest.mark.parametrize("case", ["smoke", "assert-failure", "tick-disabled"])
+def test_actual_rocket_scheduler_and_kernel_failure_cases(tmp_path, name, engine, case):
+    from socsim.cpu_platform import run_platform, verify_platform
+
+    p, cpu, software, generated, models, bridge = native_inputs(name)
+    sw = software / ("freertos-" + case)
+    r = verify_software(p, cpu, sw)
+    out = tmp_path / "run"
+    if case == "smoke":
+        c = config(engine)
+        c["workloads"] = ["baremetal", "freertos"]
+        c["software_builds"] = {"freertos": str(sw)}
+        report = run_platform(p, c, generated, models, bridge, None, out, cpu)
+        assert report["status"] == "PASSED", report
+        assert verify_platform(out)["status"] == "PASSED"
+    else:
+        report = run(
+            p,
+            cpu,
+            generated,
+            models,
+            engine,
+            out,
+            bridge,
+            elf=sw / "firmware.elf",
+            markers=r["expected_markers"],
+            max_cycles=200000 if case == "tick-disabled" else 3000000,
+        )
+        assert report["status"] == "FAILED", report
+        counters = report["counters"]
+        uart = (out / "uart.log").read_text()
+        assert counters["instructions"] > 1000
+        assert counters["axi_errors"] == 0
+        if case == "assert-failure":
+            assert "USP_FREERTOS_FAIL" in uart
+            assert counters["signature"] == 0x13333
+        else:
+            assert "USP_FREERTOS_BOOT_OK" in uart
+            assert "USP_TEST_PASS" not in uart
+            assert counters["cycles"] == 200000
+            assert counters["finished"] == 0
+        with pytest.raises(ContractError):
+            verify_run(p, cpu, out)
+
+
+@pytest.mark.parametrize("engine", ["qemu", "gem5"])
+@pytest.mark.parametrize("failure", ["downstream-axi", "cycle-budget"])
+def test_actual_rocket_bus_errors_and_execution_budget_cannot_pass(tmp_path, engine, failure):
+    p, cpu, _, generated, models, bridge = native_inputs("rv64-ips")
+    kw = {"max_cycles": 50000}
+    if failure == "downstream-axi":
+        kw["fault_address"] = next(i.windows[0].base for i in p.ir.instances if i.name == "cygcd")
+    else:
+        kw["max_cycles"] = 16
+    report = run(p, cpu, generated, models, engine, tmp_path / "run", bridge, **kw)
+    assert report["status"] == "FAILED", report
+    if failure == "downstream-axi":
+        assert report["counters"]["axi_errors"] > 0
+        assert report["checks"]["no_downstream_bus_error"] is False
+    else:
+        assert report["counters"]["cycles"] == 16
+        assert report["counters"]["instructions"] == 0
+
+
+@pytest.mark.parametrize("case", ["valid", "backwards", "negative-pc", "bad-trap", "truncated"])
+def test_streamed_retirement_validation_rejects_partial_or_invalid_evidence(tmp_path, case):
+    from socsim.rocket_cpu import commit_summary
+
+    rows = [{"cycle": i, "pc": 0x80000000, "instruction": 0x23, "trap": 0} for i in range(5)]
+    if case == "backwards":
+        rows[-1]["cycle"] = 1
+    elif case == "negative-pc":
+        rows[-1]["pc"] = -1
+    elif case == "bad-trap":
+        rows[-1]["trap"] = 7
+    path = tmp_path / "commit.jsonl"
+    path.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    if case == "truncated":
+        with path.open("a") as stream:
+            stream.write('{"cycle":')
+    summary = commit_summary(path)
+    if case == "valid":
+        assert summary == (5, 0, 4, {0}, False)
+    else:
+        assert summary is None
+
+
+@pytest.mark.parametrize("name", ["rv64-ips", "AI_SOC", "AIZ_SOC"])
+@pytest.mark.parametrize("engine", ["qemu", "gem5"])
+@pytest.mark.parametrize("case", ["smoke", "tick-disabled"])
+def test_actual_rocket_source_built_zephyr_bsp(tmp_path, name, engine, case):
+    from socsim.rocket_zephyr import verify_build
+
+    p, cpu, _, generated, models, bridge = native_inputs(name)
+    root = os.environ.get("USP_ROCKET_ZEPHYR_ROOT")
+    if not root:
+        if os.environ.get("USP_REQUIRE_ROCKET") == "1":
+            pytest.fail("mandatory source-built Rocket Zephyr BSP roots missing")
+        pytest.skip("source-built Rocket Zephyr BSP roots not supplied")
+    sw = Path(root) / name / case
+    record = verify_build(p, cpu, sw)
+    report = run(
+        p,
+        cpu,
+        generated,
+        models,
+        engine,
+        tmp_path / "run",
+        bridge,
+        elf=sw / "firmware.elf",
+        markers=record["expected_markers"],
+        max_cycles=1500000 if case == "tick-disabled" else 3000000,
+        axi_latency=3,
+    )
+    if case == "smoke":
+        assert report["status"] == "PASSED", report
+        assert report["checks"]["gcd_irq"] and report["checks"]["gpio_irq"]
+        assert verify_run(p, cpu, tmp_path / "run")["status"] == "PASSED"
+    else:
+        assert report["status"] == "FAILED", report
+        assert report["counters"]["finished"] == 0
+        assert report["counters"]["cycles"] == 1500000
+        assert "USP_TEST_PASS" not in (tmp_path / "run/uart.log").read_text()

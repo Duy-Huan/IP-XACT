@@ -36,7 +36,10 @@ to their declared IR/software ISA and context contract.
 Chipyard Ibex and normalized custom RTL masters now execute RV32 bare-metal
 against QEMU qtest or gem5's atomic memory engine, with both SystemC IP families.
 See [rtl-cpu-adapters.md](rtl-cpu-adapters.md) for source pins, boot/ABI constraints,
-actual RTL CPI/IPC, commands and native tests. Rocket/BOOM, missing RTL interfaces,
+actual RTL CPI/IPC, commands and native tests. A dev candidate now source-builds
+actual RocketTile/AXI32 and RV64IMAC firmware/kernels on both memory engines; see
+[rocket-cpu.md](rocket-cpu.md) for its exact profile, tests and remaining exits.
+Full Chipyard Rocket boards/BOOM, missing RTL interfaces,
 other ISA/MMU contracts and cross-ISS combinations still need adapters and fail
 without substitution. The separate RTL/GDS test chips retain their own scope.
 Dedicated `usp rtl-os` and `usp ucos` workflows additionally run real FreeRTOS

@@ -88,3 +88,10 @@ USP_NATIVE_EXTERNAL_ROOT. scripts/native_soc_bringup.sh builds the source models
 SMP/Linux artifacts and external example needed for its three native test modules.
 The referenced source-IP model root must already be verified; this script does
 not implicitly download any private or public source tree.
+
+The Rocket development path adds `USP_REQUIRE_ROCKET=1`, `USP_ROCKET_ROOT`,
+`USP_ROCKET_SOFTWARE_ROOT` and `USP_ROCKET_ZEPHYR_ROOT`; the two roots of source
+software contain all three I/O maps and their negative fixtures. It also uses the
+existing verified `USP_RTL_MASTER_BUILD`, generated profiles and source-IP model
+roots. See rocket-cpu.md. The full manual hosted matrix builds/runs this path;
+core minimal CI may skip it, while local promotion requires its actual execution.

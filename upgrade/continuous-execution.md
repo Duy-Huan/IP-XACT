@@ -22,3 +22,17 @@ local CI. Freeze the implementation batch before aggregate qualification/push.
 Immediate resource preparation: persist/recover exact SDK image identities while
 using temporary cache headroom; keep original OCI archive, logs, layouts and actual
 runtime executables. No private attachment or company reference data is imported.
+
+Development findings, not closed exits:
+- Actual single RocketTile AXI32, all three low-PA profiles, bare-metal and
+  PMP/Sv39 M/S/U passed on both memory engines. FreeRTOS has six positive and
+  twelve expected-negative engine/map outcomes with durable exact archives.
+- Original RV64IMAC Zephyr BSPs (smoke/timer-disabled) build for all three maps;
+  actual expanded CPU/software/protocol suite is in progress.
+- Cold concurrent first-in-process XML schema compilation failed in one threaded
+  engineering harness (raw failure retained). Preloading validated inputs avoids
+  that harness race, but does not qualify concurrent cold intake. Address schema
+  construction synchronization in the next compiler batch with fresh generated
+  identities and exact explicit engine/software reuse; never rewrite hashes.
+- Next CPU work: Linux boot ABI and long-run trace resources, generic native IR
+  binding, reset/error coverage, then BOOM. Full M5 and M8 remain open.

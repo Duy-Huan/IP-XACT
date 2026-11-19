@@ -59,6 +59,14 @@ roots at promotion. Source or adapter identity changes require fresh builds.
 The owner selected both public Apache-2.0 µC/OS products and a public-PDK ASIC
 evaluation flow; production foundry licensing is not a prerequisite for that scope.
 
+Rocket changes require docs/rocket-cpu.md, exact Chipyard gitlinks/JDK/Maven and
+actual source elaboration; preserve PMA versus downstream-error semantics and
+verify CPU-owned AXI bursts/backpressure/reset/IRQs, M/S/U and eligible kernels
+on both engines for all mapped profiles. Aggregate promotion requires
+USP_REQUIRE_ROCKET, USP_ROCKET_ROOT and USP_ROCKET_SOFTWARE_ROOT plus the
+verified gem5 external master. Keep generic native binding, BOOM/Earlgrey and
+Linux RTL/NoC exits separate from this single-tile adapter.
+
 External RTL CPU changes must retain real instruction ownership without ISS
 fallback. Read docs/rtl-cpu-adapters.md; run both actual CPUs on both memory engines
 and all three maps, retaining fault/IRQ/RVFI and zero gem5 ISS counters. Promotion

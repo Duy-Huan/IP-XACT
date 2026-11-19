@@ -87,7 +87,10 @@ Pinned Chipyard Ibex and normalized custom RTL masters support RV32 bare-metal
 and FreeRTOS/µC/OS-II/III on both memory engines; see rtl-cpu-adapters.md and rtl-os.md.
 Source-built M-mode Zephyr now also runs on both supported RTL masters and memory
 engines, with the real generated kernel/driver application; see rtl-zephyr.md.
-Rocket/BOOM, other protocols/ISA/MMU, Linux RTL ports and cross-ISS remain open.
+A dev candidate now source-builds an actual RocketTile AXI32 master with real
+PMP/Sv39 M/S/U and kernel execution on both memory engines; see rocket-cpu.md.
+Its generic native IR binding and final candidate qualification remain open.
+Full Rocket boards/BOOM, other protocols, Linux RTL ports and cross-ISS remain open.
 Native gem5 cache/memory traffic now crosses live Ruby/Garnet while the same
 Zephyr guest exercises SystemC IPs. This four-router reference is distinct from
 the independent 16/8-router mesh experiments and unimplemented device DMA.
