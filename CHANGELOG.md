@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — continuous milestone implementation
+## 0.3.0a5 — development candidate (v0.3.0-alpha.5)
 
 - Serialize cold XSD construction and reuse one fully initialized validator;
   verify concurrent first intake in a fresh four-thread process. Regenerate

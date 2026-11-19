@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "socsim-platform"
-version = "0.3.0a4"
+version = "0.3.0a5"
 description = "IP-XACT driven RISC-V virtual platform compiler"
 requires-python = ">=3.11"
 dependencies = ["lxml==6.0.2", "PyYAML==6.0.3", "jsonschema==4.25.1", "pyelftools==0.32"]
