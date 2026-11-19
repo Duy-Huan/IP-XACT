@@ -85,7 +85,7 @@ def address_map_contract(ram, regions):
             raise ContractError("unsupported Rocket region type/range")
         intervals.append((base, base + size))
     intervals.sort()
-    if any(a[1] > b[0] for a, b in zip(intervals, intervals[1:])):
+    if any(a[1] > b[0] for a, b in zip(intervals, intervals[1:], strict=False)):
         raise ContractError("overlapping Rocket PMA regions")
     return sorted(regions, key=lambda r: r["base"])
 
