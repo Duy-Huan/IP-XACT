@@ -1,0 +1,21 @@
+schema_version: native-flow-1
+spec: design1_rocket_chipyard_ot_qemu.yaml
+input_format: yaml
+engine: both
+packages: []
+software:
+- id: rocket_baremetal
+  kind: baremetal
+  timeout: 180
+- id: rocket_freertos
+  kind: freertos
+  timeout: 180
+- id: rocket_zephyr
+  kind: zephyr
+  timeout: 180
+- id: rocket_ucos2
+  kind: ucos2
+  timeout: 180
+- id: rocket_ucos3
+  kind: ucos3
+  timeout: 180

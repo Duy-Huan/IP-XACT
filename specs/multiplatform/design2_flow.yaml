@@ -1,0 +1,16 @@
+schema_version: native-flow-1
+spec: design2_gem5_noc_smp_hetero.yaml
+input_format: yaml
+engine: both
+packages: []
+software:
+- id: smp_noc_baremetal
+  kind: baremetal
+  timeout: 90
+- id: smp_noc_linux
+  kind: linux
+  timeout: 180
+performance:
+  qemu_cost_model:
+    base_cpi: 1.2
+    memory_extra_cycles: 4.0

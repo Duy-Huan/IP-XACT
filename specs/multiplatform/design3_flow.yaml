@@ -1,0 +1,27 @@
+schema_version: native-flow-1
+spec: design3_mac_npu_hetero.yaml
+input_format: yaml
+engine: both
+packages:
+- packages/mac_npu/package.yaml
+software:
+- id: mac_npu_driver
+  kind: package-driver
+  package: user.mac_npu
+  timeout: 90
+- id: hetero_baremetal
+  kind: baremetal
+  timeout: 90
+- id: hetero_freertos
+  kind: freertos
+  timeout: 90
+- id: hetero_zephyr
+  kind: zephyr
+  timeout: 90
+- id: hetero_linux
+  kind: linux
+  timeout: 180
+performance:
+  qemu_cost_model:
+    base_cpi: 1.0
+    memory_extra_cycles: 2.0

@@ -1,0 +1,65 @@
+# Multi-platform Design 3:
+# RV64 CPU (QEMU/gem5) + dual original SystemC MAC NPU-lite packages (user.mac_npu) +
+# Chipyard GCD + OpenTitan GPIO + QEMU UART/CLINT/PLIC/RAM/ROM/Finisher.
+# NOTE: user.mac_npu is an original synthetic MMIO32 SystemC MAC model, NOT upstream Chipyard Gemmini.
+schema_version: '1'
+name: MP_Design3_MacNpu_Hetero
+cpu:
+  name: rv64_app_core
+  model: qemu.rv64
+  gem5_model: gem5.RiscvTimingSimpleCPU
+  timebase_hz: 10000000
+  harts: 1
+  clock_hz: 600000000
+  memory_latency_ns: 15
+boot:
+  ram: main_dram
+  rom: boot_rom
+  console: qemu_uart_0
+  entry: 12884901888
+devices:
+- name: main_dram
+  model: ram
+  base: 12884901888
+  size: 67108864
+- name: boot_rom
+  model: rom
+  base: 4096
+  size: 4096
+- name: sys_clint
+  model: clint
+  base: 33554432
+  size: 65536
+- name: sys_plic
+  model: plic
+  base: 201326592
+  size: 67108864
+- name: sim_finisher
+  model: finisher
+  base: 1048576
+  size: 4096
+- name: qemu_uart_0
+  model: uart
+  base: 285212672
+  size: 256
+  irq: 10
+- name: chipyard_gcd_0
+  model: chipyard.gcd
+  base: 318767104
+  size: 4096
+  irq: 12
+- name: opentitan_gpio_0
+  model: opentitan.gpio
+  base: 335544320
+  size: 4096
+  irq: 13
+- name: mac_npu_0
+  model: user.mac_npu
+  base: 6727663616
+  size: 4096
+  irq: 20
+- name: mac_npu_1
+  model: user.mac_npu
+  base: 6727675904
+  size: 4096
+  irq: 21

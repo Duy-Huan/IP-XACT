@@ -17,6 +17,7 @@ from typing import Any
 from .domain import ContractError
 from .hosted_ci import query as query_hosted_ci
 from .ipxact import digest
+from .multiplatform_qa import run_multiplatform_qa
 from .native_bsp_gen import synthesize_bsp_bundle
 from .native_domains import derive_domains_from_ir
 from .native_flow import preflight_flow
@@ -28,7 +29,7 @@ from .v04_contracts import derive_noc_topology, evaluate_calibration_report
 from .version import __version__
 
 QA_CONTRACT = "usp-qa-scorecard-1"
-SUITES = ("quick", "unseen", "wheel", "full")
+SUITES = ("quick", "unseen", "multiplatform", "wheel", "full")
 
 
 def _parse_junit_summary(path: Path) -> dict[str, int]:
@@ -397,6 +398,8 @@ def run_qa(root: Path, out: Path, *, suite: str = "full") -> dict[str, Any]:
             gates["process_and_cache_hygiene"] = _run_process_and_cache_hygiene(out)
         if suite in {"unseen", "full"}:
             gates["unseen_design"] = _run_unseen_design_qa(root, out, node)
+        if suite in {"multiplatform", "full"}:
+            gates["multiplatform_soc"] = run_multiplatform_qa(root, out / "multiplatform", node)
         if suite in {"wheel", "full"}:
             gates["clean_wheel"] = _run_clean_wheel_qa(root, out, node)
         if suite == "full":
