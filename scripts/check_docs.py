@@ -4,6 +4,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 required = [
+    "docs/milestone-contracts.md",
     "docs/native-rtl-cpu.md",
     "docs/rocket-cpu.md",
     "docs/native-bus-xml.md",

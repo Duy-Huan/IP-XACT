@@ -202,3 +202,83 @@ def evaluate_calibration_report(
         "within_budget": rel_error <= budget,
         "silicon_signoff": False,
     }
+
+
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+    import json
+    from dataclasses import asdict
+    from pathlib import Path
+
+    from .ip_catalog import IP_CATALOG, catalog_summary
+    from .native_ir import read_ir
+
+    parser = argparse.ArgumentParser(prog="usp contracts")
+    commands = parser.add_subparsers(dest="command", required=True)
+    adapters_cmd = commands.add_parser("adapters")
+    adapters_cmd.add_argument("--provider")
+    adapters_cmd.add_argument("--model")
+    adapters_cmd.add_argument("--protocol")
+    adapters_cmd.add_argument("--engine")
+
+    noc_cmd = commands.add_parser("noc")
+    noc_cmd.add_argument("ir", type=Path)
+    noc_cmd.add_argument("--rows", type=int, required=True)
+    noc_cmd.add_argument("--cols", type=int, required=True)
+    noc_cmd.add_argument("--pio-bypass-disclosed", action="store_true")
+    noc_cmd.add_argument("--coherence", default="ruby-garnet-simple")
+    noc_cmd.add_argument("--sync", default="lockstep-annotated")
+
+    cal_cmd = commands.add_parser("calibrate")
+    cal_cmd.add_argument("--roi", required=True)
+    cal_cmd.add_argument("--ref-source", required=True)
+    cal_cmd.add_argument("--model-source", required=True)
+    cal_cmd.add_argument("--ref-cycles", type=float, required=True)
+    cal_cmd.add_argument("--est-cycles", type=float, required=True)
+    cal_cmd.add_argument("--budget", type=float, default=0.15)
+
+    commands.add_parser("ip-catalog")
+    args = parser.parse_args(argv)
+    try:
+        result: dict[str, Any]
+        if args.command == "adapters":
+            if any(v is not None for v in (args.provider, args.model, args.protocol, args.engine)):
+                if not all(
+                    v is not None for v in (args.provider, args.model, args.protocol, args.engine)
+                ):
+                    raise ContractError(
+                        "E_CPU_ADAPTER specify --provider, --model, --protocol and --engine"
+                    )
+                result = check_cpu_bus_adapter(
+                    args.provider, args.model, args.protocol, args.engine
+                )
+            else:
+                result = {"adapters": [asdict(entry) for entry in CPU_ADAPTER_MATRIX]}
+        elif args.command == "noc":
+            result = derive_noc_topology(
+                read_ir(args.ir),
+                rows=args.rows,
+                cols=args.cols,
+                pio_bypass_disclosed=args.pio_bypass_disclosed,
+                coherence_protocol=args.coherence,
+                synchronization=args.sync,
+            )
+        elif args.command == "calibrate":
+            result = evaluate_calibration_report(
+                roi_name=args.roi,
+                reference_source=args.ref_source,
+                model_source=args.model_source,
+                reference_cycles=args.ref_cycles,
+                estimated_cycles=args.est_cycles,
+                max_relative_error=args.budget,
+            )
+        else:
+            result = {
+                "summary": catalog_summary(),
+                "entries": [asdict(entry) for entry in IP_CATALOG],
+            }
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0
+    except (ContractError, OSError, ValueError, KeyError) as exc:
+        print(json.dumps({"status": "ERROR", "message": str(exc)}))
+        return 2

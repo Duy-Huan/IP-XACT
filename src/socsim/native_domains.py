@@ -331,3 +331,35 @@ def check_lowering_capability(
         "protocols": protocols,
         "blocking_reasons": reasons,
     }
+
+
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+    import json
+    from pathlib import Path
+
+    from .native_ir import read_ir
+    from .project import read_yaml
+
+    parser = argparse.ArgumentParser(prog="usp domains")
+    commands = parser.add_subparsers(dest="command", required=True)
+    derive_cmd = commands.add_parser("derive")
+    derive_cmd.add_argument("ir", type=Path)
+    views_cmd = commands.add_parser("views")
+    views_cmd.add_argument("views", type=Path)
+    views_cmd.add_argument("--backend", default="native-flat")
+    args = parser.parse_args(argv)
+    try:
+        if args.command == "derive":
+            result = derive_domains_from_ir(read_ir(args.ir)).to_dict()
+        else:
+            parsed = parse_address_views(read_yaml(args.views))
+            result = {
+                "views": parsed.to_dict(),
+                "lowering": check_lowering_capability(parsed, backend=args.backend),
+            }
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0
+    except (ContractError, OSError, ValueError, KeyError) as exc:
+        print(json.dumps({"status": "ERROR", "message": str(exc)}))
+        return 2

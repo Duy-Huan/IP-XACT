@@ -390,8 +390,27 @@ def main(argv):
     build.add_argument("package", type=Path)
     build.add_argument("--out", type=Path, required=True)
     commands.add_parser("verify").add_argument("out", type=Path)
+    commands.add_parser("inspect").add_argument("package", type=Path)
+    hdr = commands.add_parser("header")
+    hdr.add_argument("package", type=Path)
+    hdr.add_argument("--prefix")
+    hdr.add_argument("--out", type=Path)
     args = parser.parse_args(argv)
     try:
+        if args.command == "inspect":
+            package, _ = read_package(args.package)
+            print(json.dumps(package_capabilities(package), indent=2, sort_keys=True))
+            return 0
+        if args.command == "header":
+            package, _ = read_package(args.package)
+            text = generate_package_header(package, prefix=args.prefix)
+            if args.out:
+                args.out.parent.mkdir(parents=True, exist_ok=True)
+                args.out.write_text(text)
+                print(json.dumps({"status": "PASSED", "header": str(args.out)}))
+            else:
+                print(text, end="")
+            return 0
         result = (
             build_package(args.package, args.out)
             if args.command == "build"

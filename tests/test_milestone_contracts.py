@@ -284,12 +284,25 @@ def test_m8_m9_readiness_audit_and_cli():
     aiz = audit_system_inventory(ROOT, "AIZ_SOC")
     assert ai["total_instances"] == 46
     assert aiz["total_instances"] == 37
+    assert (
+        ai["qualified_model_matches"]
+        + ai["pinned_source_needs_adapter"]
+        + ai["missing_source_implementation"]
+        == 46
+    )
+    assert (
+        aiz["qualified_model_matches"]
+        + aiz["pinned_source_needs_adapter"]
+        + aiz["missing_source_implementation"]
+        == 37
+    )
     assert ai["full_inventory_closed"] is False
     assert aiz["full_inventory_closed"] is False
 
     audit = audit_milestone_readiness(ROOT)
     assert audit["ready_for_final_v0_3_0"] is False
     assert audit["ready_for_final_v1_0_0"] is False
+    assert audit["ip_catalog"]["total_catalog_models"] >= 30
 
     run = subprocess.run(
         [sys.executable, "-m", "socsim.upgrade", "--root", str(ROOT), "--audit"],
@@ -300,3 +313,124 @@ def test_m8_m9_readiness_audit_and_cli():
     parsed = json.loads(run.stdout)
     assert parsed["full_design_inventories"]["AI_SOC"]["total_instances"] == 46
     assert parsed["full_design_inventories"]["AIZ_SOC"]["total_instances"] == 37
+
+
+def test_cli_end_to_end_domains_contracts_package_and_flow(tmp_path):
+    from socsim.cli import main as cli_main
+
+    ir = _sample_native_ir()
+    ir_path = tmp_path / "native-ir.json"
+    ir_path.write_text(json.dumps(ir.to_dict(), indent=2, sort_keys=True) + "\n")
+
+    # usp domains derive & views
+    assert cli_main(["domains", "derive", str(ir_path)]) == 0
+    views_yaml = tmp_path / "views.yaml"
+    views_yaml.write_text(
+        "views:\n"
+        "  - initiator: cpu0\n"
+        "    address_bits: 32\n"
+        "    apertures:\n"
+        "      - name: ram\n"
+        "        local_base: 0x80000000\n"
+        "        physical_base: 0x80000000\n"
+        "        size: 0x100000\n"
+        "        target: ram0\n"
+    )
+    assert cli_main(["domains", "views", str(views_yaml)]) == 0
+
+    # usp contracts adapters, noc, calibrate, ip-catalog
+    assert cli_main(["contracts", "adapters"]) == 0
+    assert (
+        cli_main(
+            [
+                "contracts",
+                "adapters",
+                "--provider",
+                "chipyard",
+                "--model",
+                "chipyard.rocket_axi32",
+                "--protocol",
+                "axi4-32-pa32",
+                "--engine",
+                "gem5",
+            ]
+        )
+        == 0
+    )
+    assert (
+        cli_main(
+            [
+                "contracts",
+                "adapters",
+                "--provider",
+                "chipyard",
+                "--model",
+                "chipyard.boom",
+                "--protocol",
+                "axi4-64",
+                "--engine",
+                "gem5",
+            ]
+        )
+        == 2
+    )
+    assert cli_main(["contracts", "noc", str(ir_path), "--rows", "2", "--cols", "2"]) == 2
+    assert (
+        cli_main(
+            [
+                "contracts",
+                "noc",
+                str(ir_path),
+                "--rows",
+                "2",
+                "--cols",
+                "2",
+                "--pio-bypass-disclosed",
+            ]
+        )
+        == 0
+    )
+    assert (
+        cli_main(
+            [
+                "contracts",
+                "calibrate",
+                "--roi",
+                "gcd",
+                "--ref-source",
+                "native-gem5",
+                "--model-source",
+                "qemu-analytical-estimate",
+                "--ref-cycles",
+                "1000",
+                "--est-cycles",
+                "1050",
+            ]
+        )
+        == 0
+    )
+    assert cli_main(["contracts", "ip-catalog"]) == 0
+
+    # usp package inspect & header
+    pkg_path = next(ROOT.glob("specs/**/package.yaml"))
+    header_out = tmp_path / "pkg_regs.h"
+    assert cli_main(["package", "inspect", str(pkg_path)]) == 0
+    assert cli_main(["package", "header", str(pkg_path), "--out", str(header_out)]) == 0
+    assert header_out.is_file() and "#define USP_" in header_out.read_text()
+
+    # usp flow preflight across real XML, fabric, Rocket RTL, and package flows
+    for rel in (
+        "specs/bus/AI_SOC-flow.yaml",
+        "specs/fabric/AI_SOC-flow.yaml",
+        "specs/rtl/AIZ_SOC-rocket-flow.yaml",
+        "specs/flows/AI_SOC-package.yaml",
+    ):
+        assert cli_main(["flow", "preflight", str(ROOT / rel)]) == 0
+
+    # usp flow bsp
+    bsp_out = tmp_path / "bsp-out"
+    assert cli_main(["flow", "bsp", str(ir_path), "--out", str(bsp_out)]) == 0
+    assert (bsp_out / "soc_map.h").is_file()
+    assert (bsp_out / "memory.ld").is_file()
+    assert (bsp_out / "soc.dts").is_file()
+    assert (bsp_out / "bsp-manifest.json").is_file()

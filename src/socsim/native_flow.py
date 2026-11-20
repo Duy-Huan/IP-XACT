@@ -42,39 +42,7 @@ def flow_identity():
     }
 
 
-def plan(path):
-    path = path.resolve()
-    root = path.parent
-    data = read_yaml(path)
-    if not isinstance(data, dict):
-        raise ContractError("native flow must be a mapping")
-    keys(
-        data,
-        {"schema_version", "spec", "input_format", "engine", "packages", "software"}
-        | ({"performance"} if "performance" in data else set()),
-        "native flow",
-    )
-    if "performance" in data:
-        from .native_performance import validate_cost
-
-        keys(data["performance"], {"qemu_cost_model"}, "flow performance")
-        validate_cost(data["performance"]["qemu_cost_model"])
-        if data["engine"] == "gem5":
-            raise ContractError("QEMU analytical costs do not apply to a gem5-only flow")
-    if (
-        data["schema_version"] != CONTRACT
-        or not isinstance(data["engine"], str)
-        or data["engine"] not in {"qemu", "gem5", "both"}
-    ):
-        raise ContractError("unsupported native flow version/engine")
-    if not isinstance(data["input_format"], str) or data["input_format"] not in {
-        "yaml",
-        "ipxact",
-        "fabric",
-    }:
-        raise ContractError("unsupported native flow input format")
-    spec_path = inside(root, data["spec"])
-    inputs = {path.name: digest(path), data["spec"]: digest(spec_path)}
+def _load_flow_spec(root, data, spec_path, inputs):
     if data["input_format"] == "ipxact":
         if data["packages"]:
             raise ContractError(
@@ -85,7 +53,8 @@ def plan(path):
         spec, canonical = import_design(spec_path)[:2]
         for name, sha in canonical.sources:
             inputs[(spec_path.parent / name).relative_to(root).as_posix()] = sha
-    elif data["input_format"] == "fabric":
+        return spec, canonical
+    if data["input_format"] == "fabric":
         if data["packages"]:
             raise ContractError(
                 "fabric source packages require explicit materialized model bindings"
@@ -93,8 +62,11 @@ def plan(path):
         from .native_fabric import read_source
 
         spec, _ = read_source(spec_path)
-    else:
-        spec = read_yaml(spec_path)
+        return spec, None
+    return read_yaml(spec_path), None
+
+
+def _load_flow_packages(root, data, inputs):
     if not isinstance(data["packages"], list) or len(data["packages"]) > 16:
         raise ContractError("invalid native flow package list")
     packages = {}
@@ -107,37 +79,14 @@ def plan(path):
         inputs[name] = digest(package_path)
         for filename in hashes.keys() - {"package.yaml"}:
             inputs[(package_path.parent / filename).relative_to(root).as_posix()] = hashes[filename]
-    if not packages:
-        spec = validate_spec(copy.deepcopy(spec))
-    # Packages do not yet have binaries at plan time. Record deferred hardware
-    # validation, never a fabricated executable digest or a claimed runnable machine.
-    if not isinstance(spec, dict):
-        raise ContractError("flow input must be a design mapping")
-    cpu = validate_cpu(copy.deepcopy(spec.get("cpu")))
-    rtl = is_rtl(cpu)
-    if cpu.get("model") not in {"qemu.rv64", "qemu.max", ROCKET}:
-        raise ContractError("requested CPU needs an adapter; ISS substitution is forbidden")
-    if (
-        not rtl
-        and data["engine"] in {"gem5", "both"}
-        and cpu.get("gem5_model")
-        not in {
-            "gem5.RiscvTimingSimpleCPU",
-            "gem5.RiscvAtomicSimpleCPU",
-        }
-    ):
-        raise ContractError("explicit qualified gem5 CPU binding required")
-    if rtl and "performance" in data:
-        raise ContractError(
-            "actual RTL uses clock/retirement counters, not QEMU ISS cost estimates"
-        )
-    harts = integer(cpu.get("harts", 1), "cpu.harts")
-    if not 1 <= harts <= 8:
-        raise ContractError("native flow requires 1..8 qualified homogeneous RV64 harts")
-    if not isinstance(data["software"], list) or not 1 <= len(data["software"]) <= 16:
+    return packages
+
+
+def _validate_flow_workloads(software, packages, cpu, harts, rtl):
+    if not isinstance(software, list) or not 1 <= len(software) <= 16:
         raise ContractError("native flow requires 1..16 explicit software workloads")
     names = set()
-    for item in data["software"]:
+    for item in software:
         if not isinstance(item, dict):
             raise ContractError("flow software requires workload mappings")
         keys(
@@ -173,6 +122,71 @@ def plan(path):
             raise ContractError("only package-driver workloads select a package")
         if item.get("package") is not None and item["package"] not in packages:
             raise ContractError("software references an unresolved model package")
+
+
+def plan(path):
+    path = path.resolve()
+    root = path.parent
+    data = read_yaml(path)
+    if not isinstance(data, dict):
+        raise ContractError("native flow must be a mapping")
+    keys(
+        data,
+        {"schema_version", "spec", "input_format", "engine", "packages", "software"}
+        | ({"performance"} if "performance" in data else set()),
+        "native flow",
+    )
+    if "performance" in data:
+        from .native_performance import validate_cost
+
+        keys(data["performance"], {"qemu_cost_model"}, "flow performance")
+        validate_cost(data["performance"]["qemu_cost_model"])
+        if data["engine"] == "gem5":
+            raise ContractError("QEMU analytical costs do not apply to a gem5-only flow")
+    if (
+        data["schema_version"] != CONTRACT
+        or not isinstance(data["engine"], str)
+        or data["engine"] not in {"qemu", "gem5", "both"}
+    ):
+        raise ContractError("unsupported native flow version/engine")
+    if not isinstance(data["input_format"], str) or data["input_format"] not in {
+        "yaml",
+        "ipxact",
+        "fabric",
+    }:
+        raise ContractError("unsupported native flow input format")
+    spec_path = inside(root, data["spec"])
+    inputs = {path.name: digest(path), data["spec"]: digest(spec_path)}
+    spec, _ = _load_flow_spec(root, data, spec_path, inputs)
+    packages = _load_flow_packages(root, data, inputs)
+    if not packages:
+        spec = validate_spec(copy.deepcopy(spec))
+    # Packages do not yet have binaries at plan time. Record deferred hardware
+    # validation, never a fabricated executable digest or a claimed runnable machine.
+    if not isinstance(spec, dict):
+        raise ContractError("flow input must be a design mapping")
+    cpu = validate_cpu(copy.deepcopy(spec.get("cpu")))
+    rtl = is_rtl(cpu)
+    if cpu.get("model") not in {"qemu.rv64", "qemu.max", ROCKET}:
+        raise ContractError("requested CPU needs an adapter; ISS substitution is forbidden")
+    if (
+        not rtl
+        and data["engine"] in {"gem5", "both"}
+        and cpu.get("gem5_model")
+        not in {
+            "gem5.RiscvTimingSimpleCPU",
+            "gem5.RiscvAtomicSimpleCPU",
+        }
+    ):
+        raise ContractError("explicit qualified gem5 CPU binding required")
+    if rtl and "performance" in data:
+        raise ContractError(
+            "actual RTL uses clock/retirement counters, not QEMU ISS cost estimates"
+        )
+    harts = integer(cpu.get("harts", 1), "cpu.harts")
+    if not 1 <= harts <= 8:
+        raise ContractError("native flow requires 1..8 qualified homogeneous RV64 harts")
+    _validate_flow_workloads(data["software"], packages, cpu, harts, rtl)
     model_instances = spec.get("devices", [])
     if not isinstance(model_instances, list) or any(
         not isinstance(d, dict) for d in model_instances
@@ -220,6 +234,48 @@ def plan(path):
         ],
         "full_master_objective_complete": False,
     }
+
+
+def preflight_flow(path):
+    """Run design-agnostic ownership, domain and workload preflight on a flow."""
+    import tempfile
+
+    from .lifecycle_preflight import preflight_design
+    from .native_ir import compile_design
+    from .soc_spec import emit_ipxact
+
+    path = path.resolve()
+    planned = plan(path)
+    config = planned["configuration"]
+    workloads = [w["kind"] for w in config["software"]]
+    spec_path = inside(path.parent, config["spec"])
+    if planned["packages"]:
+        from .native_package import package_capabilities
+
+        pkg_caps = {
+            pid: package_capabilities(read_package(inside(path.parent, rel))[0])
+            for pid, rel in planned["packages"].items()
+        }
+        return {
+            "status": "READY",
+            "scope": "plan-time preflight; deferred package binaries validated at build",
+            "engine": planned["engine"],
+            "harts": planned["hart_count"],
+            "cpu_model": planned["cpu_model"],
+            "ownership": planned["ownership"],
+            "packages": pkg_caps,
+            "workloads": workloads,
+            "blocking_issues": [],
+        }
+    spec, canonical = _load_flow_spec(path.parent, config, spec_path, {})
+    if canonical is None:
+        validated = validate_spec(copy.deepcopy(spec))
+        with tempfile.TemporaryDirectory(prefix="usp-preflight-") as tmp:
+            tmp_dir = Path(tmp)
+            (tmp_dir / "spec.yaml").write_text(yaml.safe_dump(validated, sort_keys=False))
+            structural = emit_ipxact(validated, tmp_dir)
+            canonical = compile_design(validated, structural)
+    return preflight_design(canonical, engine=planned["engine"], workloads=workloads)
 
 
 def flow_engine_verifier(cpu):
@@ -306,6 +362,10 @@ def package_driver(generated, package_out, out, cross_compile):
         )
     out.mkdir(parents=True, exist_ok=False)
     shutil.copy2(generated / "firmware/soc.h", out / "soc.h")
+    from .native_package import generate_package_header
+
+    package_def, _ = read_package(package_out / "package.yaml")
+    (out / "package_regs.h").write_text(generate_package_header(package_def))
     (out / "driver_bindings.h").write_text(
         "#include <stdint.h>\n#define USP_DRIVER_COUNT " + str(len(targets)) + "\n"
         "static const uintptr_t usp_driver_bases[] = {"
@@ -832,8 +892,23 @@ def main(argv):
         sub = commands.add_parser(cmd)
         sub.add_argument("--built", type=Path, required=True)
         sub.add_argument("--out", type=Path, required=True)
+    pf = commands.add_parser("preflight")
+    pf.add_argument("flow", type=Path)
+    bsp_cmd = commands.add_parser("bsp")
+    bsp_cmd.add_argument("ir", type=Path)
+    bsp_cmd.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
+        if args.command == "preflight":
+            preflight = preflight_flow(args.flow)
+            print(json.dumps(preflight, indent=2, sort_keys=True))
+            return 0 if preflight["status"] == "READY" else 1
+        if args.command == "bsp":
+            from .native_bsp_gen import synthesize_bsp_bundle
+
+            manifest = synthesize_bsp_bundle(read_ir(args.ir), args.out)
+            print(json.dumps(manifest, indent=2, sort_keys=True))
+            return 0
         if args.command == "plan":
             result = plan(args.flow)
             if args.out.exists():

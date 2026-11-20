@@ -1,6 +1,7 @@
 """Headless development CLI."""
 
 import argparse
+import importlib
 import json
 import sys
 from pathlib import Path
@@ -12,132 +13,62 @@ from .domain import ContractError
 from .project import load_project
 from .runner import run_qemu, tool_version
 
+_SUBCOMMAND_MODULES: dict[str, tuple[str, str]] = {
+    "ci": ("socsim.hosted_ci", "read workflow-published Git-note evidence; use --help"),
+    "upgrade": ("socsim.upgrade", "validate sequential milestone status/evidence; use --help"),
+    "domains": (
+        "socsim.native_domains",
+        "derive/validate clock-reset and address views; use --help",
+    ),
+    "contracts": ("socsim.v04_contracts", "check CPU/bus/NoC/calibration/IP contracts; use --help"),
+    "package": ("socsim.native_package", "build/verify/inspect a pinned model package; use --help"),
+    "flow": ("socsim.native_flow", "plan/preflight/bsp/build/run/verify a native SoC; use --help"),
+    "soc": ("socsim.soc_native", "generate a native SoC from spec/memory map/IO; use --help"),
+    "coherent": ("socsim.coherent", "two-hart coherent Garnet/DMA with source IPs; use --help"),
+    "rtl-zephyr": (
+        "socsim.rtl_zephyr",
+        "source-built Zephyr on actual RV32 RTL masters; use --help",
+    ),
+    "fabric": ("socsim.fabric", "live Ruby/Garnet in unified gem5/SystemC SoC; use --help"),
+    "ucos": ("socsim.ucos", "source-built µC/OS-II/III on RTL CPU masters; use --help"),
+    "rtl-os": ("socsim.rtl_os", "FreeRTOS on actual RV32 RTL CPU masters; use --help"),
+    "rocket": ("socsim.rocket_cpu", "source-built Rocket AXI CPU on QEMU/gem5 memory; use --help"),
+    "rtlcpu": ("socsim.rtl_cpu", "actual RTL CPU/SystemC master adapters; use --help"),
+    "platform": ("socsim.cpu_platform", "select CPU provider, engine and workloads; use --help"),
+    "layers": ("socsim.layers", "software integration matrix and CPU metrics; use --help"),
+    "unified": ("socsim.unified", "one SoC/ELF with SystemC IPs on QEMU or gem5; use --help"),
+    "noc": ("socsim.noc", "build pinned Garnet network tools; use --help"),
+    "chip": ("socsim.testchip", "build/run CPU-owned RTL test chips; use --help"),
+    "asic": ("socsim.asic", "build/verify reference RTL-to-GDS flow; use --help"),
+    "system": ("socsim.systems", "validate/plan/test AI_SOC and AIZ_SOC; use --help"),
+    "workspace": ("socsim.workspace", "validate/run/verify multi-SoC acceptance; use --help"),
+}
+_LIFECYCLE_SUBCOMMANDS = frozenset(
+    {"generate", "build", "software", "test", "report", "models", "gem5", "ipblocks"}
+)
+
 
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     json_errors = "--json" in argv
     argv = [argument for argument in argv if argument != "--json"]
-    if argv and argv[0] == "ci":
-        from .hosted_ci import main as ci_main
-
-        return ci_main(argv[1:])
-    if argv and argv[0] == "upgrade":
-        from .upgrade import main as upgrade_main
-
-        return upgrade_main(argv[1:])
-    if argv and argv[0] == "package":
-        from .native_package import main as package_main
-
-        return package_main(argv[1:])
-    if argv and argv[0] == "flow":
-        from .native_flow import main as flow_main
-
-        return flow_main(argv[1:])
-    if argv and argv[0] == "soc":
-        from .soc_native import main as soc_main
-
-        return soc_main(argv[1:])
-    if argv and argv[0] == "coherent":
-        from .coherent import main as coherent_main
-
-        return coherent_main(argv[1:])
-    if argv and argv[0] == "rtl-zephyr":
-        from .rtl_zephyr import main as rtl_zephyr_main
-
-        return rtl_zephyr_main(argv[1:])
-    if argv and argv[0] == "fabric":
-        from .fabric import main as fabric_main
-
-        return fabric_main(argv[1:])
-    if argv and argv[0] == "ucos":
-        from .ucos import main as ucos_main
-
-        return ucos_main(argv[1:])
-    if argv and argv[0] == "rtl-os":
-        from .rtl_os import main as rtl_os_main
-
-        return rtl_os_main(argv[1:])
     if argv[:2] == ["ipxact", "validate"]:
         argv = argv[1:]
-    if argv and argv[0] == "rocket":
-        from .rocket_cpu import main as rocket_main
-
-        return rocket_main(argv[1:])
-    if argv and argv[0] == "rtlcpu":
-        from .rtl_cpu import main as rtl_cpu_main
-
-        return rtl_cpu_main(argv[1:])
-    if argv and argv[0] == "platform":
-        from .cpu_platform import main as platform_main
-
-        return platform_main(argv[1:])
-    if argv and argv[0] == "layers":
-        from .layers import main as layers_main
-
-        return layers_main(argv[1:])
-    if argv and argv[0] == "unified":
-        from .unified import main as unified_main
-
-        return unified_main(argv[1:])
-    if argv and argv[0] == "noc":
-        from .noc import main as noc_main
-
-        return noc_main(argv[1:])
-    if argv and argv[0] == "chip":
-        from .testchip import main as chip_main
-
-        return chip_main(argv[1:])
-    if argv and argv[0] == "asic":
-        from .asic import main as asic_main
-
-        return asic_main(argv[1:])
-    if argv and argv[0] == "system":
-        from .systems import main as system_main
-
-        return system_main(argv[1:])
-    if argv and argv[0] == "workspace":
-        from .workspace import main as workspace_main
-
-        return workspace_main(argv[1:])
-    if argv and (
-        argv[0] in {"generate", "build", "software", "test", "report", "models", "gem5", "ipblocks"}
-        or (argv[0] == "run" and "--generated" in argv)
-    ):
+    if argv and argv[0] in _SUBCOMMAND_MODULES:
+        module_name = _SUBCOMMAND_MODULES[argv[0]][0]
+        return int(importlib.import_module(module_name).main(argv[1:]))
+    if argv and (argv[0] in _LIFECYCLE_SUBCOMMANDS or (argv[0] == "run" and "--generated" in argv)):
         from .lifecycle_cli import main as lifecycle_main
 
         return lifecycle_main(argv)
     parser = argparse.ArgumentParser(prog="usp (socsim compatibility)")
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("ci", help="read workflow-published Git-note evidence; use --help")
-    commands.add_parser("upgrade", help="validate sequential milestone status/evidence; use --help")
-    commands.add_parser("package", help="build/verify a pinned source model package; use --help")
-    commands.add_parser("flow", help="plan/build/software/run/verify a native SoC; use --help")
-    commands.add_parser("soc", help="generate a native SoC from spec/memory map/IO; use --help")
-    commands.add_parser(
-        "platform", help="select CPU provider, engine and software workloads; use --help"
-    )
-    commands.add_parser(
-        "rocket", help="source-built Rocket AXI CPU on QEMU/gem5 memory; use --help"
-    )
-    commands.add_parser("rtlcpu", help="actual RTL CPU/SystemC master adapters; use --help")
-    commands.add_parser("rtl-os", help="FreeRTOS on actual RV32 RTL CPU masters; use --help")
-    commands.add_parser(
-        "rtl-zephyr", help="source-built Zephyr on actual RV32 RTL masters; use --help"
-    )
-    commands.add_parser("ucos", help="source-built µC/OS-II/III on RTL CPU masters; use --help")
-    commands.add_parser("fabric", help="live Ruby/Garnet in unified gem5/SystemC SoC; use --help")
-    commands.add_parser("coherent", help="two-hart coherent Garnet/DMA with source IPs; use --help")
-    commands.add_parser("layers", help="software integration matrix and CPU metrics; use --help")
-    commands.add_parser("unified", help="one SoC/ELF with SystemC IPs on QEMU or gem5; use --help")
+    for subcommand, (_, help_text) in _SUBCOMMAND_MODULES.items():
+        commands.add_parser(subcommand, help=help_text)
     commands.add_parser("backends", help="show implemented and planned capabilities")
     commands.add_parser("doctor", help="inspect runtime tools without installing")
-    commands.add_parser("workspace", help="validate/run/verify multi-SoC acceptance; use --help")
-    commands.add_parser("system", help="validate/plan/test AI_SOC and AIZ_SOC; use --help")
-    commands.add_parser("noc", help="build pinned Garnet network tools; use --help")
-    commands.add_parser("asic", help="build/verify reference RTL-to-GDS flow; use --help")
-    commands.add_parser("chip", help="build/run CPU-owned RTL test chips; use --help")
-    for extra in ("generate", "build", "software", "test", "report", "models", "gem5", "ipblocks"):
+    for extra in sorted(_LIFECYCLE_SUBCOMMANDS):
         commands.add_parser(extra, help="custom QEMU/Zephyr lifecycle; use --help")
     for name in ("validate", "elaborate", "plan", "run"):
         sub = commands.add_parser(name)
