@@ -1,0 +1,94 @@
+# Single Unified Multi-Platform Heterogeneous SoC mapped over a SystemC/TLM-2.0 2x2 Mesh NoC.
+# Combines all four multi-platform design domains into ONE unified address map, PLIC IRQ table,
+# and SystemC/TLM-2.0 simulation top so real compiled RISC-V64 software exercises every IP end-to-end.
+schema_version: unified-systemc-soc-1
+name: Unified_Hetero_MultiPlatform_SoC
+noc:
+  topology: mesh-2x2
+  rows: 2
+  cols: 2
+  hop_latency_ns: 10
+  link_latency_ns: 5
+  cpu_router: [0, 0]
+cpu:
+  name: unified_rv64_core
+  isa: rv64im_zicsr
+  privilege: M
+  pmp_regions: 4
+  clock_hz: 50000000
+  timebase_hz: 10000000
+  entry: 0x80000000
+  stack_top: 0x800F0000
+  protected_scratch: 0x80100000
+  protected_size: 0x1000
+  model_disclosure: >-
+    SystemC/TLM-2.0 RV64IM_Zicsr functional initiator with real M-mode PMP CSRs and trap controller;
+    distinct from Verilated Chipyard Rocket RTL and QEMU/gem5 ISS.
+devices:
+- name: boot_rom
+  platform: qemu-io
+  model: rom
+  base: 0x00001000
+  size: 0x00001000
+  router: [0, 0]
+- name: sim_finisher
+  platform: qemu-io
+  model: finisher
+  base: 0x00100000
+  size: 0x00001000
+  router: [0, 0]
+- name: main_dram
+  platform: qemu-io
+  model: ram
+  base: 0x80000000
+  size: 0x01000000
+  router: [0, 0]
+- name: sys_clint
+  platform: qemu-io
+  model: clint
+  base: 0x02000000
+  size: 0x00010000
+  router: [1, 0]
+- name: sys_plic
+  platform: qemu-io
+  model: plic
+  base: 0x0C000000
+  size: 0x04000000
+  router: [1, 0]
+- name: qemu_uart_0
+  platform: qemu-io
+  model: uart
+  base: 0x11000000
+  size: 0x00001000
+  irq: 10
+  router: [1, 0]
+- name: chipyard_gcd_0
+  platform: chipyard
+  model: chipyard.gcd
+  base: 0x13000000
+  size: 0x00001000
+  irq: 12
+  router: [0, 1]
+- name: opentitan_gpio_0
+  platform: opentitan
+  model: opentitan.gpio
+  base: 0x14000000
+  size: 0x00001000
+  irq: 13
+  router: [0, 1]
+- name: mac_npu_0
+  platform: systemc-npu
+  model: user.mac_npu
+  base: 0x15000000
+  size: 0x00001000
+  irq: 20
+  router: [1, 1]
+  disclosure: Original SystemC/TLM-2.0 MMIO32 MAC accelerator, NOT upstream Chipyard Gemmini RTL.
+- name: pmp_guard_0
+  platform: systemc-pmp
+  model: user.pmp_guard
+  base: 0x16000000
+  size: 0x00001000
+  irq: 21
+  router: [1, 1]
+  disclosure: Original SystemC/TLM-2.0 NoC IOPMP bus firewall complementary to CPU-internal PMP CSRs.

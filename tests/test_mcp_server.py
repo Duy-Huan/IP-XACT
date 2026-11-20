@@ -367,6 +367,6 @@ def test_mcp_cli_tools_and_client_configs():
     assert proc.returncode == 0, proc.stderr
     data = json.loads(proc.stdout)
     assert data["server"] == SERVER_NAME
-    assert len(data["tools"]) == 14
+    assert len(data["tools"]) == 15
     assert len(data["resources"]) == 5
     assert len(data["prompts"]) == 3

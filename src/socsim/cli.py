@@ -19,6 +19,10 @@ _SUBCOMMAND_MODULES: dict[str, tuple[str, str]] = {
         "socsim.mcp_server",
         "run Model Context Protocol (MCP) stdio server for AI clients; use --help",
     ),
+    "unified-soc": (
+        "socsim.unified_systemc_soc",
+        "build/run unified SystemC/TLM-2.0 multi-platform SoC with RV64 SW; use --help",
+    ),
     "qa": ("socsim.qa_runner", "run real QA/QC suites and verify scorecards; use --help"),
     "upgrade": ("socsim.upgrade", "validate sequential milestone status/evidence; use --help"),
     "domains": (

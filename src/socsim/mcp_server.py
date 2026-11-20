@@ -41,6 +41,7 @@ from .runner import run_qemu, tool_version
 from .sdk import EmulatorNode
 from .soc_spec import catalog as native_model_catalog
 from .soc_spec import load_spec, validate_spec
+from .unified_systemc_soc import run_unified_soc
 from .v04_contracts import (
     CPU_ADAPTER_MATRIX,
     check_cpu_bus_adapter,
@@ -131,7 +132,12 @@ def _discover_specs(root: Path) -> dict[str, Any]:
             packages.append(rel)
         elif schema == "native-flow-1":
             flows.append(rel)
-        elif schema in {"1", "native-fabric-1", "multiplatform-target-audit-1"}:
+        elif schema in {
+            "1",
+            "native-fabric-1",
+            "multiplatform-target-audit-1",
+            "unified-systemc-soc-1",
+        }:
             soc_specs.append(rel)
     return {
         "root": str(root),
@@ -163,6 +169,7 @@ class EmulatorMcpServer:
             "emulator_package_build": self._tool_package_build,
             "emulator_run_qa": self._tool_run_qa,
             "emulator_run_qemu": self._tool_run_qemu,
+            "emulator_run_unified_soc": self._tool_run_unified_soc,
         }
 
     def _resolve_path(self, raw: str, *, field: str = "path", must_exist: bool = False) -> Path:
@@ -462,6 +469,29 @@ class EmulatorMcpServer:
                 read_only=False,
                 idempotent=False,
             ),
+            McpToolSpec(
+                name="emulator_run_unified_soc",
+                description=(
+                    "Compile and execute the single unified SystemC/TLM-2.0 2x2 NoC multi-platform "
+                    "SoC (QEMU IO + Chipyard GCD + OpenTitan GPIO + MAC NPU + PMP Bus Guard) with "
+                    "real compiled RV64IM_Zicsr bare-metal software."
+                ),
+                input_schema={
+                    "type": "object",
+                    "required": ["out_dir"],
+                    "properties": {
+                        "spec_path": {
+                            "type": "string",
+                            "default": "specs/multiplatform/unified_hetero_soc.yaml",
+                        },
+                        "out_dir": {"type": "string"},
+                        "max_steps": {"type": "integer", "default": 500000},
+                    },
+                    "additionalProperties": False,
+                },
+                read_only=False,
+                idempotent=False,
+            ),
         )
 
     # --- Tool implementations ---
@@ -653,6 +683,13 @@ class EmulatorMcpServer:
             if console_log.is_file()
             else "",
         }
+
+    def _tool_run_unified_soc(self, args: dict[str, Any]) -> dict[str, Any]:
+        spec_rel = str(args.get("spec_path", "specs/multiplatform/unified_hetero_soc.yaml"))
+        spec_path = self._resolve_path(spec_rel, field="spec_path", must_exist=True)
+        out_dir = self._resolve_path(args["out_dir"], field="out_dir", must_exist=False)
+        max_steps = int(args.get("max_steps", 500_000))
+        return run_unified_soc(spec_path, out_dir, max_steps=max_steps)
 
     # --- MCP Resources & Prompts ---
 
