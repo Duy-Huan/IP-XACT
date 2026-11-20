@@ -128,7 +128,8 @@ workspace test. Consult docs/milestone-checklist.md; never translate selected
 matrix success into full master completion or close unimplemented deliverables.
 
 Implements agent.md §§3–6. Read agent.md, docs/roadmap.md and the compatibility
-boundary first. Work on `dev`, preserve user changes, and use the existing checkout.
+boundary first. Always sync Git first (`git fetch origin --tags --prune && git pull --ff-only`
+when clean). Work on `dev`, preserve user changes, and use the existing checkout.
 No automatic updates, pushes, releases, or company data uploads.
 
 1. Identify the exact target: Python dependency, schema, simulator, IP model, firmware

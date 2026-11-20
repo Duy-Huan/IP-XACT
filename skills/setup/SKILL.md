@@ -5,10 +5,12 @@ description: Set up and verify the supported IP-XACT and QEMU development workfl
 
 # Setup workflow
 
-Implements agent.md §§2–5. Read it and docs/roadmap.md first. Work on `dev` in the
-existing isolated checkout; do not create a worktree unless requested. Inspect
-Git changes, Python/uv availability, disk and actual engine versions before install.
-Do not overwrite user files or download confidential reference material.
+Implements agent.md §§2–5. Read it and docs/roadmap.md first. Always sync Git
+first (`git fetch origin --tags --prune && git pull --ff-only` when clean). Work
+on `dev` in the existing isolated checkout; do not create a worktree unless
+requested. Inspect Git changes, Python/uv availability, disk and actual engine
+versions before install. Do not overwrite user files or download confidential
+reference material.
 
 Run `bash scripts/setup.sh`, then `source .venv/bin/activate`. The script uses
 `uv sync --frozen --extra dev` and performs offline schema/example validation.

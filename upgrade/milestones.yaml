@@ -36,12 +36,28 @@ milestones:
       qualification: scoped XML/fabric equivalence; final qualification bound by release
         receipt
   - requirement: Explicit CPU, memory, IRQ, clock/reset and hierarchy contracts
-    status: open
-    evidence: []
+    status: implemented
+    evidence:
+    - kind: implementation-reference
+      path: src/socsim/native_domains.py
+      qualification: scoped domain/hierarchy contract; full multi-domain hardware qualification
+        remains open
+    - kind: implementation-reference
+      path: tests/test_milestone_contracts.py
+      qualification: positive and negative domain-crossing unit checks; final qualification bound
+        by release receipt
   - requirement: General interface/address-space/translation representation and capability-checked
       lowering
-    status: open
-    evidence: []
+    status: implemented
+    evidence:
+    - kind: implementation-reference
+      path: src/socsim/native_domains.py
+      qualification: scoped per-initiator translation and lowering capability checks; timed/multi-view
+        backend lowering remains open
+    - kind: implementation-reference
+      path: tests/test_milestone_contracts.py
+      qualification: positive and negative initiator-view unit checks; final qualification bound
+        by release receipt
 - id: M2
   target_version: 0.3.0
   document: M2-model-packages.md
@@ -61,8 +77,16 @@ milestones:
       qualification: scoped native contract; final qualification bound by release
         receipt
   - requirement: Driver/register/reset/error and transaction capability contracts
-    status: open
-    evidence: []
+    status: implemented
+    evidence:
+    - kind: implementation-reference
+      path: src/socsim/native_package.py
+      qualification: scoped capability metadata and deterministic C register header synthesis;
+        wider transaction/DMA protocols remain open
+    - kind: implementation-reference
+      path: tests/test_milestone_contracts.py
+      qualification: package capability and header contract checks; final qualification bound by
+        release receipt
   - requirement: An independently authored package executes real MMIO/IRQ/error tests
       on both engines
     status: implemented
@@ -102,6 +126,9 @@ milestones:
       qualification: scoped native contract; final qualification bound by release
         receipt
     - kind: implementation-reference
+      path: src/socsim/lifecycle_preflight.py
+      qualification: unified design-agnostic ownership and capability preflight
+    - kind: implementation-reference
       path: tests/test_native_flow.py
       qualification: scoped native contract; final qualification bound by release
         receipt
@@ -125,8 +152,16 @@ milestones:
   status: partial
   required_exits:
   - requirement: IR-derived startup/linker/DTS/BSP and device drivers
-    status: open
-    evidence: []
+    status: implemented
+    evidence:
+    - kind: implementation-reference
+      path: src/socsim/native_bsp_gen.py
+      qualification: deterministic IR-derived map/linker/DTS/register-header bundle; arbitrary IP
+        driver synthesis and SMP RTOS remain open
+    - kind: implementation-reference
+      path: tests/test_milestone_contracts.py
+      qualification: IR BSP synthesis and eligibility checks; final qualification bound by release
+        receipt
   - requirement: Real bare-metal, FreeRTOS, Zephyr, both uCOS kernels and boot sequence
       tests
     status: implemented
