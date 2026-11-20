@@ -1,0 +1,24 @@
+schema_version: native-flow-1
+spec: unseen_dual_ip_soc.yaml
+input_format: yaml
+engine: both
+packages: []
+software:
+- id: baremetal_dual_ip
+  kind: baremetal
+  timeout: 60
+- id: freertos_rtos
+  kind: freertos
+  timeout: 90
+- id: zephyr_rtos
+  kind: zephyr
+  timeout: 90
+- id: ucos2_rtos
+  kind: ucos2
+  timeout: 90
+- id: ucos3_rtos
+  kind: ucos3
+  timeout: 90
+- id: linux_boot
+  kind: linux
+  timeout: 180

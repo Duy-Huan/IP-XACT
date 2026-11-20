@@ -15,6 +15,7 @@ from .runner import run_qemu, tool_version
 
 _SUBCOMMAND_MODULES: dict[str, tuple[str, str]] = {
     "ci": ("socsim.hosted_ci", "read workflow-published Git-note evidence; use --help"),
+    "qa": ("socsim.qa_runner", "run real QA/QC suites and verify scorecards; use --help"),
     "upgrade": ("socsim.upgrade", "validate sequential milestone status/evidence; use --help"),
     "domains": (
         "socsim.native_domains",
