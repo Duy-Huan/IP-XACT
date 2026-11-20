@@ -39,7 +39,7 @@ case "$command" in
         "${oci[@]}" run "${safe[@]}" "${user_args[@]}" --network=none \
             "$image" bash /opt/socsim/containers/smoke.sh
         ;;
-    run|qa)
+    run|qa|mcp)
         state=${USP_CONTAINER_STATE:-$repo/.podman}
         mkdir -p "$state"
         state=$(cd "$state" && pwd)
@@ -56,13 +56,18 @@ case "$command" in
         mounts+=(--volume "$state/cache:/cache$suffix")
         if [[ "$command" == qa ]]; then
             suite=${1:-full}
-            case "$suite" in quick|unseen|wheel|full) ;; *) echo 'Suite must be quick|unseen|wheel|full' >&2; exit 2 ;; esac
+            case "$suite" in quick|unseen|multiplatform|wheel|full) ;; *) echo 'Suite must be quick|unseen|multiplatform|wheel|full' >&2; exit 2 ;; esac
             stamp=$(date -u +%Y%m%dT%H%M%SZ)
             out_dir=${2:-results/podman-qa-${suite}-${stamp}}
             "${oci[@]}" run "${safe[@]}" "${user_args[@]}" "${mounts[@]}" \
                 --env PYTHONPATH=/workspace/src --workdir /workspace "$image" \
                 bash -c 'set -euo pipefail; git config --global --add safe.directory /workspace; usp qa run --suite "$1" --root /workspace --out "$2"; usp qa scorecard "$2" > /dev/null; cat "$2/scorecard.md"' \
                 _ "$suite" "$out_dir"
+        elif [[ "$command" == mcp ]]; then
+            # Keep stdin open without allocating a PTY so MCP JSON-RPC stdio framing stays pure.
+            "${oci[@]}" run "${safe[@]}" -i "${user_args[@]}" "${mounts[@]}" \
+                --env PYTHONPATH=/workspace/src --workdir /workspace "$image" \
+                usp mcp serve --root /workspace "$@"
         else
             tty=(); if [[ -t 0 && -t 1 ]]; then tty=(-it); fi
             [[ $# != 0 ]] || set -- bash
@@ -95,7 +100,7 @@ case "$command" in
         echo "$dest/$archive"
         ;;
     *)
-        echo 'Usage: scripts/podman.sh {build|smoke|qa [quick|unseen|wheel|full] [OUT]|run [COMMAND...]|export OUTPUT_DIRECTORY}'
+        echo 'Usage: scripts/podman.sh {build|smoke|qa [quick|unseen|multiplatform|wheel|full] [OUT]|mcp [ARGS...]|run [COMMAND...]|export OUTPUT_DIRECTORY}'
         [[ "$command" == help ]] || exit 2
         ;;
 esac
