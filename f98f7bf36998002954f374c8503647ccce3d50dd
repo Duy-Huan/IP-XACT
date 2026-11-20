@@ -1,0 +1,33 @@
+{
+  "records": [
+    {
+      "artifacts": [],
+      "attempt": 1,
+      "conclusion": "failure",
+      "created_utc": "2026-11-20T11:00:43.488684+00:00",
+      "event": "push",
+      "failure_details": [
+        {
+          "excerpt": "2026-11-20T10:43:27.0847587Z tests/test_freertos.py::test_invalid_timeout_before_starting_guest[301] PASSED [ 21%]\n2026-11-20T10:43:27.0972940Z tests/test_freertos.py::test_freertos_cli_requires_source PASSED         [ 22%]\n2026-11-20T10:43:27.0979896Z tests/test_freertos.py::test_real_freertos_preemption_registers_timer_and_uart_irq SKIPPED [ 22%]\n2026-11-20T10:43:27.0986956Z tests/test_freertos.py::test_real_guest_failures_are_failed_results[assert-failure] SKIPPED [ 22%]\n2026-11-20T10:43:27.0993786Z tests/test_freertos.py::test_real_guest_failures_are_failed_results[tick-disabled] SKIPPED [ 22%]\n2026-11-20T10:43:27.1000733Z tests/test_freertos.py::test_modified_software_is_rejected_before_execution[freertos/firmware.elf] SKIPPED [ 22%]\n2026-11-20T10:43:27.1010940Z tests/test_freertos.py::test_modified_software_is_rejected_before_execution[freertos/bsp/FreeRTOSConfig.h] SKIPPED [ 22%]\n2026-11-20T10:43:27.1017728Z tests/test_freertos.py::test_invalid_software_record_is_rejected[software_adapter-value0] SKIPPED [ 22%]\n2026-11-20T10:43:27.1024258Z tests/test_freertos.py::test_invalid_software_record_is_rejected[bsp_files-value1] SKIPPED [ 22%]\n2026-11-20T10:43:27.1030696Z tests/test_freertos.py::test_invalid_software_record_is_rejected[test_case-value2] SKIPPED [ 22%]\n2026-11-20T10:43:27.1037293Z tests/test_freertos.py::test_invalid_software_record_is_rejected[kernel_source_commit-unverified-revision] SKIPPED [ 23%]\n2026-11-20T10:43:27.1051908Z tests/test_gem5.py::test_configuration_provenance_rejects_semantic_mismatch[flag] PASSED [ 23%]\n2026-11-20T10:43:27.1069405Z tests/test_gem5.py::test_configuration_provenance_rejects_semantic_mismatch[kconfig] PASSED [ 23%]\n2026-11-20T10:43:27.1086892Z tests/test_gem5.py::test_configuration_provenance_rejects_semantic_mismatch[executable_info] PASSED [ 23%]\n2026-11-20T10:43:27.1099365Z tests/test_gem5.py::test_same_elf_on_qemu_linux_and_gem5_with_real_stats SKIPPED [ 23%]\n2026-11-20T10:43:27.1386056Z tests/test_hierarchy.py::test_configuration_aliases_and_parameterized_leaf PASSED [ 23%]\n2026-11-20T10:43:27.1485736Z tests/test_hierarchy.py::test_invalid_hierarchy_fails_closed[cycle] PASSED [ 23%]\n2026-11-20T10:43:27.1583408Z tests/test_hierarchy.py::test_invalid_hierarchy_fails_closed[unknown-view] PASSED [ 23%]\n2026-11-20T10:43:27.1680123Z tests/test_hierarchy.py::test_invalid_hierarchy_fails_closed[ambiguous] PASSED [ 24%]\n2026-11-20T10:43:27.1778947Z tests/test_hierarchy.py::test_invalid_hierarchy_fails_closed[alias-collision] PASSED [ 24%]\n2026-11-20T10:43:27.1881626Z tests/test_hierarchy.py::test_invalid_hierarchy_fails_closed[unknown-alias] PASSED [ 24%]\n2026-11-20T10:43:27.1987878Z tests/test_hierarchy.py::test_invalid_hierarchy_fails_closed[missing-placement] PASSED [ 24%]\n2026-11-20T10:43:27.2161779Z tests/test_hierarchy.py::test_recursive_design_configuration_instantiation PASSED [ 24%]\n2026-11-20T10:43:27.2174252Z tests/test_hierarchy.py::test_real_configured_hierarchy_boot_and_irq SKIPPED [ 24%]\n2026-11-20T10:43:27.2667676Z tests/test_hosted_ci.py::test_missing_real_receipt_remains_unobserved PASSED [ 24%]",
+          "job": "regression",
+          "log_prefix_sha256": "35fc2aba37871c04bce5aba6b65f09569bb9273cf22af59e6a08c08f6b98df68"
+        }
+      ],
+      "jobs": {
+        "branch-policy": "success",
+        "custom-zephyr": "success",
+        "regression": "failure",
+        "workflow-lint": "success"
+      },
+      "kind": "regression",
+      "publication": "not-applicable",
+      "ref": "refs/heads/dev",
+      "repository": "Duy-Huan/IP-XACT",
+      "run_id": 44721541339,
+      "scope": "hosted-required-jobs; native full/cold qualification separate",
+      "url": "https://github.com/Duy-Huan/IP-XACT/actions/runs/44721541339"
+    }
+  ],
+  "schema_version": "hosted-git-receipt-1",
+  "source_commit": "f98f7bf36998002954f374c8503647ccce3d50dd"
+}
