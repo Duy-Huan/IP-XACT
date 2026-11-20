@@ -55,7 +55,13 @@ def validate_ledger(root):
                 or not isinstance(exit["evidence"], list)
             ):
                 raise ContractError("invalid milestone acceptance state")
-            if exit["status"] == "verified" and not exit["evidence"]:
+            if exit["status"] == "verified" and (
+                not exit["evidence"]
+                or all(
+                    isinstance(ev, dict) and ev.get("kind") == "implementation-reference"
+                    for ev in exit["evidence"]
+                )
+            ):
                 raise ContractError("verified exit requires actual qualification evidence")
         if item["status"] == "verified" and any(
             e["status"] != "verified" for e in item["required_exits"]

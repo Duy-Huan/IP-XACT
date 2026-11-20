@@ -469,15 +469,21 @@ def main(argv=None):
                 time.sleep(min(20, max(0, deadline - time.monotonic())))
         print(json.dumps(result, indent=2))
         return 0
-    except (ContractError, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
-        print(
-            json.dumps(
-                {
-                    "status": "ERROR",
-                    "reason": "hosted receipt validation/transport failed; no success inferred",
-                }
-            )
-        )
+    except (
+        ContractError,
+        OSError,
+        ValueError,
+        KeyError,
+        TypeError,
+        subprocess.SubprocessError,
+    ) as exc:
+        error = {
+            "status": "ERROR",
+            "reason": "hosted receipt validation/transport failed; no success inferred",
+        }
+        if isinstance(exc, ContractError):
+            error["detail"] = str(exc)
+        print(json.dumps(error))
         return 2
 
 

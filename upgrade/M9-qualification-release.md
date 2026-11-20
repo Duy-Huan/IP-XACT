@@ -5,7 +5,10 @@ Dependencies: M8.
 
 ## Observed baseline
 
-v0.3.0-alpha.1 has 534 local mandatory passes; hosted CI remains unobserved; old SDK is a separate immutable release.
+`v0.3.0-alpha.5` (`6a1492c`) has 826 local mandatory passes (775 initial plus 51
+resumed after `tmpfs` ENOSPC repair, zero skips/failures); hosted CI failed on
+container `safe.directory` ownership checks; old SDK (`container-v0.2.0-r1`) is
+a separate immutable release.
 
 ## Required exits
 
@@ -24,6 +27,28 @@ The 0.3.0a4 scoped batch adds standard native bus XML/IR v5 and workflow Git-not
 observations. See docs/native-bus-xml.md, docs/hosted-ci-receipts.md and
 upgrade/bus-xml-batch.md. Full milestone completion remains separately gated;
 implementation references alone do not constitute release qualification.
+
+## Observed hosted CI failure on `v0.3.0-alpha.5` (`6a1492c`), 2026-11-19
+
+Direct GitHub Actions inspection recorded failures caused by Git dubious
+ownership in Debian container jobs (`/__w/IP-XACT/IP-XACT` owned by host runner
+UID while container steps run as UID 0, without persistent `safe.directory` in
+`/github/home/.gitconfig`):
+
+- `SoC regression` runs `44554888972` (`dev`) and `44554888959` (`main`):
+  `branch-policy`, `workflow-lint`, `regression` and `custom-zephyr` passed
+  (`gem5-se` skipped), while `hosted-receipt` failed immediately on
+  `git rev-parse --show-toplevel` (exit 128). `workflow-lint` also hit exit 128
+  on `git ls-files -z '*.sh'` inside a process substitution in `scripts/ci_lint.sh`.
+- `Versioned application prerelease` run `44554889389` (`v0.3.0-alpha.5`):
+  `source-release` failed at `Verify immutable tag and full local qualification`
+  with `git rev-parse --show-toplevel` exit 128, cascading into `hosted-receipt`.
+
+All container jobs in `.github/workflows/regression.yml` and
+`.github/workflows/application-release.yml` now configure `safe.directory` for
+`"${GITHUB_WORKSPACE:-$PWD}"` after checkout, and `scripts/ci_lint.sh` checks
+`git ls-files` exit status explicitly. Observed hosted pass still requires a
+fresh green Actions run and published Git note receipt.
 
 ## Current-machine rootless observation, 2026-11-19
 

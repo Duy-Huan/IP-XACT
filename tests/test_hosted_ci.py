@@ -199,3 +199,39 @@ def test_skipped_required_job_is_never_success():
     assert conclusion({"required": "cancelled"}) == "cancelled"
     with pytest.raises(ContractError):
         conclusion({"required": "invented"})
+
+
+def test_container_workflow_jobs_configure_git_safe_directory():
+    import sys
+    from pathlib import Path
+
+    import yaml
+
+    root = Path(__file__).resolve().parents[1]
+    expected = 'git config --global --add safe.directory "${GITHUB_WORKSPACE:-$PWD}"'
+    for name in ("regression.yml", "application-release.yml"):
+        workflow = yaml.safe_load((root / ".github/workflows" / name).read_text())
+        for job_name, job in workflow["jobs"].items():
+            if "container" not in job:
+                continue
+            steps = job["steps"]
+            checkout_index = next(
+                i
+                for i, step in enumerate(steps)
+                if str(step.get("uses", "")).startswith("actions/checkout@")
+            )
+            post_runs = [step["run"] for step in steps[checkout_index + 1 :] if "run" in step]
+            assert post_runs, f"{name}:{job_name} missing post-checkout run step"
+            assert expected in post_runs[0], (
+                f"{name}:{job_name} must configure git safe.directory right after checkout"
+            )
+    for job in ("regression", "custom-zephyr"):
+        emitted = subprocess.run(
+            [sys.executable, str(root / "scripts/emit_ci_job.py"), job],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert expected in emitted.stdout
+        subprocess.run(["bash", "-n"], input=emitted.stdout, text=True, check=True)

@@ -77,16 +77,20 @@ or blocked dependency stays visible; metadata does not replace a missing model.
 
 ## Current sequential batch
 
-The current development candidate is [rocket-native-batch.md](rocket-native-batch.md):
-actual Rocket ownership, native IR v6 source binding and source-built software.
-The published [bus-xml-batch.md](bus-xml-batch.md), 0.3.0a4, adds standard XML
-bus graphs and checked native IR v5 static physical lowering.
-The prior [address-decoder-batch.md](address-decoder-batch.md) qualifies v4. Actual
-native qualification is required before its source tag; broad M1-M9 stay partial.
+The latest promoted baseline is `v0.3.0-alpha.5` (`6a1492c`, 826 local passes:
+775 initial plus 51 resumed after `tmpfs` ENOSPC repair; zero skips/failures),
+delivering [rocket-native-batch.md](rocket-native-batch.md): actual Rocket
+ownership, native IR v6 source binding and source-built software. The prior
+[bus-xml-batch.md](bus-xml-batch.md) (`0.3.0a4`) adds standard XML bus graphs
+and IR v5 static lowering; [address-decoder-batch.md](address-decoder-batch.md)
+(`0.3.0a3`) qualifies v4; [native-flow-batch.md](native-flow-batch.md)
+(`0.3.0a2`) adds source packages, persisted lifecycle and native RTOS/event
+contracts.
 
-See [native-flow-batch.md](native-flow-batch.md) for 0.3.0a2 deliverables and remaining
-exits. Implemented scoped exits retain their full milestone status as partial.
-Run `usp upgrade --root .` to validate dependency/order/closure consistency; its
-ledger-validation result is not a claim that every milestone passed. Final local
-qualification is recorded in the immutable version tag, not inferred from source
-references or intermediate probes.
+Observed hosted GitHub Actions runs on `v0.3.0-alpha.5` failed because Debian
+container jobs lacked explicit `git config --global --add safe.directory` after
+checkout (`dubious ownership` on `/__w/IP-XACT/IP-XACT`). Fixing hosted CI
+container safe-directory configuration and syncing the ledger on `dev` precedes
+the next milestone-closing upgrade batch. Broad M1-M9 remain partial until every
+exit has actual qualification evidence; run `usp upgrade --root .` to validate
+ledger consistency.

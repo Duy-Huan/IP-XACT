@@ -17,7 +17,7 @@ def test_approved_programme_is_sequential_and_completion_is_not_inferred():
     assert result["milestones"]["M8"] != "verified"
 
 
-@pytest.mark.parametrize("case", ["cycle", "false-completion", "missing-evidence"])
+@pytest.mark.parametrize("case", ["cycle", "false-completion", "missing-evidence", "impl-ref-only"])
 def test_upgrade_rejects_invalid_dependencies_and_unproved_completion(tmp_path, case):
     shutil.copytree(ROOT / "upgrade", tmp_path / "upgrade")
     path = tmp_path / "upgrade/milestones.yaml"
@@ -27,6 +27,9 @@ def test_upgrade_rejects_invalid_dependencies_and_unproved_completion(tmp_path, 
         milestone["depends_on"] = ["M9"]
     elif case == "false-completion":
         milestone["status"] = "verified"
+    elif case == "missing-evidence":
+        milestone["required_exits"][0]["status"] = "verified"
+        milestone["required_exits"][0]["evidence"] = []
     else:
         milestone["required_exits"][0]["status"] = "verified"
     path.write_text(yaml.safe_dump(data, sort_keys=False))

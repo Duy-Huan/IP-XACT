@@ -6,6 +6,9 @@ export PATH="$PWD/.tools/ci/bin:$PATH"
 command -v actionlint >/dev/null || { echo 'Install actionlint v1.7.9' >&2; exit 1; }
 command -v shellcheck >/dev/null || { echo 'Install ShellCheck 0.10.0' >&2; exit 1; }
 actionlint -shellcheck "$(command -v shellcheck)"
-while IFS= read -r -d '' script; do
+mapfile -d '' scripts < <(git ls-files -z '*.sh')
+wait "$!"
+(( ${#scripts[@]} > 0 )) || { echo 'No tracked shell scripts found' >&2; exit 1; }
+for script in "${scripts[@]}"; do
     bash -n "$script"
-done < <(git ls-files -z '*.sh')
+done
