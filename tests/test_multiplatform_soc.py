@@ -143,7 +143,7 @@ def test_design3_driver_compiles_with_riscv_gcc_when_installed(tmp_path):
     proc = subprocess.run(
         [
             gcc,
-            "-march=rv64imac",
+            "-march=rv64imac_zicsr",
             "-mabi=lp64",
             "-mcmodel=medany",
             "-ffreestanding",
