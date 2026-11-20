@@ -10,7 +10,10 @@ for name in AI_SOC AIZ_SOC; do
     usp soc generate "specs/$name-native.yaml" --engine both --out "$out/$name-native" \
         > "$out/$name-native-generation.json"
 done
-SOCSIM_REQUIRE_INTEGRATION=1 python -m pytest tests/test_qemu.py -q \
+usp qa run --suite unseen --root /opt/socsim --out "$out/qa-unseen" > "$out/qa-unseen.json"
+usp qa scorecard "$out/qa-unseen" > "$out/qa-scorecard.json"
+usp upgrade --root /opt/socsim --audit > "$out/upgrade-audit.json"
+SOCSIM_REQUIRE_INTEGRATION=1 python -m pytest tests/test_qemu.py tests/test_sdk_qa.py tests/test_milestone_contracts.py -q \
     -o cache_dir="$out/pytest-cache" --basetemp="$out/tests" --junitxml="$out/junit.xml"
-printf 'SDK native smoke passed; source revision: '
+printf 'SDK native smoke + QA passed; source revision: '
 cat /usr/local/share/socsim-revision

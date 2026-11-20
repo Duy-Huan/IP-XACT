@@ -304,6 +304,36 @@ class EmulatorNode:
         self._record(label, duration, result.success, replayed=False)
         return result
 
+    def run_in_podman(
+        self,
+        label: str,
+        command: list[str],
+        *,
+        repo_root: Path,
+        engine: str = "podman",
+        image: str | None = None,
+        timeout: float = 300.0,
+        log_path: Path | None = None,
+    ) -> RunResult:
+        """Run a command inside the rootless Podman/Docker SDK container worker."""
+        if engine not in {"podman", "docker"}:
+            raise ContractError("E_SDK_OCI engine must be podman or docker")
+        if not command:
+            raise ContractError("E_SDK_CMD container command cannot be empty")
+        env = dict(os.environ)
+        env["USP_OCI_ENGINE"] = engine
+        if image is not None:
+            env["USP_CONTAINER_IMAGE"] = image
+        script = str(repo_root.resolve() / "scripts/podman.sh")
+        return self.run_command(
+            label,
+            ["bash", script, "run", *command],
+            cwd=repo_root.resolve(),
+            env=env,
+            timeout=timeout,
+            log_path=log_path,
+        )
+
     def write_profile(self, path: Path) -> Path:
         write_json(path, {"node": self.name, "events": self.profile})
         return path

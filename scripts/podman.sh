@@ -3,7 +3,8 @@
 set -euo pipefail
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 engine=${USP_OCI_ENGINE:-podman}
-image=${USP_CONTAINER_IMAGE:-localhost/socsim-sdk:0.2.0-r1}
+sdk_version=${USP_SDK_VERSION:-0.3.0a5-r1}
+image=${USP_CONTAINER_IMAGE:-localhost/socsim-sdk:${sdk_version}}
 case "$engine" in
     podman) oci=(podman); user_args=(--userns=keep-id --user "$(id -u):$(id -g)"); label=Z ;;
     docker) oci=(docker); user_args=(--user "$(id -u):$(id -g)"); label= ;;
@@ -38,7 +39,7 @@ case "$command" in
         "${oci[@]}" run "${safe[@]}" "${user_args[@]}" --network=none \
             "$image" bash /opt/socsim/containers/smoke.sh
         ;;
-    run)
+    run|qa)
         state=${USP_CONTAINER_STATE:-$repo/.podman}
         mkdir -p "$state"
         state=$(cd "$state" && pwd)
@@ -53,15 +54,26 @@ case "$command" in
         done
         mkdir -p "$state/cache"
         mounts+=(--volume "$state/cache:/cache$suffix")
-        tty=(); if [[ -t 0 && -t 1 ]]; then tty=(-it); fi
-        [[ $# != 0 ]] || set -- bash
-        "${oci[@]}" run "${safe[@]}" "${user_args[@]}" "${tty[@]}" "${mounts[@]}" \
-            --env PYTHONPATH=/workspace/src --workdir /workspace "$image" "$@"
+        if [[ "$command" == qa ]]; then
+            suite=${1:-full}
+            case "$suite" in quick|unseen|wheel|full) ;; *) echo 'Suite must be quick|unseen|wheel|full' >&2; exit 2 ;; esac
+            stamp=$(date -u +%Y%m%dT%H%M%SZ)
+            out_dir=${2:-results/podman-qa-${suite}-${stamp}}
+            "${oci[@]}" run "${safe[@]}" "${user_args[@]}" "${mounts[@]}" \
+                --env PYTHONPATH=/workspace/src --workdir /workspace "$image" \
+                bash -c 'set -euo pipefail; git config --global --add safe.directory /workspace; usp qa run --suite "$1" --root /workspace --out "$2"; usp qa scorecard "$2" > /dev/null; cat "$2/scorecard.md"' \
+                _ "$suite" "$out_dir"
+        else
+            tty=(); if [[ -t 0 && -t 1 ]]; then tty=(-it); fi
+            [[ $# != 0 ]] || set -- bash
+            "${oci[@]}" run "${safe[@]}" "${user_args[@]}" "${tty[@]}" "${mounts[@]}" \
+                --env PYTHONPATH=/workspace/src --workdir /workspace "$image" "$@"
+        fi
         ;;
     export)
         [[ $# == 1 ]] || { echo 'Usage: podman.sh export OUTPUT_DIRECTORY' >&2; exit 2; }
         mkdir -p "$1"; dest=$(cd "$1" && pwd)
-        archive=socsim-sdk-0.2.0-r1-linux-amd64.oci.tar
+        archive="socsim-sdk-${sdk_version}-linux-amd64.oci.tar"
         [[ ! -e "$dest/$archive" ]] || { echo 'Archive already exists; preserve it' >&2; exit 2; }
         if [[ "$engine" == podman ]]; then
             "${oci[@]}" save --format oci-archive --output "$dest/$archive" "$image"
@@ -83,7 +95,7 @@ case "$command" in
         echo "$dest/$archive"
         ;;
     *)
-        echo 'Usage: scripts/podman.sh {build|smoke|run [COMMAND...]|export OUTPUT_DIRECTORY}'
+        echo 'Usage: scripts/podman.sh {build|smoke|qa [quick|unseen|wheel|full] [OUT]|run [COMMAND...]|export OUTPUT_DIRECTORY}'
         [[ "$command" == help ]] || exit 2
         ;;
 esac

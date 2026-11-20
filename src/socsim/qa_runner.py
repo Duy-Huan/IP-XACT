@@ -368,6 +368,18 @@ def _render_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _source_commit(root: Path) -> str:
+    probe = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True, check=False
+    )
+    if probe.returncode == 0 and probe.stdout.strip():
+        return probe.stdout.strip()
+    revision_file = Path("/usr/local/share/socsim-revision")
+    if revision_file.is_file() and revision_file.read_text().strip():
+        return revision_file.read_text().strip()
+    return "no-git-checkout"
+
+
 def run_qa(root: Path, out: Path, *, suite: str = "full") -> dict[str, Any]:
     if suite not in SUITES:
         raise ContractError(f"E_QA_SUITE unsupported suite: {suite}")
@@ -377,7 +389,7 @@ def run_qa(root: Path, out: Path, *, suite: str = "full") -> dict[str, Any]:
         raise ContractError("E_QA_OUT preserve existing QA bundle; choose a fresh directory")
     out.mkdir(parents=True)
 
-    commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+    commit = _source_commit(root)
     gates: dict[str, Any] = {}
     with EmulatorNode("usp_qa_runner") as node:
         if suite in {"quick", "full"}:

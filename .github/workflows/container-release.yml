@@ -40,7 +40,7 @@ jobs:
       - name: Export and load OCI archive
         run: |
           bash scripts/podman.sh export build/container-release
-          podman load --input build/container-release/socsim-sdk-0.2.0-r1-linux-amd64.oci.tar
+          podman load --input build/container-release/socsim-sdk-0.3.0a5-r1-linux-amd64.oci.tar
           bash scripts/podman.sh smoke | tee build/container-release/loaded-smoke.log
           (cd build/container-release && sha256sum smoke.log loaded-smoke.log >> SHA256SUMS)
       - name: Publish container prerelease from a main commit
@@ -48,23 +48,22 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          test "$GITHUB_REF_NAME" = container-v0.2.0-r1
+          test "$GITHUB_REF_NAME" = container-v0.3.0a5-r1
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main
           cat > build/container-release/NOTES.md <<'EOF'
-          Podman rootless SDK for the 0.2.0 application, container packaging revision r1 (Linux amd64).
+          Podman rootless HW/SW Emulator & QA SDK for 0.3.0a5, container packaging revision r1 (Linux amd64).
 
-          Contains the pinned Python environment, reference QEMU, RISC-V toolchains,
-          SystemC/Verilator and native source-build prerequisites. Offline acceptance
-          compiles real firmware and tests guest success, failure and timeout; it
-          validates/generates the selected IP-XACT designs. Both the built and OCI-loaded
-          image must pass before this release is published.
+          Contains the pinned Python 3.12 environment, reference QEMU 10.0.13, RISC-V
+          toolchains, SystemC 3.0.1, Verilator 5.032, Yosys 0.52, ShellCheck, Java 21
+          and the CHIA-style Emulator SDK (`socsim.sdk`) + QA runner (`usp qa`).
+          Offline acceptance compiles real firmware, tests guest success/failure/timeout,
+          runs unseen-design QA (`Helios_QA_SoC`) and verifies scorecards and upgrade audit.
 
-          Verify SHA256SUMS, then podman load --input socsim-sdk-0.2.0-r1-linux-amd64.oci.tar.
-          See docs/podman.md. Large source models and generated firmware are built into
-          separate local volumes. This SDK release is not full master-spec or ASIC signoff.
+          Verify SHA256SUMS, then podman load --input socsim-sdk-0.3.0a5-r1-linux-amd64.oci.tar.
+          See docs/podman.md and docs/qa-emulator-sdk.md.
           EOF
           gh release create "$GITHUB_REF_NAME" --verify-tag --prerelease \
-            --title 'Podman SDK 0.2.0-r1' --notes-file build/container-release/NOTES.md \
+            --title 'Podman Emulator SDK 0.3.0a5-r1' --notes-file build/container-release/NOTES.md \
             build/container-release/*.oci.tar build/container-release/SHA256SUMS \
             build/container-release/image-inspect.json build/container-release/smoke.log \
             build/container-release/loaded-smoke.log

@@ -109,4 +109,37 @@ def test_docker_and_podman_context_filters_are_identical_and_exclude_private_inp
     assert text == (ROOT / ".dockerignore").read_text()
     assert "**/*.zip" in text and "**/*.key" in text
     assert "!.git\n" not in text and "!ref/**" not in text
-    assert "!src/**" in text
+    assert "!src/**" in text and "!upgrade/**" in text
+
+
+def test_podman_qa_subcommand_and_sdk_container_worker(client):
+    from socsim.sdk import EmulatorNode
+
+    project, env, log = client
+    p = subprocess.run(
+        ["bash", "scripts/podman.sh", "qa", "unseen", "results/qa-podman"],
+        cwd=project,
+        env=env,
+    )
+    assert p.returncode == 0
+    call = json.loads(log.read_text())
+    assert "--userns=keep-id" in call
+    assert "--cap-drop=ALL" in call
+    assert "unseen" in call and "results/qa-podman" in call
+
+    bad = subprocess.run(["bash", "scripts/podman.sh", "qa", "invalid"], cwd=project, env=env)
+    assert bad.returncode != 0
+
+    log.unlink()
+    orig_path = os.environ["PATH"]
+    try:
+        os.environ["PATH"] = env["PATH"]
+        os.environ["OCI_CALLS"] = env["OCI_CALLS"]
+        with EmulatorNode("podman_worker") as node:
+            res = node.run_in_podman("sdk_probe", ["usp", "--version"], repo_root=project)
+            assert res.success is True
+    finally:
+        os.environ["PATH"] = orig_path
+        os.environ.pop("OCI_CALLS", None)
+    sdk_call = json.loads(log.read_text())
+    assert sdk_call[-2:] == ["usp", "--version"]
