@@ -1,0 +1,34 @@
+{
+  "records": [
+    {
+      "artifacts": [],
+      "attempt": 1,
+      "conclusion": "failure",
+      "created_utc": "2026-11-20T10:16:53.414258+00:00",
+      "event": "workflow_dispatch",
+      "failure_details": [
+        {
+          "excerpt": "2026-11-20T09:56:27.5097575Z       Built docopt==0.6.2\n2026-11-20T09:56:27.5368525Z       Built socsim-platform @ file:///__w/IP-XACT/IP-XACT\n2026-11-20T09:56:27.5387077Z Prepared 31 packages in 3.01s\n2026-11-20T09:56:27.5411943Z warning: Failed to hardlink files; falling back to full copy. This may lead to degraded performance.\n2026-11-20T09:56:27.5413361Z          If the cache and target directories are on different filesystems, hardlinking may not be supported.\n2026-11-20T09:56:27.5415678Z          If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning.\n2026-11-20T09:56:29.1953707Z Installed 31 packages in 1.65s\n2026-11-20T09:56:29.1954218Z  + attrs==26.1.0\n2026-11-20T09:56:29.1954516Z  + cmake==3.31.6\n2026-11-20T09:56:29.1954807Z  + colorama==0.4.6\n2026-11-20T09:56:29.1955110Z  + docopt==0.6.2\n2026-11-20T09:56:29.1955477Z  + iniconfig==2.3.1\n2026-11-20T09:56:29.1955830Z  + jsonschema==4.25.1\n2026-11-20T09:56:29.1956193Z  + jsonschema-specifications==2025.9.1\n2026-11-20T09:56:29.1956669Z  + lxml==6.0.2\n2026-11-20T09:56:29.1956972Z  + meson==1.7.0\n2026-11-20T09:56:29.1957730Z  + mypy==1.18.2\n2026-11-20T09:56:29.1958071Z  + mypy-extensions==1.2.0\n2026-11-20T09:56:29.1958468Z  + ninja==1.11.1.4\n2026-11-20T09:56:29.1958789Z  + packaging==26.3\n2026-11-20T09:56:29.1959152Z  + pathspec==1.1.1\n2026-11-20T09:56:29.1959491Z  + pluggy==1.7.0\n2026-11-20T09:56:29.1959785Z  + pyelftools==0.32\n2026-11-20T09:56:29.1960097Z  + pygments==2.21.0\n2026-11-20T09:56:29.1960685Z  + pykwalify==1.8.0",
+          "job": "gem5-se",
+          "log_prefix_sha256": "98ac9b85de83f46789010ce45b701f3ea037d1f2b73f7da8c415b7397c6cf20f"
+        }
+      ],
+      "jobs": {
+        "branch-policy": "success",
+        "custom-zephyr": "success",
+        "gem5-se": "failure",
+        "regression": "success",
+        "workflow-lint": "success"
+      },
+      "kind": "regression",
+      "publication": "not-applicable",
+      "ref": "refs/heads/dev",
+      "repository": "Duy-Huan/IP-XACT",
+      "run_id": 44714740962,
+      "scope": "hosted-required-jobs; native full/cold qualification separate",
+      "url": "https://github.com/Duy-Huan/IP-XACT/actions/runs/44714740962"
+    }
+  ],
+  "schema_version": "hosted-git-receipt-1",
+  "source_commit": "c147b5596e04e4fb48daa241d2ff714bd6574791"
+}
