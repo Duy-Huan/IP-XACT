@@ -25,6 +25,7 @@
 | [`podman.md`](podman.md) | Workstation / KDE Plasma / CI | Building, verifying offline, exporting, and running the rootless Podman OCI SDK |
 | [`creating-soc.md`](creating-soc.md) | SoC Architects | Authoring a new IP-XACT 2022 project and running validation/elaboration |
 | [`examples/ASoC.md`](examples/ASoC.md) | SoC Architects / AI HW-SW | **Flagship Official Example (`ASoC`)**: 20-IP, 2-CPU-Cluster (4-Hart), 4-Tier Hierarchical Bus + 3 Bridges, Verilator NPU + LPU + 7× RTL, Dual-Layer PMP & CHIA Loop |
+| [`examples/BSoC.md`](examples/BSoC.md) | Telecom / Multi-Platform SoC | **Flagship Official Telecom Example (`BSoC`)**: Rocket + Hwacha 4-Lane Vector RTL, Dual-Clock CDC, 3 Crossbars, 5-Stage AXI4-Stream DSP Chain, 5× Verilator RTL + LIVE `usp-mmio32-v1` Socket Plugin + QEMU/gem5/Chipyard Cross-Binding ([Bottleneck Audit](../upgrade/bsoc-multiplatform-audit.md)) |
 | [`examples/rv64-minimal.md`](examples/rv64-minimal.md) | Hardware/SW Bring-up | Generated custom QEMU machine + Zephyr RTOS CLINT/PLIC interrupt bring-up |
 | [`examples/rv64-hybrid.md`](examples/rv64-hybrid.md) | SystemC / RTL Engineers | Connecting QEMU MMIO/IRQ to SystemC / Verilated OpenTitan FIFO RTL |
 | [`examples/rv64-ips.md`](examples/rv64-ips.md) | Multi-Platform Engineers | Integrating source-built Chipyard Chisel GCD + OpenTitan GPIO/TL-UL |
@@ -37,7 +38,7 @@
 | Document | Scope |
 |---|---|
 | [`unified-systemc-soc.md`](unified-systemc-soc.md) | Running the Single Unified Dual-Hart SMP + 6× Verilator RTL SystemC SoC, DSE, CHIA loop, IP scaffolder & HTML5 Dashboard |
-| [`mcp-server.md`](mcp-server.md) | Connecting AI coding assistants (Claude, Cursor, VS Code, Podman) to the 20-tool MCP stdio server |
+| [`mcp-server.md`](mcp-server.md) | Connecting AI coding assistants (Claude, Cursor, VS Code, Podman) to the 23-tool MCP stdio server |
 | [`native-flow.md`](native-flow.md) | Planning, preflighting, building, running, and verifying `native-flow-1` hardware/software pipelines |
 | [`native-soc-generator.md`](native-soc-generator.md) | Generating multi-instance SoCs (`AI_SOC`, `AIZ_SOC`) and running concurrent QEMU + gem5 acceptance |
 | [`ci-local.md`](ci-local.md) | Reproducing hosted CI locally (`ci_lint.sh`, `regression.sh`, `promote.sh`, clean-container tests) |

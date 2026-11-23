@@ -10,6 +10,7 @@ required = [
     "scripts/README.md",
     "containers/README.md",
     "upgrade/enterprise-emulator-roadmap.md",
+    "upgrade/bsoc-multiplatform-audit.md",
     "docs/unified-systemc-soc.md",
     "docs/mcp-server.md",
     "docs/multiplatform-soc-qa.md",

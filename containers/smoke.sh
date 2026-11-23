@@ -8,7 +8,7 @@ on_err() {
     local f
     echo "SMOKE FAILED (rc=$rc) at line $1" >&2
     ls -la "$out" >&2
-    for f in "$out"/*.json "$out"/asoc-run/*.log "$out"/asoc-run/report.json; do
+    for f in "$out"/*.json "$out"/asoc-run/*.log "$out"/asoc-run/report.json "$out"/bsoc-run/*.log "$out"/bsoc-run/report.json; do
         [ -s "$f" ] && echo "=== $f ===" >&2 && tail -n 40 "$f" >&2
     done
     exit "$rc"
@@ -40,6 +40,8 @@ usp registry publish specs/multiplatform/packages/mac_npu/package.yaml \
     --registry "$out/ip-registry" --version 1.0.0 > "$out/reg-pub1.json"
 usp registry publish "$out/scaffold-xor-accel/package.yaml" \
     --registry "$out/ip-registry" --version 1.0.0 > "$out/reg-pub2.json"
+usp registry publish examples/BSoC/packages/polyphase_12t/package.yaml \
+    --registry "$out/ip-registry" --version 1.0.0 > "$out/reg-pub3.json"
 usp registry verify --registry "$out/ip-registry" > "$out/reg-verify.json"
 usp dse sweep specs/multiplatform/unified_hetero_soc.yaml --out "$out/dse-sweep" \
     --workers 2 --cluster process --cache "$out/dse-cache" > "$out/dse-sweep.json"
@@ -76,15 +78,28 @@ usp dashboard generate --out "$out/asoc-dashboard.html" \
 usp soc generate examples/ASoC/asoc_fabric.yaml --input-format fabric --engine both \
     --out "$out/asoc-fabric" > "$out/asoc-fabric.json"
 usp flow preflight examples/ASoC/asoc_flow.yaml > "$out/asoc-flow.json"
+usp compose audit examples/BSoC/bsoc_composed.yaml > "$out/bsoc-audit.json"
+usp compose run examples/BSoC/bsoc_composed.yaml --out "$out/bsoc-run" \
+    > "$out/bsoc-run.json"
+echo "=== BSOC LIVE CONSOLE ==="
+cat "$out/bsoc-run/pos-console.log"
+echo "=== BSOC LIVE REPORT ==="
+cat "$out/bsoc-run/report.md"
+echo "=== BSOC LIVE SUMMARY JSON ==="
+cat "$out/bsoc-run/report.json"
+usp compose calibrate examples/BSoC/bsoc_composed.yaml --out "$out/bsoc-cal" \
+    > "$out/bsoc-cal.json"
+echo "=== BSOC CALIBRATION JSON ==="
+cat "$out/bsoc-cal/calibration.json"
 usp mcp tools --root /opt/socsim > "$out/mcp-tools.json"
 usp mcp config --client podman --root /opt/socsim > "$out/mcp-podman-config.json"
 usp upgrade --root /opt/socsim --audit > "$out/upgrade-audit.json"
 SOCSIM_REQUIRE_INTEGRATION=1 USP_REQUIRE_SYSTEMC=1 python -m pytest \
     tests/test_qemu.py tests/test_sdk_qa.py tests/test_milestone_contracts.py \
     tests/test_multiplatform_soc.py tests/test_unified_systemc_soc.py \
-    tests/test_asoc_example.py \
+    tests/test_asoc_example.py tests/test_bsoc_and_composer.py \
     tests/test_enterprise_registry_dse.py tests/test_mcp_server.py \
     tests/test_project_standardization.py -q \
     -o cache_dir="$out/pytest-cache" --basetemp="$out/tests" --junitxml="$out/junit.xml"
-printf 'SDK native smoke + QA + ASoC (2-Cluster 20-IP 7x RTL) + Dual-Hart SMP + CHIA Loop + IP Scaffold + Dashboard + MCP passed; source revision: '
+printf 'SDK native smoke + QA + ASoC + BSoC (Multi-Platform Composer + 5x RTL + Live Socket Plugin + QEMU) + CHIA Loop + MCP passed; source revision: '
 cat /usr/local/share/socsim-revision

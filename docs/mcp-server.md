@@ -3,7 +3,7 @@
 | Metadata Field | Value |
 |---|---|
 | **Document ID** | `SOCSIM-MCP-001` |
-| **Current Version** | `0.3.0a5` (20 Tools · 5 Resources · 3 Prompts) |
+| **Current Version** | `0.3.0a5` (23 Tools · 5 Resources · 3 Prompts) |
 | **Status** | Active / CI-Verified (`tests/test_mcp_server.py` + `containers/smoke.sh`) |
 | **Normative Authority** | `src/socsim/mcp_server.py`, `tests/test_mcp_server.py`, `scripts/podman.sh` |
 
@@ -15,6 +15,7 @@
 |---|---|---|---|---|
 | `0.3.0a5` (Initial) | `2026-11-20` | MCP Baseline | AI Tool Control | Launched zero-dependency MCP JSON-RPC 2.0 `stdio` server with 14 tools, 5 resources, 3 prompts, workspace sandboxing, and Podman stdio bridge. |
 | `0.3.0a5-E4–E12` | `2026-11-23` | `PR #1–#3` (`911b450`) | Enterprise Expansion | Expanded MCP server to **20 tools** adding unified SystemC/RTL execution, IP registry inspection, parallel DSE sweeps, CHIA cyclic loop, IP scaffolder, and HTML5 dashboard generation. |
+| `0.3.0a5-BSoC` | `2026-11-23` | `PR #6` (Multi-Platform Composer) | Generic `usp compose` | Expanded MCP server to **23 tools** adding `emulator_compose_audit`, `emulator_compose_plan`, and `emulator_compose_run` for generic `multiplatform-soc-1` (Chipyard + gem5 + QEMU + Verilator RTL + live `usp-mmio32-v1` socket plugins). |
 
 ---
 
@@ -31,7 +32,7 @@ The USP/SocSim emulator ships a zero-dependency **Model Context Protocol (MCP)**
 
 ## 2. Complete Capability Reference
 
-### 2.1 Tools (20)
+### 2.1 Tools (23)
 
 | # | Tool Name | Category | Purpose |
 |---:|---|---|---|
@@ -55,6 +56,9 @@ The USP/SocSim emulator ships a zero-dependency **Model Context Protocol (MCP)**
 | 18 | `emulator_run_chia_loop` | Optimization | Run CHIA-style cyclic HW/SW NoC placement/latency optimization loop under isolated verification oracle |
 | 19 | `emulator_scaffold_ip` | Authoring | Scaffold a hash-pinned IP plugin (IP-XACT 2022 XML, SV RTL, SystemC TLM-2.0, `selftest.c`, `package.yaml`) |
 | 20 | `emulator_generate_dashboard` | Reporting | Render zero-CDN HTML5 Verification, Coverage, Calibration, DSE & CHIA Convergence Dashboard |
+| 21 | `emulator_compose_audit` | Composer | Audit a `multiplatform-soc-1` YAML for clock domains, crossbars, CDC bridges, AXI4-Stream DAG, RTL & live plugins |
+| 22 | `emulator_compose_plan` | Composer | Emit canonical IR, `binding-lock.json`, C++ SystemC top-level, IP-XACT, QEMU DTS, gem5 Python & Chipyard Scala |
+| 23 | `emulator_compose_run` | Composer | Build & run a `multiplatform-soc-1` SoC with Verilator RTL, live `usp-mmio32-v1` socket plugins & QEMU crosscheck |
 
 ### 2.2 Resources (5) & Prompts (3)
 
@@ -68,7 +72,7 @@ The USP/SocSim emulator ships a zero-dependency **Model Context Protocol (MCP)**
 Generate ready-to-paste client JSON configs directly from the CLI:
 
 ```bash
-# Inspect all 20 tools + JSON schemas locally
+# Inspect all 23 tools + JSON schemas locally
 usp mcp tools --root .
 
 # Generate client configuration for local Python .venv

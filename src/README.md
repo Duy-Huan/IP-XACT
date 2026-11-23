@@ -45,6 +45,7 @@
 | Module | Responsibility |
 |---|---|
 | [`unified_systemc_soc.py`](socsim/unified_systemc_soc.py) | Compiles & executes the single unified `sc_main` binary: Dual-Hart SMP `RV64IMA_Zicsr`, IR-generated `unified_soc_routes.h` 2×2 NoC, 6× Verilator 5.032 clean-room SV RTL IPs (`MAC NPU`, `SHA-256`, `AES-128`, `SPI`, `I2C`, `L2 Cache`), DMA master, IOPMP guard, GDB RSP, IEEE 1364 VCD dump, 24-bin coverage, and RTL-vs-TLM cycle calibration |
+| [`multiplatform_composer.py`](socsim/multiplatform_composer.py) | Generic data-driven `multiplatform-soc-1` composer (`usp compose`): multi-clock CDC, multi-crossbar/multi-master fabrics, AXI4-Stream DAG, live `usp-mmio32-v1` Unix-socket plugins, Verilator RTL, and synchronized IP-XACT / QEMU / gem5 / Chipyard exports |
 
 ### 4. Enterprise Collaboration, DSE Cluster, CHIA Loop & Visualization
 | Module | Responsibility |
@@ -58,7 +59,7 @@
 ### 5. AI Control Plane, SDK, QA & Governance (`usp mcp`, `usp qa`, `usp upgrade`)
 | Module | Responsibility |
 |---|---|
-| [`mcp_server.py`](socsim/mcp_server.py) | Zero-dependency Model Context Protocol (MCP) JSON-RPC 2.0 `stdio` server exposing 20 tools, 5 resources, and 3 prompts with workspace sandboxing |
+| [`mcp_server.py`](socsim/mcp_server.py) | Zero-dependency Model Context Protocol (MCP) JSON-RPC 2.0 `stdio` server exposing 23 tools, 5 resources, and 3 prompts with workspace sandboxing |
 | [`sdk.py`](socsim/sdk.py) | Python `EmulatorNode` SDK supporting local and rootless Podman execution (`run_in_podman()`) |
 | [`qa_runner.py`](socsim/qa_runner.py) & [`multiplatform_qa.py`](socsim/multiplatform_qa.py) | Real-execution QA/QC suites (`quick`, `unseen`, `multiplatform`, `wheel`, `full`) and SHA-256 scorecards |
 | [`upgrade.py`](socsim/upgrade.py), [`readiness_audit.py`](socsim/readiness_audit.py), [`hosted_ci.py`](socsim/hosted_ci.py) | M1–M9 milestone ledger validator, readiness auditor, and Git-note CI receipt reader |

@@ -1,0 +1,374 @@
+# BSoC: Official Telecom Baseband & SDR Heterogeneous Multi-Platform SoC
+# Faithfully models the complete Rocket + Hwacha 4-Lane Vector + TileLink Crossbar +
+# Dual Clock Domain (core_clk <-> dsp_clk) + Memory-Mapped IO Manager CDC Bridge +
+# JTAG-to-AXI4 + AXI4 Control/Data Crossbars + 5-Stage AXI4-Stream DSP Chain
+# (TISAR ADC + 18KB LUT -> 32-phase Tuner -> 136-tap prog FIR /8 Decimator ->
+# 12-tap fixed Polyphase Filter -> 128-point FFT) + 5x SAM SRAMs + 512KB Pattern Gen /
+# 512KB Logic Analyzer architecture.
+
+schema_version: multiplatform-soc-1
+name: BSoC
+description: >-
+  Telecom Baseband / SDR heterogeneous multi-platform SoC combining Chipyard, gem5, QEMU,
+  5x Verilator 5.032 clean-room SystemVerilog RTL accelerators, 1x live out-of-process
+  usp-mmio32-v1 Unix-socket IP plugin (12-tap polyphase filter), and mixed-signal TISAR ADC +
+  18KB calibration LUT behavioral TLM across 2 clock domains and 3 crossbars.
+
+clock_domains:
+  - name: core_clk
+    freq_hz: 800000000
+    description: Rocket CPU, Hwacha 4-lane Vector, TileLink Crossbar, DMA, 512KB L2$, 8MB SRAM
+  - name: dsp_clk
+    freq_hz: 250000000
+    description: JTAG-to-AXI4, UART, AXI4 Control/Data Crossbars, 5-Stage DSP Chain, 5x SAMs, Pattern Gen/LA
+
+fabrics:
+  - name: tilelink_xbar
+    protocol: tilelink-uh-coherent
+    clock_domain: core_clk
+    latency_ns: 4
+    provider: chipyard
+    masters: [rocket_cpu_0, dma_accel_0, hwacha_vec_0]
+  - name: axi4_ctrl_xbar
+    protocol: axi4-lite-control
+    clock_domain: dsp_clk
+    latency_ns: 6
+    provider: systemc-tlm
+    masters: [mmio_cdc_mgr_0, jtag_to_axi4_0]
+  - name: axi4_data_xbar
+    protocol: axi4-256b-data
+    clock_domain: dsp_clk
+    latency_ns: 4
+    provider: systemc-tlm
+    masters: [mmio_cdc_mgr_0, jtag_to_axi4_0, tisar_adc_0]
+
+cdc_bridges:
+  - name: mmio_cdc_mgr_0
+    provider: chipyard
+    protocol: tilelink-to-axi4-async-cdc
+    from_fabric: tilelink_xbar
+    to_fabrics: [axi4_ctrl_xbar, axi4_data_xbar]
+    from_clock: core_clk
+    to_clock: dsp_clk
+    cdc_latency_ns: 12
+    description: Memory-Mapped IO Manager bridging core_clk TileLink to dsp_clk AXI4 Control/Data Crossbars and UART.
+
+cpu:
+  name: rocket_cpu_0
+  provider: chipyard
+  harts: 1
+  isa: rv64imafd_zicsr
+  fpu: true
+  icache_kb: 16
+  dcache_kb: 16
+  fabric: tilelink_xbar
+  clock_domain: core_clk
+  entry: 0x80000000
+  stack_top: 0x800F0000
+  dma_buf_base: 0x80100000
+  gem5_model: gem5.RiscvTimingSimpleCPU
+  qemu_model: qemu.rv64
+  chipyard_config: BSoCChipyardConfig
+  model_disclosure: >-
+    64-bit RISC-V Rocket-class core contract (16KB I$, 16KB D$, FPU CSRs, RoCC vector dispatch).
+    Executes via SystemC/TLM-2.0 RV64 initiator in composed mode, cross-verified live on QEMU RV64,
+    and lowered to gem5 RiscvTimingSimpleCPU and Chipyard RocketConfig artifacts.
+
+devices:
+  # =====================================================================
+  # CORE CLOCK DOMAIN (`core_clk` @ 800 MHz, `tilelink_xbar`) — 9 IPs
+  # =====================================================================
+  - name: boot_rom
+    kind: rom
+    provider: qemu
+    binding: systemc-tlm
+    fabric: tilelink_xbar
+    clock_domain: core_clk
+    base: 0x00001000
+    size: 0x00001000
+  - name: sim_finisher
+    kind: finisher
+    provider: qemu
+    binding: systemc-tlm
+    fabric: tilelink_xbar
+    clock_domain: core_clk
+    base: 0x00100000
+    size: 0x00001000
+  - name: sys_clint
+    kind: clint
+    provider: qemu
+    binding: systemc-tlm
+    fabric: tilelink_xbar
+    clock_domain: core_clk
+    base: 0x02000000
+    size: 0x00010000
+  - name: sys_plic
+    kind: plic
+    provider: qemu
+    binding: systemc-tlm
+    fabric: tilelink_xbar
+    clock_domain: core_clk
+    base: 0x0C000000
+    size: 0x04000000
+  - name: main_sram_8m
+    kind: ram
+    provider: gem5
+    binding: systemc-tlm
+    fabric: tilelink_xbar
+    clock_domain: core_clk
+    base: 0x80000000
+    size: 0x00800000
+    disclosure: 8 MiB On-Chip SRAM Main Memory (gem5 SimpleMemory / Chipyard TLRAM backing contract).
+  - name: l2_cache_512k
+    kind: l2_cache
+    provider: gem5
+    binding: verilator-rtl
+    rtl_module: l2_cache_rtl
+    rtl_source: specs/multiplatform/unified_systemc/rtl/l2_cache_rtl.sv
+    fabric: tilelink_xbar
+    clock_domain: core_clk
+    base: 0x1A000000
+    size: 0x00001000
+    disclosure: 512KB L2$ modeled by Verilator 5.032 cache/snoop monitor RTL (l2_cache_rtl.sv) and lowered to gem5 512kB Cache.
+  - name: hwacha_vec_0
+    kind: hwacha_vec4
+    provider: chipyard
+    binding: verilator-rtl
+    rtl_module: hwacha_vec4_rtl
+    rtl_source: examples/BSoC/rtl/hwacha_vec4_rtl.sv
+    fabric: tilelink_xbar
+    clock_domain: core_clk
+    base: 0x15000000
+    size: 0x00001000
+    irq: 20
+    disclosure: Clean-room Verilator 5.032 4-lane Vector Accelerator RTL (hwacha_vec4_rtl.sv), distinct from upstream Chisel Hwacha.
+  - name: dma_accel_0
+    kind: dma_accel
+    provider: chipyard
+    binding: systemc-tlm
+    fabric: tilelink_xbar
+    clock_domain: core_clk
+    base: 0x17000000
+    size: 0x00001000
+    irq: 14
+    disclosure: Second TileLink bus master transferring FFT/SAM payloads across async CDC bridge into 8MB Main Memory with L2$ snoops.
+  - name: serial_adapter_0
+    kind: serial_adapter
+    provider: chipyard
+    binding: systemc-tlm
+    fabric: tilelink_xbar
+    clock_domain: core_clk
+    base: 0x11002000
+    size: 0x00001000
+    irq: 11
+    disclosure: Chipyard-style TileLink Serial Adapter host link with completion PLIC IRQ.
+
+  # =====================================================================
+  # DSP CLOCK DOMAIN (`dsp_clk` @ 250 MHz, `axi4_ctrl_xbar`) — 7 IPs
+  # =====================================================================
+  - name: uart_console_0
+    kind: uart
+    provider: qemu
+    binding: systemc-tlm
+    fabric: axi4_ctrl_xbar
+    clock_domain: dsp_clk
+    base: 0x10000000
+    size: 0x00001000
+    irq: 10
+    disclosure: QEMU-compatible NS16550 UART in DSP clock domain bridged through Memory-Mapped IO Manager.
+  - name: jtag_to_axi4_0
+    kind: jtag_to_axi4
+    provider: chipyard
+    binding: systemc-tlm
+    fabric: axi4_ctrl_xbar
+    clock_domain: dsp_clk
+    base: 0x12000000
+    size: 0x00001000
+    irq: 12
+    disclosure: Independent JTAG-to-AXI4 host/debug bus master directly driving AXI4 Control and AXI4 Data crossbars.
+  - name: tisar_adc_0
+    kind: tisar_adc_lut
+    provider: mixed-signal-tlm
+    binding: mixed-signal-tlm
+    fabric: axi4_ctrl_xbar
+    clock_domain: dsp_clk
+    base: 0x20000000
+    size: 0x00008000
+    irq: 15
+    disclosure: Mixed-signal behavioral TISAR ADC + real 18 KiB calibration LUT SRAM + SCR & AXI4-Stream pipeline source (not analog SPICE signoff).
+  - name: tuner_32ph_0
+    kind: tuner_32ph
+    provider: verilator-rtl
+    binding: verilator-rtl
+    rtl_module: tuner_32ph_rtl
+    rtl_source: examples/BSoC/rtl/tuner_32ph_rtl.sv
+    fabric: axi4_ctrl_xbar
+    clock_domain: dsp_clk
+    base: 0x20010000
+    size: 0x00001000
+    irq: 16
+    disclosure: Clean-room Verilator 5.032 32-phase quadrature NCO mixer RTL (tuner_32ph_rtl.sv).
+  - name: fir_decim8_0
+    kind: fir_decim8
+    provider: verilator-rtl
+    binding: verilator-rtl
+    rtl_module: fir_decim8_rtl
+    rtl_source: examples/BSoC/rtl/fir_decim8_rtl.sv
+    rtl_busy_reg: 0x24
+    fabric: axi4_ctrl_xbar
+    clock_domain: dsp_clk
+    base: 0x20020000
+    size: 0x00001000
+    irq: 17
+    disclosure: Clean-room Verilator 5.032 136-tap programmable FIR & /8 decimator folded-MAC RTL (fir_decim8_rtl.sv).
+  - name: polyphase_12t_0
+    kind: polyphase_12t
+    provider: usp-plugin
+    binding: usp-plugin
+    package_yaml: examples/BSoC/packages/polyphase_12t/package.yaml
+    fabric: axi4_ctrl_xbar
+    clock_domain: dsp_clk
+    base: 0x20030000
+    size: 0x00001000
+    irq: 18
+    disclosure: LIVE out-of-process native-model-package-1 (usp-mmio32-v1 Unix socket) 12-tap fixed poly-phase filter plugin, reusable identically in SystemC, QEMU, and gem5.
+  - name: fft_128pt_0
+    kind: fft_128pt
+    provider: verilator-rtl
+    binding: verilator-rtl
+    rtl_module: fft_128pt_rtl
+    rtl_source: examples/BSoC/rtl/fft_128pt_rtl.sv
+    rtl_busy_reg: 0x20
+    fabric: axi4_ctrl_xbar
+    clock_domain: dsp_clk
+    base: 0x20040000
+    size: 0x00001000
+    irq: 19
+    disclosure: Clean-room Verilator 5.032 128-point radix-2 Cooley-Tukey FFT RTL (fft_128pt_rtl.sv, 704 cycles/frame).
+
+  # =====================================================================
+  # DSP CLOCK DOMAIN (`dsp_clk` @ 250 MHz, `axi4_data_xbar`) — 6 SRAMs
+  # =====================================================================
+  - name: sam_adc_160k
+    kind: sam_buffer
+    role_tag: sam_adc
+    provider: systemc-tlm
+    binding: systemc-tlm
+    fabric: axi4_data_xbar
+    clock_domain: dsp_clk
+    base: 0x30000000
+    size: 0x00028000
+    disclosure: 160 KiB Sample Acquisition Memory (SAM) tapping TISAR ADC output.
+  - name: sam_tuner_256k
+    kind: sam_buffer
+    role_tag: sam_tuner
+    provider: systemc-tlm
+    binding: systemc-tlm
+    fabric: axi4_data_xbar
+    clock_domain: dsp_clk
+    base: 0x30040000
+    size: 0x00040000
+    disclosure: 256 KiB Sample Acquisition Memory (SAM) tapping 32-phase Tuner output.
+  - name: sam_fir_64k
+    kind: sam_buffer
+    role_tag: sam_fir
+    provider: systemc-tlm
+    binding: systemc-tlm
+    fabric: axi4_data_xbar
+    clock_domain: dsp_clk
+    base: 0x30080000
+    size: 0x00010000
+    disclosure: 64 KiB Sample Acquisition Memory (SAM) tapping 136-tap prog FIR /8 Decimator output.
+  - name: sam_poly_64k
+    kind: sam_buffer
+    role_tag: sam_poly
+    provider: systemc-tlm
+    binding: systemc-tlm
+    fabric: axi4_data_xbar
+    clock_domain: dsp_clk
+    base: 0x30090000
+    size: 0x00010000
+    disclosure: 64 KiB Sample Acquisition Memory (SAM) tapping 12-tap fixed Polyphase Filter output.
+  - name: sam_fft_64k
+    kind: sam_buffer
+    role_tag: sam_fft
+    provider: systemc-tlm
+    binding: systemc-tlm
+    fabric: axi4_data_xbar
+    clock_domain: dsp_clk
+    base: 0x300A0000
+    size: 0x00010000
+    disclosure: 64 KiB Sample Acquisition Memory (SAM) tapping 128-point FFT spectrum output.
+  - name: patgen_la_0
+    kind: pattern_gen_la
+    provider: systemc-tlm
+    binding: systemc-tlm
+    fabric: axi4_data_xbar
+    clock_domain: dsp_clk
+    base: 0x30100000
+    size: 0x00100000
+    disclosure: 512 KiB Pattern Generator (0x30100000) + 512 KiB Logic Analyzer (0x30180000) MUXed with every DSP Chain block.
+
+streams:
+  - name: patgen_to_adc
+    from: patgen_la_0
+    to: tisar_adc_0
+    width_bits: 32
+    clock_domain: dsp_clk
+    protocol: axi4-stream-mux
+    sam_tap: sam_adc_160k
+    mux_probe: patgen_la_0
+  - name: adc_to_tuner
+    from: tisar_adc_0
+    to: tuner_32ph_0
+    width_bits: 32
+    clock_domain: dsp_clk
+    protocol: axi4-stream
+    sam_tap: sam_tuner_256k
+    mux_probe: patgen_la_0
+  - name: tuner_to_fir
+    from: tuner_32ph_0
+    to: fir_decim8_0
+    width_bits: 32
+    clock_domain: dsp_clk
+    protocol: axi4-stream
+    sam_tap: sam_fir_64k
+    mux_probe: patgen_la_0
+  - name: fir_to_polyphase
+    from: fir_decim8_0
+    to: polyphase_12t_0
+    width_bits: 32
+    clock_domain: dsp_clk
+    protocol: axi4-stream
+    sam_tap: sam_poly_64k
+    mux_probe: patgen_la_0
+  - name: polyphase_to_fft
+    from: polyphase_12t_0
+    to: fft_128pt_0
+    width_bits: 32
+    clock_domain: dsp_clk
+    protocol: axi4-stream
+    sam_tap: sam_fft_64k
+    mux_probe: patgen_la_0
+
+firmware:
+  positive_src: examples/BSoC/sw/bsoc_telecom_sw.c
+  negative_src: examples/BSoC/sw/bsoc_fail_sw.c
+  qemu_crosscheck_src: examples/BSoC/sw/bsoc_qemu_crosscheck.c
+  expected_markers:
+    - BSOC_BOOT_CORE_DSP_CDC_OK
+    - BSOC_JTAG_AXI4_PATGEN_OK
+    - BSOC_TISAR_ADC_18KB_LUT_OK
+    - BSOC_DSP_5STAGE_STREAM_OK
+    - BSOC_POLYPHASE_PLUGIN_IPC_OK
+    - BSOC_FFT_128PT_PEAK_TONE_OK
+    - BSOC_DMA_CDC_SAM_TO_SRAM_OK
+    - BSOC_HWACHA_VEC4_POWER_OK
+    - BSOC_LOGIC_ANALYZER_JTAG_OK
+    - BSOC_SERIAL_ADAPTER_IRQ_OK
+    - BSOC_L2_CACHE_512K_COHERENCY_OK
+    - BSOC_TELECOM_ALL_PASS
+  qemu_expected_markers:
+    - BSOC_QEMU_CROSSCHECK_BOOT_OK
+    - BSOC_QEMU_TELECOM_DSP_MATH_OK
+    - BSOC_QEMU_CROSSCHECK_PASS
