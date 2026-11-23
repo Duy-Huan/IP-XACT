@@ -1,0 +1,9 @@
+# Core runtime dependencies for socsim-platform (IP-XACT RISC-V Virtual Platform).
+# Strictly synchronized with [project].dependencies in pyproject.toml and uv.lock.
+# Verified by tests/test_project_standardization.py.
+# Python >= 3.11 required (SDK reference: Python 3.12.14).
+
+lxml==6.0.2
+PyYAML==6.0.3
+jsonschema==4.25.1
+pyelftools==0.32

@@ -2,6 +2,26 @@
 
 ## 0.3.0a5 — development candidate (v0.3.0-alpha.5)
 
+- Standardize project layout, Python environment packaging, platform setup scripts,
+  container composition, and industrial documentation: add pinned `requirements.txt`,
+  `requirements-dev.txt`, `requirements-models.txt`, `requirements-bringup.txt`, and
+  `requirements-all.txt` synchronized with `pyproject.toml`/`uv.lock`; add shared
+  `scripts/lib/common.sh` and modular `setup_venv.sh`, `setup_qemu.sh`,
+  `setup_gem5.sh`, `setup_chipyard.sh`, `setup_opentitan.sh`, and `setup_all.sh`;
+  add root `Makefile`, `containers/compose.yaml`, Diataxis `docs/README.md`,
+  `docs/setup-and-environment.md`, and directory indexes (`src/README.md`,
+  `scripts/README.md`, `containers/README.md`) with mandatory Document Control
+  Metadata and Revision History tables; enforce synchronization via
+  `tests/test_project_standardization.py`.
+- Add the single unified multi-platform SystemC 3.0.1 + 6× Verilator 5.032 RTL
+  SoC emulator (`usp unified-soc`, E1–E12): Dual-Hart SMP `RV64IMA_Zicsr` with
+  CLINT IPI and RV64A atomics, IR-generated 2×2 NoC routing table
+  (`unified_soc_routes.h`), 6 clean-room Verilator RTL IPs (`MAC NPU`, `SHA-256`,
+  `AES-128`, `SPI`, `I2C`, `L2 Cache`), 3rd-master DMA, IOPMP bus guard, GDB RSP,
+  IEEE 1364 VCD dump, 24-bin coverage, parallel DSE cluster (`usp dse`), CHIA-style
+  cyclic optimization loop (`usp loop`), IP plugin scaffolder (`usp ip`), SHA-256
+  IP registry (`usp registry`), air-gapped HTML5 dashboard (`usp dashboard`), and
+  20-tool MCP stdio server (`usp mcp`).
 - Serialize cold XSD construction and reuse one fully initialized validator;
   verify concurrent first intake in a fresh four-thread process. Regenerate
   parser-identity-bound artifacts with explicit verified cache reuse.

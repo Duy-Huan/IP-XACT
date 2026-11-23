@@ -1,142 +1,112 @@
-# Architecture and compatibility boundary
+# System Architecture & Compatibility Boundary
+
+| Metadata Field | Value |
+|---|---|
+| **Document ID** | `SOCSIM-ARCH-001` |
+| **Current Version** | `0.3.0a5` |
+| **Status** | Active / Normative Architecture Spec |
+| **Normative Authority** | `src/socsim/ipxact.py`, `src/socsim/native_ir.py`, `src/socsim/pipeline.py`, `src/socsim/unified_systemc_soc.py`, `agent.md` |
+
+---
+
+## Document Revision History
+
+| Version | Release Date | Milestone / Gate | Author / Scope | Detailed Summary of Changes |
+|---|---|---|---|---|
+| `0.1.0` | `2026-11-10` | Initial Baseline | Compiler Frontend | Offline IEEE 1685-2022 XSD validation, flat immutable `SoCIR`, fixed QEMU `virt` profile, hashed evidence capture. |
+| `0.2.0` | `2026-11-16` | `v0.2.0` (`4d65eae`) | Multi-Engine & Source IPs | Added `usp-rv64-v1`/`hybrid`/`ips` custom generated QEMU machine, Zephyr/FreeRTOS/Linux bring-up, SystemC/Verilator Chipyard GCD & OpenTitan GPIO, scalar registers, bounded parameters, structural hierarchy. |
+| `0.3.0a1–a4` | `2026-11-18` | `M1–M4` Alpha Series | Canonical Native IR | Unified Native IR v3–v5, static decoder lowering, IEEE 1685-2022 bus XML import/export, `native-model-package-1`, `usp flow`. |
+| `0.3.0a5` | `2026-11-23` | `PR #1–#3` (`E1–E12`) & Refactor | Unified SystemC + Enterprise Stack | Added Native IR v6 (`RocketTile` source CPU), Dual-Hart SMP + 6× Verilator RTL unified SystemC emulator, IR NoC routing table, CHIA cyclic optimization loop, 20-tool MCP server, and industrial architecture documentation. |
+
+---
+
+## 1. End-to-End Platform Architecture
 
 ```mermaid
 flowchart LR
-    XML[IP-XACT 2022] --> XSD[Offline XSD validation]
-    YAML[Placement / model / toolchain manifests] --> IR[Canonical immutable SoCIR]
-    XSD --> IR
-    IR --> B[Explicit model and capability resolution]
-    B --> Q[Generated custom QEMU machine]
-    Q --> RUN[Zephyr / FreeRTOS / Linux execution]
-    RUN --> E[Raw logs and hashed evidence]
-    B --> G[Shared workload: gem5 SE]
-    G --> E
-    B --> R[Selected Chipyard / OpenTitan RTL]
-    R --> S[SystemC transaction bridge]
-    S --> Q
+    subgraph Frontend["1. Input & Compiler Frontend"]
+        XML["IEEE 1685-2022 XML\n(ipxact.py / native_bus_xml.py)"]
+        YAML["SoC Spec / Flow / Package YAML\n(soc_spec.py / native_flow.py)"]
+        XSD["Offline Accellera XSD\n(src/socsim/schemas/1685-2022/)"]
+        IR["Canonical Immutable SoC IR\n(v2–v6: native_ir.py / domain.py)"]
+    end
+
+    subgraph Resolution["2. Fail-Closed Binding & Lowering"]
+        BIND["Explicit VLNV & Adapter Check\n(backends.py / v04_contracts.py)"]
+        BSP["Deterministic BSP Codegen\n(native_bsp_gen.py / pipeline.py)"]
+    end
+
+    subgraph Engines["3. Multi-Platform Execution Engines"]
+        QEMU["Custom QEMU 10.0.0\n(usp-rv64: Bare-Metal/RTOS/Linux)"]
+        GEM5["gem5 v24.1.0.3\n(FS/SE + Live Ruby/Garnet NoC)"]
+        SYSC["Unified SystemC 3.0.1 + 6x Verilator RTL\n(Dual-Hart SMP + 2x2 IR NoC)"]
+        RTL["Source-Built RTL CPU Masters\n(RocketTile AXI / Ibex OBI)"]
+    end
+
+    subgraph Evidence["4. Verification, DSE & AI Control"]
+        EV["Tamper-Evident Run Bundles\n(SHA-256 Logs, VCD, 24-Bin Coverage)"]
+        CHIA["Parallel DSE Cluster & CHIA Loop\n(dse_cluster.py / chia_loop.py)"]
+        MCP["20-Tool MCP Server\n(mcp_server.py)"]
+    end
+
+    XML --> XSD --> IR
+    YAML --> IR
+    IR --> BIND
+    BIND --> BSP
+    BSP --> QEMU --> EV
+    BSP --> GEM5 --> EV
+    BIND --> SYSC --> EV
+    BIND --> RTL --> EV
+    SYSC --> CHIA --> EV
+    MCP --> Frontend
+    MCP --> Engines
 ```
 
-`ipxact.py` checks the 2022 namespace and bundled XSD before semantic intake.
-`domain.py` contains immutable instances and byte-addressed windows. `project.py`
-resolves explicitly named local files and manifest schema. `backends.py` resolves
-exact VLNV bindings and enforces one fixed board contract. `runner.py` executes
-argument arrays with timeouts, process-group cleanup, logs and content hashes.
+---
 
-## Supported 2022 semantic subset
+## 2. White-Box Source Code Execution Pipeline
 
-Top-level component and design VLNVs; componentInstances/instanceName/componentRef;
-memoryMaps/memoryMap/name/addressBlock/name/baseAddress/range/width/usage;
-addressUnitBits=8. Component numeric fields now accept the bounded unsigned integer
-expression subset documented in parameters.md; no input code is executed. The
-source catalog is `ipxact/**/*.xml`.
-All instance placements must be explicitly listed in the simulation manifest.
-The XML baseAddress is component-local; supplemental placement adds its offset.
-Overlaps and unsigned 64-bit overflow are rejected; aliases are not implemented.
+Every hardware/software run traverses an explicit, deterministic Python-to-native pipeline with zero implicit network fetches or silent backend substitutions:
 
-Everything outside the accepted child/attribute sets is rejected, including
-general parameter types/expressions, register arrays/side effects, busInterfaces,
-nonstructural views and fileSets,
-general hierarchy/bus translations and vendor extensions. This is **not complete
-IEEE 1685 semantic compliance**. XSD validity is necessary but insufficient.
-`socsim validate` checks this metadata subset; `socsim plan` additionally checks
-the selected backend and profile. XML DTD/entities, YAML duplicate keys and source
-path escapes are rejected. XSD loading and XML parsing do not fetch network URLs.
+1. **Schema & Structural Intake** ([`ipxact.py`](../src/socsim/ipxact.py), [`native_bus_xml.py`](../src/socsim/native_bus_xml.py), [`soc_spec.py`](../src/socsim/soc_spec.py)):
+   - Validates XML against bundled offline Accellera IEEE 1685-2022 XSD schemas (thread-safe serialized initialization). Rejects XML DTDs/external entities, duplicate YAML keys, and path traversal outside the project root.
+   - Elaborates bounded unsigned integer parameters ([`parameters.py`](../src/socsim/parameters.py)), scalar register/field metadata ([`registers.py`](../src/socsim/registers.py)), and structural hierarchy ([`hierarchy.py`](../src/socsim/hierarchy.py)).
+2. **Immutable Canonical IR Lowering** ([`domain.py`](../src/socsim/domain.py), [`native_ir.py`](../src/socsim/native_ir.py), [`native_fabric.py`](../src/socsim/native_fabric.py)):
+   - Normalizes address spaces, bridge apertures, interrupt routes, clock/reset domains ([`native_domains.py`](../src/socsim/native_domains.py)), and initiator views. Rejects overlaps, 64-bit overflows, cycles, misalignment, and unsupported bus protocols before any code generation occurs.
+3. **Fail-Closed Model & Adapter Qualification** ([`backends.py`](../src/socsim/backends.py), [`v04_contracts.py`](../src/socsim/v04_contracts.py), [`native_package.py`](../src/socsim/native_package.py)):
+   - Resolves exact VLNV and SHA-256 package hashes (`native-model-package-1`). Unqualified `(provider, model, protocol, engine)` pairs fail explicitly with `ContractError` — never silently falling back to an ISS.
+4. **Target Generation & Native Execution** ([`pipeline.py`](../src/socsim/pipeline.py), [`soc_native.py`](../src/socsim/soc_native.py), [`unified_systemc_soc.py`](../src/socsim/unified_systemc_soc.py), [`runner.py`](../src/socsim/runner.py)):
+   - Generates target C machines, DTS, `soc.h`/`soc.ld`, and IR routing headers (`unified_soc_routes.h`), then launches subprocesses as explicit argument arrays with timeouts, process-group SIGTERM cleanup, raw log capture, and SHA-256 artifact manifests.
 
-## QEMU reference profile
+---
 
-`qemu-virt-rv64-v1` requires exactly one bound RV64 CPU, 128 MiB RAM at 0x80000000,
-NS16550 window at 0x10000000 and SiFive test window at 0x100000. Widths and ranges
-must match. It selects existing upstream `virt`; it does not generate custom
-QOM code. Implicit upstream devices include ROM, interrupt controllers, timer and
-other board hardware. They are not reconstructed from these minimal descriptors.
-Functional CPU execution does not establish matching cache timing, custom ISA,
-PMP/security, DMA or IRQ correctness. CPU state and RAM have a single owner: QEMU.
+## 3. Dual-Layer Traceability: Hardware IP Platform vs. Simulator Execution Engine
 
-The XML schemas are public Accellera assets fetched through the pinned public
-edaa-org mirror because the direct origin is unavailable in this environment.
-Provenance includes the mirror commit and SHA256 of every XSD. No confidential
-input was sent to that mirror. Dependency artifacts are pinned by `uv.lock`.
+| Hardware IP Platform / Origin | Concrete IP / Subsystem | Simulator Execution Engine & Actual Binding | Fidelity & Honest Boundary |
+|---|---|---|---|
+| **QEMU Upstream (`v10.0.0`)** | `usp-rv64` custom board, NS16550 UART, CLINT, PLIC, SiFive Finisher | Compiled QEMU `qemu-system-riscv64` (`pipeline.py`, `soc_native.py`) | Functional full-system ISA; optional event counters (explicitly labeled estimated CPI/IPC) |
+| **gem5 Upstream (`v24.1.0.3`)** | TimingSimple/AtomicSimple RV64, Ruby `MI_example`, Garnet 2D Mesh | Compiled `RISCV/gem5.opt` (`USE_SYSTEMC=0`, `soc_native_gem5.py`, `fabric.py`, `coherent.py`) | Native cycle/packet/flit stats; PIO bypass disclosed where applicable |
+| **Chipyard Upstream (`1.13.0`)** | `RocketTile` AXI CPU (L1/PTW/TLBroadcast), Chipyard Ibex, Chisel GCD | Verilated Chisel/CIRCT SV (`sbt 1.10.7`, `firtool 1.62.0`) over SystemC/QEMU/gem5 (`rocket_cpu.py`, `ipblocks.py`) | Real upstream RTL for selected cores/leaves; full Chipyard mega-SoC remains separate |
+| **OpenTitan Upstream (`earlgrey_silver_release_v5`)** | `gpio.sv` + `tlul_pkg.sv`, `prim_fifo_sync.sv` | Verilator 5.032 + SystemC 3.0.1 bridge (`ipblocks.py`, `hybrid.py`) | Real upstream peripheral RTL; full EarlGrey security complex remains separate |
+| **Unified Multi-Platform SoC (Original Clean-Room)** | Dual-Hart SMP `RV64IMA_Zicsr`, IR 2×2 NoC, `MAC NPU`, `SHA-256`, `AES-128`, `SPI`, `I2C`, `L2 Cache`, DMA, IOPMP | Single SystemC 3.0.1 `sc_main` + 6× Verilator 5.032 clean-room SV RTL (`unified_systemc_soc.py`) | Cycle-accurate RTL on 6 peripherals + TLM-2.0 annotated NoC/SMP CPUs; distinct from upstream silicon RTL |
 
-## Evidence and reproducibility
+---
 
-The IR uses relative names and hashes, so relocation does not change its contents.
-Run bundles include IR, plan, argv/workdir, exact input snapshots, serial/error
-logs, simulator binary identity/hash, ELF hash and JSON/Markdown outcome. The ELF
-itself remains an external artifact; keep it with controlled storage if replay is
-required. A QEMU version pin is not a full source-build lock: record actual binary
-hash and distro revision; future profiles must pin source/patches/firmware toolchains.
-Wall time is measured; simulated cycles/time are unavailable for this profile.
+## 4. Supported IEEE 1685-2022 Semantic Subset & Boundaries
 
-Run bundles can contain private project inputs. Keep them local; the provided CI
-executes only synthetic fixtures and uploads only its JUnit results. No telemetry,
-remote simulator service or automatic dependency upgrades occur during simulation.
+### Accepted Semantics
+- Top-level `component` and `design` VLNVs; `componentInstances` (`instanceName`, `componentRef`); `memoryMaps` / `addressBlock` (`baseAddress`, `range`, `width`, `usage`, `addressUnitBits=8`).
+- Bounded unsigned integer parameter expressions (`parameters.md`), scalar registers and bitfields (`registers.md`), bounded structural hierarchy via `designConfiguration` (`examples/rv64-hierarchy.md`), and native bus/subspace XML import/export (`native-bus-xml.md`).
 
-## v0.2 generated-machine path
+### Explicit Rejections (Fail-Closed)
+- Everything outside the validated child/attribute subset is rejected before code generation: arbitrary parameter types/strings/vectors, implicit register side effects, non-structural views, vendor extensions, XML DTDs/entities, and path escapes.
+- **This is not complete IEEE 1685 semantic compliance.** XSD validity is necessary but never sufficient.
 
-The earlier sections describe the retained v0.1 metadata/virt path. Manifest
-schema_version=2 adds hardware.yaml with typed CPU, reset/entry, IRQ routes and an
-explicit CPU address space. The supported custom profiles are usp-rv64-v1 and
-usp-rv64-hybrid-v1. They require exact role/VLNV/model contracts and fixed validated
-window sizes but permit supported relocation. The UART is relocated to 0x11000000.
+---
 
-pipeline.py generates C machine source, Zephyr board/DTS/application, software
-contract, C address header and memory layout from validated inputs. It integrates
-QEMU APIs verified against source SHA, compiles the machine into usp-rv64, and builds
-Zephyr through west. UART clock/baudbase come from the same explicit model contract;
-the new custom profile does not inherit the legacy virt clock mismatch.
+## 5. Evidence Integrity, Reproducibility & Confidentiality
 
-schemas/ir-v2.json exports the typed IR structure, hardware-v1.json describes the
-strict overlay, and model-catalog-v1.json identifies exact source/contract versions.
-The importer still rejects unsupported standard XML semantics. The current IR has
-one initiator-visible address space; general translations remain unsupported.
-
-The structural hierarchy extension resolves model views through exact design and
-designConfiguration references, preserving full leaf paths in hierarchy_path.
-Explicit instance_aliases select safe logical names for backend contracts;
-placements still name full source paths. See the rv64-hierarchy guide for the
-bounded structural subset and actual boot acceptance. This does not infer wiring,
-parent translations or parameter propagation.
-
-linux.py builds a static original init/workload, tiny Linux and OpenSBI fw_payload,
-and generates/loads a Linux DTS. Linux needs a shared-capable Linux GNU linker for
-vDSO; the bare-metal linker is rejected by a preflight compile/link probe. The boot
-contract is generated ROM → OpenSBI M mode → Linux S mode → initramfs PID 1. This
-is separate from building a Yocto root filesystem and separate from secure boot.
-
-gem5.py is an explicitly scoped SE adapter for the identical Linux-ABI workload,
-not a binding for this complete hardware topology. It leaves MMIO/IRQ devices
-unmodeled and records fixed uncalibrated CPU/memory assumptions. QEMU retains full
-CPU/RAM ownership in the hybrid profile; hybrid.py manages a local SystemC model,
-with an optional real OpenTitan FIFO RTL implementation compiled by Verilator.
-The transaction/time contract is documented in the hybrid example guide.
-
-Generation manifests bind compiler module, template, catalog, input and output
-hashes. Build records bind binary/ELF identities to that manifest. Old outputs must
-be regenerated when any input identity changes. All run artifacts remain ignored
-and may contain private inputs; hosted CI only executes original synthetic fixtures.
-
-freertos.py independently generates and builds the original static-allocation BSP
-against the unmodified source-pinned upstream RV64 port. It consumes verified
-soc.h/memory.ld and the same timer/IRQ IR, then binds the software resources,
-adapter and ELF in freertos-build.json. It does not change the hardware generation
-manifest when adding this optional software build. Its runner verifies both
-software and QEMU identities, captures real tick/preemption/PLIC evidence and
-cleans up owned native processes on timeout or cancellation.
-
-`usp-rv64-ips-v1` has separate exact Chipyard GCD and OpenTitan GPIO roles/VLNVs,
-placements, address windows and unique IRQ routes. ipblocks_codegen.py lowers
-the dual-window QEMU transport and Zephyr device/guest tests; only this profile
-hashes those additional generation templates. ipblocks.py compiles the verbatim
-selected Chipyard Chisel classes and actual OpenTitan GPIO/TL-UL in a separate
-SystemC/Verilator process. It checks the generator dependency content lock and
-captures actual RTL source inputs, generated SV and binary identities. QEMU owns
-CPU/RAM; the native process owns the two peripheral states and advances only on
-transactions. The rv64-ips guide documents the MMIO/IRQ shim, loopback, protocol,
-time annotations, evidence and full-SoC boundaries.
-
-Scalar registers and fields now elaborate into immutable Window.registers metadata
-with explicit access/volatile policies, bounds, alignment and overlap checks.
-registers.py verifies declared GCD metadata against its exact executable model
-contract; other model declarations fail lowering until an adapter supports them.
-pipeline.py generates soc_registers.h, which the real source-IP Zephyr guest uses
-for GCD offsets and masks. See registers.md; general register behavior is not inferred.
+- **Relocatable IR & Reproducible Builds**: IR uses relative names and content hashes; bare-metal ELF debug paths and assembler intermediates are normalized across output directories.
+- **Tamper-Evident Run Bundles**: Every run writes into a fresh output directory capturing IR, execution plan, argv/workdir, serial/error logs, tool binary hashes, ELF hash, and JSON/Markdown outcomes. Prior evidence is never overwritten.
+- **Offline Schema Provenance**: Accellera IEEE 1685-2022 XSD assets under `src/socsim/schemas/1685-2022/` are loaded strictly offline with recorded mirror commit and per-file SHA-256 hashes. No telemetry or remote service calls occur during simulation.
+- **Confidentiality**: Run bundles stay local and Git-ignored. Hosted CI executes only synthetic public fixtures.

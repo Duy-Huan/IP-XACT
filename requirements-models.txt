@@ -1,0 +1,6 @@
+# Hardware model build dependencies (gem5 SCons build system).
+# Strictly synchronized with [project.optional-dependencies].models in pyproject.toml.
+
+-r requirements.txt
+
+scons==4.8.1
