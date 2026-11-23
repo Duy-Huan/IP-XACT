@@ -4,6 +4,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 required = [
+    "upgrade/enterprise-emulator-roadmap.md",
     "docs/unified-systemc-soc.md",
     "docs/mcp-server.md",
     "docs/multiplatform-soc-qa.md",

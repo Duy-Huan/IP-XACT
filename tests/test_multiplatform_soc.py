@@ -92,8 +92,8 @@ def test_multiplatform_qa_matrix_and_scorecard(tmp_path):
 def test_design3_real_systemc_mac_npu_build_and_conformance(tmp_path):
     """Compile and run the real SystemC user.mac_npu binary over usp-mmio32-v1 when available."""
     if not _has_systemc_toolchain():
-        if os.environ.get("SOCSIM_REQUIRE_INTEGRATION") == "1":
-            pytest.fail("SOCSIM_REQUIRE_INTEGRATION=1 requires libsystemc-dev and c++")
+        if os.environ.get("USP_REQUIRE_SYSTEMC") == "1":
+            pytest.fail("USP_REQUIRE_SYSTEMC=1 requires libsystemc-dev and c++")
         pytest.skip("libsystemc-dev / pkg-config systemc not installed on this host")
 
     pkg_path = ROOT / "specs/multiplatform/packages/mac_npu/package.yaml"

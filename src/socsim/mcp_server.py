@@ -22,7 +22,9 @@ from typing import Any, BinaryIO
 import yaml
 
 from .domain import ContractError
+from .dse_cluster import run_dse_sweep
 from .ip_catalog import IP_CATALOG, catalog_summary
+from .ip_registry import list_registry
 from .native_bsp_gen import synthesize_bsp_bundle
 from .native_domains import derive_domains_from_ir
 from .native_flow import preflight_flow
@@ -170,6 +172,8 @@ class EmulatorMcpServer:
             "emulator_run_qa": self._tool_run_qa,
             "emulator_run_qemu": self._tool_run_qemu,
             "emulator_run_unified_soc": self._tool_run_unified_soc,
+            "emulator_registry_list": self._tool_registry_list,
+            "emulator_run_dse_sweep": self._tool_run_dse_sweep,
         }
 
     def _resolve_path(self, raw: str, *, field: str = "path", must_exist: bool = False) -> Path:
@@ -472,9 +476,9 @@ class EmulatorMcpServer:
             McpToolSpec(
                 name="emulator_run_unified_soc",
                 description=(
-                    "Compile and execute the single unified SystemC/TLM-2.0 2x2 NoC multi-platform "
-                    "SoC (QEMU IO + Chipyard GCD + OpenTitan GPIO + MAC NPU + PMP Bus Guard) with "
-                    "real compiled RV64IM_Zicsr bare-metal software."
+                    "Compile and execute the single unified SystemC/TLM-2.0 + Verilator RTL "
+                    "2x2 NoC multi-platform SoC (QEMU IO + Chipyard GCD + OpenTitan GPIO + "
+                    "DMA Master + Verilated MAC NPU + PMP Bus Guard + GDB RSP) with RV64 SW."
                 ),
                 input_schema={
                     "type": "object",
@@ -485,7 +489,48 @@ class EmulatorMcpServer:
                             "default": "specs/multiplatform/unified_hetero_soc.yaml",
                         },
                         "out_dir": {"type": "string"},
+                        "backend": {
+                            "type": "string",
+                            "enum": ["auto", "verilator-rtl", "systemc-tlm"],
+                            "default": "auto",
+                        },
                         "max_steps": {"type": "integer", "default": 500000},
+                    },
+                    "additionalProperties": False,
+                },
+                read_only=False,
+                idempotent=False,
+            ),
+            McpToolSpec(
+                name="emulator_registry_list",
+                description=(
+                    "List versioned, SHA-256-locked IP packages in a shared IP plugin registry."
+                ),
+                input_schema={
+                    "type": "object",
+                    "required": ["registry_dir"],
+                    "properties": {"registry_dir": {"type": "string"}},
+                    "additionalProperties": False,
+                },
+                read_only=True,
+            ),
+            McpToolSpec(
+                name="emulator_run_dse_sweep",
+                description=(
+                    "Run a CHIA-style parallel DSE and RTL-vs-TLM timing calibration sweep "
+                    "across multiple NoC latency and backend points with ArtifactCache."
+                ),
+                input_schema={
+                    "type": "object",
+                    "required": ["out_dir"],
+                    "properties": {
+                        "spec_path": {
+                            "type": "string",
+                            "default": "specs/multiplatform/unified_hetero_soc.yaml",
+                        },
+                        "out_dir": {"type": "string"},
+                        "workers": {"type": "integer", "minimum": 1, "maximum": 8, "default": 2},
+                        "cache_dir": {"type": "string"},
                     },
                     "additionalProperties": False,
                 },
@@ -688,8 +733,25 @@ class EmulatorMcpServer:
         spec_rel = str(args.get("spec_path", "specs/multiplatform/unified_hetero_soc.yaml"))
         spec_path = self._resolve_path(spec_rel, field="spec_path", must_exist=True)
         out_dir = self._resolve_path(args["out_dir"], field="out_dir", must_exist=False)
+        backend = str(args.get("backend", "auto"))
         max_steps = int(args.get("max_steps", 500_000))
-        return run_unified_soc(spec_path, out_dir, max_steps=max_steps)
+        return run_unified_soc(spec_path, out_dir, backend=backend, max_steps=max_steps)
+
+    def _tool_registry_list(self, args: dict[str, Any]) -> dict[str, Any]:
+        reg_dir = self._resolve_path(args["registry_dir"], field="registry_dir", must_exist=False)
+        return list_registry(reg_dir)
+
+    def _tool_run_dse_sweep(self, args: dict[str, Any]) -> dict[str, Any]:
+        spec_rel = str(args.get("spec_path", "specs/multiplatform/unified_hetero_soc.yaml"))
+        spec_path = self._resolve_path(spec_rel, field="spec_path", must_exist=True)
+        out_dir = self._resolve_path(args["out_dir"], field="out_dir", must_exist=False)
+        workers = int(args.get("workers", 2))
+        cache_dir = (
+            self._resolve_path(args["cache_dir"], field="cache_dir", must_exist=False)
+            if args.get("cache_dir")
+            else None
+        )
+        return run_dse_sweep(spec_path, out_dir, workers=workers, cache_dir=cache_dir)
 
     # --- MCP Resources & Prompts ---
 

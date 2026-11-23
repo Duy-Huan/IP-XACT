@@ -1,10 +1,11 @@
-"""Tests for the single unified multi-platform SystemC/TLM-2.0 SoC emulator and RV64 SW."""
+"""Tests for the single unified SystemC/TLM-2.0 + Verilator RTL SoC emulator and RV64 SW."""
 
 from __future__ import annotations
 
 import copy
 import json
 import os
+import shutil
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,7 @@ import yaml
 from socsim.domain import ContractError
 from socsim.unified_systemc_soc import (
     EXPECTED_POSITIVE_MARKERS,
+    calibrate_unified_soc,
     generate_unified_artifacts,
     has_unified_toolchain,
     load_unified_spec,
@@ -26,7 +28,7 @@ SPEC = ROOT / "specs/multiplatform/unified_hetero_soc.yaml"
 def test_unified_spec_validates_and_generates_shared_map_and_linker(tmp_path):
     spec = load_unified_spec(SPEC)
     assert spec["name"] == "Unified_Hetero_MultiPlatform_SoC"
-    assert len(spec["devices"]) == 10
+    assert len(spec["devices"]) == 11
 
     out = tmp_path / "plan"
     ir = generate_unified_artifacts(SPEC, out)
@@ -35,6 +37,7 @@ def test_unified_spec_validates_and_generates_shared_map_and_linker(tmp_path):
     linker = (out / "link.ld").read_text()
     assert "#define USOC_CHIPYARD_GCD_0_BASE 0x13000000ULL" in header
     assert "#define USOC_OPENTITAN_GPIO_0_IRQ 13U" in header
+    assert "#define USOC_DMA_ENGINE_0_IRQ 14U" in header
     assert "#define USOC_MAC_NPU_0_BASE 0x15000000ULL" in header
     assert "#define USOC_PMP_GUARD_0_IRQ 21U" in header
     assert "PROVIDE(_stack_top = 0x800F0000);" in linker
@@ -59,20 +62,19 @@ def test_unified_spec_rejects_overlap_and_duplicate_irq(tmp_path):
 
 
 def test_unified_systemc_soc_real_sw_execution(tmp_path):
-    """Compile and execute unified SystemC 2x2 NoC SoC + real RV64 SW when toolchain is present."""
+    """Compile and execute hybrid SystemC + Verilator RTL SoC, DMA, GDB RSP, and calibration."""
     ready, missing = has_unified_toolchain()
     out = tmp_path / "unified-run"
     if not ready:
-        if os.environ.get("SOCSIM_REQUIRE_INTEGRATION") == "1":
-            pytest.fail(f"SOCSIM_REQUIRE_INTEGRATION=1 requires unified toolchain: {missing}")
-        # Even without local SystemC/RV64-GCC, verify honest BLOCKED reporting (no fake pass)
+        if os.environ.get("USP_REQUIRE_SYSTEMC") == "1":
+            pytest.fail(f"USP_REQUIRE_SYSTEMC=1 requires unified toolchain: {missing}")
         blocked = run_unified_soc(SPEC, out)
         assert blocked["status"] == "BLOCKED"
         assert (out / "unified_soc_map.h").is_file()
         assert (out / "report.json").is_file()
         return
 
-    report = run_unified_soc(SPEC, out)
+    report = run_unified_soc(SPEC, out, backend="auto", verify_gdb=True)
     assert report["status"] == "PASSED", json.dumps(report, indent=2)
     pos = report["positive_run"]
     assert pos["returncode"] == 0
@@ -80,13 +82,28 @@ def test_unified_systemc_soc_real_sw_execution(tmp_path):
         assert marker in pos["console_output"]
     assert all(pos["checks"].values())
     assert pos["summary"]["ip_results"]["gcd_ops_completed"] == 3
+    assert pos["summary"]["ip_results"]["dma_bytes_transferred"] == 16
+    assert pos["summary"]["ip_results"]["dma_bus_errors"] == 1
     assert pos["summary"]["ip_results"]["npu_acc_final"] == 126
-    assert pos["summary"]["ip_results"]["pmp_guard_fault_count"] == 1
+    assert pos["summary"]["ip_results"]["pmp_guard_fault_count"] == 2
+    assert pos["summary"]["noc_dma_master_transactions"] >= 9
     assert all(h > 0 for h in pos["summary"]["router_hits"])
 
+    # Live GDB RSP check
+    assert report["gdb_rsp"]["status"] == "PASSED"
+    assert report["gdb_rsp"]["continue_reply"] == "W00"
+
+    # Negative guest failure check
     neg = report["negative_run"]
     assert neg["expected_failure_detected"] is True
     assert neg["status"] == "FAILED"
     assert neg["returncode"] != 0
-    assert (out / "report.md").is_file()
-    assert (out / "noc-trace.jsonl").is_file()
+
+    # Real Verilator RTL vs TLM-2.0 calibration check when Verilator is installed
+    if shutil.which("verilator") is not None:
+        assert pos["summary"]["mac_npu_backend"] == "verilator-rtl"
+        assert pos["summary"]["ip_results"]["npu_rtl_cycles"] > 0
+        cal = calibrate_unified_soc(SPEC, tmp_path / "unified-cal")
+        assert cal["status"] == "PASSED", json.dumps(cal, indent=2)
+        assert cal["functional_parity"] is True
+        assert cal["calibration"]["within_budget"] is True

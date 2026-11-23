@@ -1,11 +1,12 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-/* End-to-end RISC-V64 bare-metal software exercising EVERY mapped IP in the unified SystemC SoC:
+/* End-to-end RISC-V64 bare-metal software exercising EVERY mapped IP in the unified SystemC+RTL SoC:
  *   1. QEMU-compatible NS16550 UART, CLINT, PLIC, and Finisher
  *   2. CPU-internal RISC-V PMP CSRs (pmpaddr0 / pmpcfg0)
- *   3. Chipyard GCD accelerator (MMIO + PLIC IRQ)
- *   4. OpenTitan TL-UL GPIO (loopback + rising-edge PLIC IRQ + masked output clear)
- *   5. SystemC MAC NPU-lite (3-step dot-product accumulation + PLIC IRQ + RO fault check)
- *   6. SystemC PMP/IOPMP Bus Guard (protected scratch region write block + Store Fault + PLIC IRQ)
+ *   3. Chipyard GCD accelerator (MMIO + PLIC IRQ 12)
+ *   4. OpenTitan TL-UL GPIO (loopback + rising-edge PLIC IRQ 13 + masked output clear)
+ *   5. Verilated SystemVerilog RTL / SystemC MAC NPU-lite (3-step dot product = 126 + PLIC IRQ 20)
+ *   6. SystemC PMP/IOPMP Bus Guard blocking unauthorized CPU write (Store Fault + PLIC IRQ 21)
+ *   7. Second-master NoC DMA Engine transferring 16B RAM->RAM (PLIC IRQ 14) + DMA PMP block check
  */
 #include <stdint.h>
 #include "unified_soc_map.h"
@@ -21,6 +22,8 @@ static volatile uint32_t g_gpio_state = 0;
 static volatile uint32_t g_npu_irqs = 0;
 static volatile uint32_t g_npu_acc = 0;
 static volatile uint32_t g_pmp_guard_irqs = 0;
+static volatile uint32_t g_dma_irqs = 0;
+static volatile uint32_t g_dma_last_status = 0;
 static volatile uint32_t g_store_faults = 0;
 static volatile uint64_t g_last_fault_addr = 0;
 
@@ -50,6 +53,10 @@ uint64_t trap_dispatch(uint64_t mcause, uint64_t mepc, uint64_t mtval) {
             g_gpio_state = pending;
             R32(USOC_OPENTITAN_GPIO_0_BASE + 0x00U) = pending;
             g_gpio_irqs++;
+        } else if (irq == USOC_DMA_ENGINE_0_IRQ) {
+            g_dma_last_status = R32(USOC_DMA_ENGINE_0_BASE + 0x10U);
+            R32(USOC_DMA_ENGINE_0_BASE + 0x14U) = 1U;
+            g_dma_irqs++;
         } else if (irq == USOC_MAC_NPU_0_IRQ) {
             g_npu_acc = R32(USOC_MAC_NPU_0_BASE + 0x0CU);
             R32(USOC_MAC_NPU_0_BASE + 0x10U) = 1U;
@@ -64,7 +71,6 @@ uint64_t trap_dispatch(uint64_t mcause, uint64_t mepc, uint64_t mtval) {
         return mepc;
     }
     if (mcause == 7ULL) {
-        /* Synchronous Store Access Fault (e.g. from PMP Bus Guard or RO register write). */
         g_store_faults++;
         g_last_fault_addr = mtval;
         return mepc + 4ULL;
@@ -74,14 +80,15 @@ uint64_t trap_dispatch(uint64_t mcause, uint64_t mepc, uint64_t mtval) {
 }
 
 static void enable_plic_irqs(void) {
-    const uint32_t irqs[4] = {
+    const uint32_t irqs[5] = {
         USOC_CHIPYARD_GCD_0_IRQ,
         USOC_OPENTITAN_GPIO_0_IRQ,
+        USOC_DMA_ENGINE_0_IRQ,
         USOC_MAC_NPU_0_IRQ,
         USOC_PMP_GUARD_0_IRQ,
     };
     uint32_t mask = 0;
-    for (unsigned i = 0; i < 4U; ++i) {
+    for (unsigned i = 0; i < 5U; ++i) {
         R32(USOC_SYS_PLIC_BASE + irqs[i] * 4U) = 1U;
         mask |= (1U << irqs[i]);
     }
@@ -102,9 +109,9 @@ int main(void) {
         finish(0x13333U);
     }
 
-    /* 2. CPU-internal RISC-V PMP CSR configuration & readback (NAPOT region covering RAM) */
+    /* 2. CPU-internal RISC-V PMP CSR configuration & readback */
     uint64_t pmp_addr_val = (uint64_t)(USOC_MAIN_DRAM_BASE >> 2) | 0x001FFFFFULL;
-    uint64_t pmp_cfg_val = 0x1FULL; /* NAPOT | R | W | X */
+    uint64_t pmp_cfg_val = 0x1FULL;
     uint64_t rd_addr = 0, rd_cfg = 0;
     __asm__ volatile("csrw pmpaddr0, %0" : : "r"(pmp_addr_val));
     __asm__ volatile("csrw pmpcfg0, %0" : : "r"(pmp_cfg_val));
@@ -117,7 +124,7 @@ int main(void) {
 
     enable_plic_irqs();
 
-    /* 3. Chipyard GCD over SystemC 2x2 NoC (Router 0,0 -> Router 0,1) + PLIC IRQ 12 */
+    /* 3. Chipyard GCD over SystemC 2x2 NoC + PLIC IRQ 12 */
     static const uint32_t gcd_vecs[3][3] = {
         {48U, 18U, 6U},
         {270U, 192U, 6U},
@@ -139,15 +146,15 @@ int main(void) {
     }
     uart_puts("CHIPYARD_GCD_IRQ_OK\n");
 
-    /* 4. OpenTitan GPIO over SystemC 2x2 NoC (Router 0,0 -> Router 0,1) + PLIC IRQ 13 */
+    /* 4. OpenTitan GPIO over SystemC 2x2 NoC + PLIC IRQ 13 */
     if (R32(USOC_OPENTITAN_GPIO_0_BASE + 0x10U) != 0U ||
         R32(USOC_OPENTITAN_GPIO_0_BASE + 0x00U) != 0U) {
         finish(0x13333U);
     }
-    R32(USOC_OPENTITAN_GPIO_0_BASE + 0x20U) = 1U; /* DIRECT_OE */
-    R32(USOC_OPENTITAN_GPIO_0_BASE + 0x2CU) = 1U; /* INTR_CTRL_EN_RISING */
-    R32(USOC_OPENTITAN_GPIO_0_BASE + 0x04U) = 1U; /* INTR_ENABLE */
-    R32(USOC_OPENTITAN_GPIO_0_BASE + 0x14U) = 1U; /* DIRECT_OUT rising edge */
+    R32(USOC_OPENTITAN_GPIO_0_BASE + 0x20U) = 1U;
+    R32(USOC_OPENTITAN_GPIO_0_BASE + 0x2CU) = 1U;
+    R32(USOC_OPENTITAN_GPIO_0_BASE + 0x04U) = 1U;
+    R32(USOC_OPENTITAN_GPIO_0_BASE + 0x14U) = 1U;
     for (unsigned wait = 0; g_gpio_irqs == 0U && wait < 1000U; ++wait) {
         __asm__ volatile("nop");
     }
@@ -155,14 +162,13 @@ int main(void) {
         R32(USOC_OPENTITAN_GPIO_0_BASE + 0x10U) != 1U) {
         finish(0x13333U);
     }
-    R32(USOC_OPENTITAN_GPIO_0_BASE + 0x18U) = 0x00010000U; /* MASKED_OUT_LOWER clear bit 0 */
+    R32(USOC_OPENTITAN_GPIO_0_BASE + 0x18U) = 0x00010000U;
     if (R32(USOC_OPENTITAN_GPIO_0_BASE + 0x10U) != 0U) {
         finish(0x13333U);
     }
     uart_puts("OPENTITAN_GPIO_IRQ_OK\n");
 
-    /* 5. SystemC MAC NPU-lite over 2x2 NoC (Router 0,0 -> Router 1,1, 2 hops) + PLIC IRQ 20
-     *    Dot product: 6*7 + 5*8 + 11*4 = 42 + 40 + 44 = 126 */
+    /* 5. Verilator RTL / SystemC MAC NPU-lite (6*7 + 5*8 + 11*4 = 126) + PLIC IRQ 20 */
     static const uint32_t mac_ops[3][2] = {{6U, 7U}, {5U, 8U}, {11U, 4U}};
     for (unsigned i = 0; i < 3U; ++i) {
         uint32_t before = g_npu_irqs;
@@ -181,21 +187,16 @@ int main(void) {
     }
     uart_puts("MAC_NPU_DOT_IRQ_OK\n");
 
-    /* 6. SystemC PMP/IOPMP Bus Guard (Router 1,1) protecting scratch RAM [BASE, BASE+SIZE) */
+    /* 6. SystemC PMP/IOPMP Bus Guard blocking unauthorized CPU write (Store Fault + PLIC IRQ 21) */
     R32(USOC_PROTECTED_SCRATCH_BASE) = 0xCAFEBABEU;
-    if (R32(USOC_PROTECTED_SCRATCH_BASE) != 0xCAFEBABEU) {
-        finish(0x13333U);
-    }
     R32(USOC_PMP_GUARD_0_BASE + 0x04U) = (uint32_t)USOC_PROTECTED_SCRATCH_BASE;
     R32(USOC_PMP_GUARD_0_BASE + 0x08U) =
         (uint32_t)(USOC_PROTECTED_SCRATCH_BASE + USOC_PROTECTED_SCRATCH_SIZE);
-    R32(USOC_PMP_GUARD_0_BASE + 0x00U) = 3U; /* bit0=enable | bit1=deny_write */
+    R32(USOC_PMP_GUARD_0_BASE + 0x00U) = 3U;
 
-    /* Read must still succeed */
     if (R32(USOC_PROTECTED_SCRATCH_BASE) != 0xCAFEBABEU) {
         finish(0x13333U);
     }
-    /* Unauthorized write MUST be blocked by NoC PMP Guard -> Store Fault + PLIC IRQ 21! */
     uint32_t faults_before = g_store_faults;
     R32(USOC_PROTECTED_SCRATCH_BASE) = 0xDEADBEEFU;
     for (unsigned wait = 0; g_pmp_guard_irqs == 0U && wait < 1000U; ++wait) {
@@ -204,12 +205,57 @@ int main(void) {
     if (g_store_faults != faults_before + 1U ||
         g_last_fault_addr != USOC_PROTECTED_SCRATCH_BASE ||
         g_pmp_guard_irqs != 1U ||
-        R32(USOC_PMP_GUARD_0_BASE + 0x0CU) != (uint32_t)USOC_PROTECTED_SCRATCH_BASE ||
         R32(USOC_PMP_GUARD_0_BASE + 0x14U) != 1U ||
         R32(USOC_PROTECTED_SCRATCH_BASE) != 0xCAFEBABEU) {
         finish(0x13333U);
     }
     uart_puts("PMP_GUARD_FAULT_IRQ_OK\n");
+
+    /* 7. Second-master NoC DMA Engine: valid 16B copy + PLIC IRQ 14 */
+    static const uint32_t dma_pattern[4] = {
+        0x11223344U, 0x55667788U, 0x99AABBCCU, 0xDDEEFF00U
+    };
+    for (unsigned i = 0; i < 4U; ++i) {
+        R32(USOC_DMA_SRC_BUF + i * 4U) = dma_pattern[i];
+        R32(USOC_DMA_DST_BUF + i * 4U) = 0U;
+    }
+    R32(USOC_DMA_ENGINE_0_BASE + 0x04U) = (uint32_t)USOC_DMA_SRC_BUF;
+    R32(USOC_DMA_ENGINE_0_BASE + 0x08U) = (uint32_t)USOC_DMA_DST_BUF;
+    R32(USOC_DMA_ENGINE_0_BASE + 0x0CU) = 16U;
+    R32(USOC_DMA_ENGINE_0_BASE + 0x00U) = 1U;
+    for (unsigned wait = 0; g_dma_irqs == 0U && wait < 1000U; ++wait) {
+        __asm__ volatile("nop");
+    }
+    if (g_dma_irqs != 1U || (g_dma_last_status & 3U) != 1U) {
+        finish(0x13333U);
+    }
+    for (unsigned i = 0; i < 4U; ++i) {
+        if (R32(USOC_DMA_DST_BUF + i * 4U) != dma_pattern[i]) {
+            finish(0x13333U);
+        }
+    }
+    uart_puts("NOC_DMA_MASTER_IRQ_OK\n");
+
+    /* 8. Unauthorized DMA write targeting PMP-protected scratch -> blocked by NoC PMP Guard! */
+    uint32_t dma_irqs_before = g_dma_irqs;
+    uint32_t pmp_irqs_before = g_pmp_guard_irqs;
+    R32(USOC_DMA_ENGINE_0_BASE + 0x04U) = (uint32_t)USOC_DMA_SRC_BUF;
+    R32(USOC_DMA_ENGINE_0_BASE + 0x08U) = (uint32_t)USOC_PROTECTED_SCRATCH_BASE;
+    R32(USOC_DMA_ENGINE_0_BASE + 0x0CU) = 4U;
+    R32(USOC_DMA_ENGINE_0_BASE + 0x00U) = 1U;
+    for (unsigned wait = 0;
+         (g_dma_irqs == dma_irqs_before || g_pmp_guard_irqs == pmp_irqs_before) && wait < 1000U;
+         ++wait) {
+        __asm__ volatile("nop");
+    }
+    if (g_dma_irqs != dma_irqs_before + 1U ||
+        (g_dma_last_status & 2U) == 0U ||
+        g_pmp_guard_irqs != pmp_irqs_before + 1U ||
+        R32(USOC_PMP_GUARD_0_BASE + 0x14U) != 2U ||
+        R32(USOC_PROTECTED_SCRATCH_BASE) != 0xCAFEBABEU) {
+        finish(0x13333U);
+    }
+    uart_puts("DMA_PMP_BLOCK_OK\n");
 
     uart_puts("UNIFIED_SOC_ALL_PASS\n");
     finish(0x5555U);

@@ -20,12 +20,22 @@ usp qa scorecard "$out/qa-multiplatform" > "$out/qa-multiplatform-scorecard.json
 usp unified-soc run specs/multiplatform/unified_hetero_soc.yaml --out "$out/unified-soc" \
     > "$out/unified-soc.json"
 cat "$out/unified-soc/console.log"
+usp unified-soc calibrate specs/multiplatform/unified_hetero_soc.yaml \
+    --out "$out/unified-calibrate" > "$out/unified-calibrate.json"
+usp registry publish specs/multiplatform/packages/mac_npu/package.yaml \
+    --registry "$out/ip-registry" --version 1.0.0 > "$out/reg-pub1.json"
+usp registry publish specs/flows/packages/counter/package.yaml \
+    --registry "$out/ip-registry" --version 1.0.0 > "$out/reg-pub2.json"
+usp registry verify --registry "$out/ip-registry" > "$out/reg-verify.json"
+usp dse sweep specs/multiplatform/unified_hetero_soc.yaml --out "$out/dse-sweep" \
+    --workers 2 --cache "$out/dse-cache" > "$out/dse-sweep.json"
 usp mcp tools --root /opt/socsim > "$out/mcp-tools.json"
 usp mcp config --client podman --root /opt/socsim > "$out/mcp-podman-config.json"
 usp upgrade --root /opt/socsim --audit > "$out/upgrade-audit.json"
-SOCSIM_REQUIRE_INTEGRATION=1 python -m pytest \
+SOCSIM_REQUIRE_INTEGRATION=1 USP_REQUIRE_SYSTEMC=1 python -m pytest \
     tests/test_qemu.py tests/test_sdk_qa.py tests/test_milestone_contracts.py \
-    tests/test_multiplatform_soc.py tests/test_unified_systemc_soc.py tests/test_mcp_server.py -q \
+    tests/test_multiplatform_soc.py tests/test_unified_systemc_soc.py \
+    tests/test_enterprise_registry_dse.py tests/test_mcp_server.py -q \
     -o cache_dir="$out/pytest-cache" --basetemp="$out/tests" --junitxml="$out/junit.xml"
-printf 'SDK native smoke + QA + unified SystemC SoC + MCP passed; source revision: '
+printf 'SDK native smoke + QA + hybrid Verilator/SystemC SoC + Registry + DSE + MCP passed; source revision: '
 cat /usr/local/share/socsim-revision

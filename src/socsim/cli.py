@@ -23,6 +23,14 @@ _SUBCOMMAND_MODULES: dict[str, tuple[str, str]] = {
         "socsim.unified_systemc_soc",
         "build/run unified SystemC/TLM-2.0 multi-platform SoC with RV64 SW; use --help",
     ),
+    "registry": (
+        "socsim.ip_registry",
+        "publish/resolve/verify versioned SHA-256 IP model packages; use --help",
+    ),
+    "dse": (
+        "socsim.dse_cluster",
+        "run CHIA-style parallel DSE sweeps and RTL-vs-TLM calibration; use --help",
+    ),
     "qa": ("socsim.qa_runner", "run real QA/QC suites and verify scorecards; use --help"),
     "upgrade": ("socsim.upgrade", "validate sequential milestone status/evidence; use --help"),
     "domains": (

@@ -339,8 +339,8 @@ def test_mcp_live_stdio_subprocess_and_real_systemc_when_available(tmp_path):
             assert payload["status"] == "PASSED"
             assert payload["conformance_vectors_passed"] == 17
         else:
-            if os.environ.get("SOCSIM_REQUIRE_INTEGRATION") == "1":
-                pytest.fail("SOCSIM_REQUIRE_INTEGRATION=1 requires real SystemC build via MCP")
+            if os.environ.get("USP_REQUIRE_SYSTEMC") == "1":
+                pytest.fail("USP_REQUIRE_SYSTEMC=1 requires real SystemC build via MCP")
             assert payload["status"] == "BLOCKED"
     finally:
         if proc.stdin:
@@ -367,6 +367,6 @@ def test_mcp_cli_tools_and_client_configs():
     assert proc.returncode == 0, proc.stderr
     data = json.loads(proc.stdout)
     assert data["server"] == SERVER_NAME
-    assert len(data["tools"]) == 15
+    assert len(data["tools"]) == 17
     assert len(data["resources"]) == 5
     assert len(data["prompts"]) == 3
