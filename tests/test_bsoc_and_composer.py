@@ -204,8 +204,12 @@ def test_bsoc_official_reports_artifacts_contract() -> None:
     cal = json.loads((rep_dir / "bsoc-calibration-report.json").read_text(encoding="utf-8"))
     qemu_log = (rep_dir / "bsoc-qemu-crosscheck.log").read_text(encoding="utf-8")
 
+    backend_log = (rep_dir / "bsoc-backend-traces.log").read_text(encoding="utf-8")
+
     for marker in load_composed_spec(BSOC_SPEC)["firmware"]["expected_markers"]:
         assert marker in console
+    assert "peak_bin=112" in console
+    assert "power[14..17]=[25, 25, 5618, 17]" in console
     assert "PASSED" in sim_md
     assert "100.0%" in sim_md
     assert "usp-mmio32-v1-live-plugin" in sim_md
@@ -216,3 +220,7 @@ def test_bsoc_official_reports_artifacts_contract() -> None:
     assert cal["rtl_cycles"]["fft_128pt_0"] >= 704
     assert cal["rtl_cycles"]["fir_decim8_0"] >= 17000
     assert "BSOC_QEMU_CROSSCHECK_PASS" in qemu_log
+    assert "verilator-fft_128pt_rtl.log" in backend_log
+    assert '"cdc":true' in backend_log
+    assert '"systemc_time_ps":7721000' in backend_log
+    assert "$scope module composed_soc $end" in backend_log

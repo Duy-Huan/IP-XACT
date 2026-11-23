@@ -1,3 +1,5 @@
+[QEMU-RV64] Booted live on qemu-system-riscv64 -M virt
 BSOC_QEMU_CROSSCHECK_BOOT_OK
+[QEMU-RV64] Verified poly_12t_dc=256, fft_bin16_power=5618 (matches BSoC Verilator+Plugin)
 BSOC_QEMU_TELECOM_DSP_MATH_OK
 BSOC_QEMU_CROSSCHECK_PASS

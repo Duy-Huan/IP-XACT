@@ -1,0 +1,111 @@
+# Verbatim BSoC Backend Execution Logs (Podman SDK CI Run 45194062413, commit 36c1ed3)
+
+=== BSOC VERILATOR BUILD LOGS ===
+--- verilator-fft_128pt_rtl.log ---
+- Verilator: Built from 0.033 MB sources in 2 modules, into 0.138 MB in 7 C++ files needing 0.000 MB
+- Verilator: Walltime 4.447 s (elab=0.001, cvt=0.011, bld=4.426); cpu 0.025 s on 2 threads; alloced 14.691 MB
+--- verilator-fir_decim8_rtl.log ---
+- Verilator: Built from 0.028 MB sources in 2 modules, into 0.084 MB in 7 C++ files needing 0.000 MB
+- Verilator: Walltime 4.341 s (elab=0.001, cvt=0.009, bld=4.325); cpu 0.018 s on 2 threads; alloced 14.402 MB
+--- verilator-hwacha_vec4_rtl.log ---
+- Verilator: Built from 0.027 MB sources in 2 modules, into 0.111 MB in 7 C++ files needing 0.000 MB
+- Verilator: Walltime 4.412 s (elab=0.001, cvt=0.011, bld=4.391); cpu 0.022 s on 2 threads; alloced 15.441 MB
+--- verilator-l2_cache_rtl.log ---
+- Verilator: Built from 0.023 MB sources in 2 modules, into 0.041 MB in 7 C++ files needing 0.000 MB
+- Verilator: Walltime 4.283 s (elab=0.000, cvt=0.005, bld=4.273); cpu 0.012 s on 2 threads; alloced 13.691 MB
+--- verilator-tuner_32ph_rtl.log ---
+- Verilator: Built from 0.026 MB sources in 2 modules, into 0.048 MB in 8 C++ files needing 0.000 MB
+- Verilator: Walltime 4.274 s (elab=0.001, cvt=0.005, bld=4.263); cpu 0.013 s on 2 threads; alloced 13.832 MB
+=== BSOC BUS & CDC TRACE (EXCERPT) ===
+{"master":"rocket_cpu_0","target":"uart_console_0","fabric":"axi4_ctrl_xbar","cdc":true,"addr":268435457,"offset":1,"op":"W","value":0,"status":"OK","systemc_time_ps":1108000}
+{"master":"rocket_cpu_0","target":"uart_console_0","fabric":"axi4_ctrl_xbar","cdc":true,"addr":268435459,"offset":3,"op":"W","value":3,"status":"OK","systemc_time_ps":1240000}
+{"master":"rocket_cpu_0","target":"sys_clint","fabric":"tilelink_xbar","cdc":false,"addr":33603576,"offset":49144,"op":"R","value":15,"status":"OK","systemc_time_ps":1412000}
+{"master":"rocket_cpu_0","target":"uart_console_0","fabric":"axi4_ctrl_xbar","cdc":true,"addr":268435461,"offset":5,"op":"R","value":96,"status":"OK","systemc_time_ps":1785000}
+{"master":"rocket_cpu_0","target":"uart_console_0","fabric":"axi4_ctrl_xbar","cdc":true,"addr":268435456,"offset":0,"op":"W","value":91,"status":"OK","systemc_time_ps":1957000}
+{"master":"rocket_cpu_0","target":"uart_console_0","fabric":"axi4_ctrl_xbar","cdc":true,"addr":268435461,"offset":5,"op":"R","value":96,"status":"OK","systemc_time_ps":2109000}
+{"master":"rocket_cpu_0","target":"uart_console_0","fabric":"axi4_ctrl_xbar","cdc":true,"addr":268435456,"offset":0,"op":"W","value":70,"status":"OK","systemc_time_ps":2281000}
+{"master":"rocket_cpu_0","target":"uart_console_0","fabric":"axi4_ctrl_xbar","cdc":true,"addr":268435461,"offset":5,"op":"R","value":96,"status":"OK","systemc_time_ps":2433000}
+{"master":"rocket_cpu_0","target":"uart_console_0","fabric":"axi4_ctrl_xbar","cdc":true,"addr":268435456,"offset":0,"op":"W","value":87,"status":"OK","systemc_time_ps":2605000}
+{"master":"rocket_cpu_0","target":"uart_console_0","fabric":"axi4_ctrl_xbar","cdc":true,"addr":268435461,"offset":5,"op":"R","value":96,"status":"OK","systemc_time_ps":2757000}
+{"master":"rocket_cpu_0","target":"uart_console_0","fabric":"axi4_ctrl_xbar","cdc":true,"addr":268435456,"offset":0,"op":"W","value":32,"status":"OK","systemc_time_ps":2929000}
+{"master":"rocket_cpu_0","target":"uart_console_0","fabric":"axi4_ctrl_xbar","cdc":true,"addr":268435461,"offset":5,"op":"R","value":96,"status":"OK","systemc_time_ps":3081000}
+{"master":"rocket_cpu_0","target":"uart_console_0","fabric":"axi4_ctrl_xbar","cdc":true,"addr":268435456,"offset":0,"op":"W","value":48,"status":"OK","systemc_time_ps":3253000}
+{"master":"rocket_cpu_0","target":"uart_console_0","fabric":"axi4_ctrl_xbar","cdc":true,"addr":268435461,"offset":5,"op":"R","value":96,"status":"OK","systemc_time_ps":3405000}
+{"master":"rocket_cpu_0","target":"uart_console_0","fabric":"axi4_ctrl_xbar","cdc":true,"addr":268435456,"offset":0,"op":"W","value":49,"status":"OK","systemc_time_ps":3577000}
+... [first 10 CDC crossings core_clk <-> dsp_clk] ...
+{"master":"rocket_cpu_0","target":"uart_console_0","fabric":"axi4_ctrl_xbar","cdc":true,"addr":268435457,"offset":1,"op":"W","value":0,"status":"OK","systemc_time_ps":1108000}
+{"master":"rocket_cpu_0","target":"uart_console_0","fabric":"axi4_ctrl_xbar","cdc":true,"addr":268435459,"offset":3,"op":"W","value":3,"status":"OK","systemc_time_ps":1240000}
+{"master":"rocket_cpu_0","target":"uart_console_0","fabric":"axi4_ctrl_xbar","cdc":true,"addr":268435461,"offset":5,"op":"R","value":96,"status":"OK","systemc_time_ps":1785000}
+{"master":"rocket_cpu_0","target":"uart_console_0","fabric":"axi4_ctrl_xbar","cdc":true,"addr":268435456,"offset":0,"op":"W","value":91,"status":"OK","systemc_time_ps":1957000}
+{"master":"rocket_cpu_0","target":"uart_console_0","fabric":"axi4_ctrl_xbar","cdc":true,"addr":268435461,"offset":5,"op":"R","value":96,"status":"OK","systemc_time_ps":2109000}
+{"master":"rocket_cpu_0","target":"uart_console_0","fabric":"axi4_ctrl_xbar","cdc":true,"addr":268435456,"offset":0,"op":"W","value":70,"status":"OK","systemc_time_ps":2281000}
+{"master":"rocket_cpu_0","target":"uart_console_0","fabric":"axi4_ctrl_xbar","cdc":true,"addr":268435461,"offset":5,"op":"R","value":96,"status":"OK","systemc_time_ps":2433000}
+{"master":"rocket_cpu_0","target":"uart_console_0","fabric":"axi4_ctrl_xbar","cdc":true,"addr":268435456,"offset":0,"op":"W","value":87,"status":"OK","systemc_time_ps":2605000}
+{"master":"rocket_cpu_0","target":"uart_console_0","fabric":"axi4_ctrl_xbar","cdc":true,"addr":268435461,"offset":5,"op":"R","value":96,"status":"OK","systemc_time_ps":2757000}
+{"master":"rocket_cpu_0","target":"uart_console_0","fabric":"axi4_ctrl_xbar","cdc":true,"addr":268435456,"offset":0,"op":"W","value":32,"status":"OK","systemc_time_ps":2929000}
+... [tail 12 transactions] ...
+{"master":"tisar_adc_0_stream","target":"tuner_32ph_0","fabric":"axi4_ctrl_xbar","cdc":false,"addr":536936460,"offset":12,"op":"R","value":66715747,"status":"OK","systemc_time_ps":798444000}
+{"master":"tisar_adc_0_stream","target":"fir_decim8_0","fabric":"axi4_ctrl_xbar","cdc":false,"addr":537001996,"offset":12,"op":"W","value":99,"status":"OK","systemc_time_ps":798444000}
+{"master":"tisar_adc_0_stream","target":"fir_decim8_0","fabric":"axi4_ctrl_xbar","cdc":false,"addr":537001984,"offset":0,"op":"R","value":41,"status":"OK","systemc_time_ps":798444000}
+{"master":"tisar_adc_0_stream","target":"fir_decim8_0","fabric":"axi4_ctrl_xbar","cdc":false,"addr":537001984,"offset":0,"op":"W","value":1,"status":"OK","systemc_time_ps":798444000}
+{"master":"tisar_adc_0_stream","target":"fir_decim8_0","fabric":"axi4_ctrl_xbar","cdc":false,"addr":537001984,"offset":0,"op":"R","value":42,"status":"OK","systemc_time_ps":798444000}
+{"master":"tisar_adc_0_stream","target":"fir_decim8_0","fabric":"axi4_ctrl_xbar","cdc":false,"addr":537002000,"offset":16,"op":"W","value":1,"status":"OK","systemc_time_ps":798444000}
+{"master":"tisar_adc_0_stream","target":"fir_decim8_0","fabric":"axi4_ctrl_xbar","cdc":false,"addr":537002004,"offset":20,"op":"R","value":426,"status":"OK","systemc_time_ps":798444000}
+{"master":"tisar_adc_0_stream","target":"polyphase_12t_0","fabric":"axi4_ctrl_xbar","cdc":false,"addr":537067528,"offset":8,"op":"W","value":426,"status":"OK","systemc_time_ps":798444000}
+{"master":"tisar_adc_0_stream","target":"polyphase_12t_0","fabric":"axi4_ctrl_xbar","cdc":false,"addr":537067520,"offset":0,"op":"W","value":1,"status":"OK","systemc_time_ps":798444000}
+{"master":"tisar_adc_0_stream","target":"polyphase_12t_0","fabric":"axi4_ctrl_xbar","cdc":false,"addr":537067536,"offset":16,"op":"W","value":1,"status":"OK","systemc_time_ps":798444000}
+{"master":"tisar_adc_0_stream","target":"polyphase_12t_0","fabric":"axi4_ctrl_xbar","cdc":false,"addr":537067532,"offset":12,"op":"R","value":4294967139,"status":"OK","systemc_time_ps":798444000}
+{"master":"tisar_adc_0_stream","target":"fft_128pt_0","fabric":"axi4_ctrl_xbar","cdc":false,"addr":537133064,"offset":8,"op":"W","value":65379,"status":"OK","systemc_time_ps":798444000}
+=== BSOC LIVE PLUGIN AF_UNIX IPC TRACE (EXCERPT) ===
+{"op":2,"offset":0,"data":0,"value":0,"status":0,"irq":0,"systemc_time_ps":1000}
+{"op":0,"offset":20,"data":0,"value":1024,"status":0,"irq":0,"systemc_time_ps":11000}
+{"op":1,"offset":4,"data":1,"value":1,"status":0,"irq":0,"systemc_time_ps":21000}
+{"op":1,"offset":0,"data":2,"value":2,"status":0,"irq":0,"systemc_time_ps":31000}
+{"op":1,"offset":8,"data":939,"value":939,"status":0,"irq":0,"systemc_time_ps":41000}
+{"op":1,"offset":0,"data":1,"value":1,"status":0,"irq":1,"systemc_time_ps":71000}
+{"op":1,"offset":16,"data":1,"value":1,"status":0,"irq":0,"systemc_time_ps":81000}
+{"op":0,"offset":12,"data":0,"value":14,"status":0,"irq":0,"systemc_time_ps":91000}
+{"op":1,"offset":8,"data":426,"value":426,"status":0,"irq":0,"systemc_time_ps":101000}
+{"op":1,"offset":0,"data":1,"value":1,"status":0,"irq":1,"systemc_time_ps":131000}
+{"op":1,"offset":16,"data":1,"value":1,"status":0,"irq":0,"systemc_time_ps":141000}
+{"op":0,"offset":12,"data":0,"value":36,"status":0,"irq":0,"systemc_time_ps":151000}
+... [tail 8 AF_UNIX IPC frames] ...
+{"op":1,"offset":0,"data":1,"value":1,"status":0,"irq":1,"systemc_time_ps":7631000}
+{"op":1,"offset":16,"data":1,"value":1,"status":0,"irq":0,"systemc_time_ps":7641000}
+{"op":0,"offset":12,"data":0,"value":114,"status":0,"irq":0,"systemc_time_ps":7651000}
+{"op":1,"offset":8,"data":901,"value":901,"status":0,"irq":0,"systemc_time_ps":7661000}
+{"op":1,"offset":0,"data":1,"value":1,"status":0,"irq":1,"systemc_time_ps":7691000}
+{"op":1,"offset":16,"data":1,"value":1,"status":0,"irq":0,"systemc_time_ps":7701000}
+{"op":0,"offset":12,"data":0,"value":6,"status":0,"irq":0,"systemc_time_ps":7711000}
+{"op":0,"offset":0,"data":0,"value":128,"status":0,"irq":0,"systemc_time_ps":7721000}
+=== BSOC VCD WAVEFORM EXCERPT ===
+$version USP Multi-Platform Composed SoC VCD $end
+$timescale 1ps $end
+$scope module composed_soc $end
+$var wire 32 a bus_addr $end
+$var wire 1 w bus_wr $end
+$var wire 1 c cdc_cross $end
+$var wire 1 h l2_hit $end
+$var wire 32 i plic_irq_mask $end
+$upscope $end
+$enddefinitions $end
+#0
+b0 a
+0w
+0c
+0h
+b0 i
+#1108000
+b00010000000000000000000000000001 a
+1w
+1c
+1h
+b00000000000000000000000000000000 i
+#1240000
+b00010000000000000000000000000011 a
+1w
+1c
+1h
+b00000000000000000000000000000000 i
+#1412000
+b00000010000000001011111111111000 a

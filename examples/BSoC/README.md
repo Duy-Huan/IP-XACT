@@ -138,22 +138,22 @@ bash scripts/podman.sh run usp compose calibrate examples/BSoC/bsoc_composed.yam
 
 ## 4. Verified Live CI Simulation & Calibration Results
 
-Executed live inside the **Rootless Podman SDK** (`Verilator 5.032`, `SystemC 3.0.0`, `g++ 14.2.0`, `riscv64-unknown-elf-gcc 14.2.0`, `QEMU 10.0.13`) on **100%-GREEN GitHub Actions run [`45171596002`](https://github.com/Duy-Huan/IP-XACT/actions/runs/45171596002)** (commit `7a88f46`, `2026-11-23T12:16:36Z`):
+Executed live inside the **Rootless Podman SDK** (`Verilator 5.032`, `SystemC 3.0.0`, `g++ 14.2.0`, `riscv64-unknown-elf-gcc 14.2.0`, `QEMU 10.0.13`) on **100%-GREEN GitHub Actions run [`45194062413`](https://github.com/Duy-Huan/IP-XACT/actions/runs/45194062413)** (commit `36c1ed3`, `2026-11-23T14:35:34Z`):
 
 | Metric | Measured Result | Verbatim Artifact |
 |---|---:|---|
 | **Overall Status & Functional Coverage** | **`PASSED` · `100.0%` (`18/18` bins)** | [`reports/bsoc-simulation-report.md`](reports/bsoc-simulation-report.md) |
-| **Telecom Firmware Verification Markers** | **`12/12` matched (`exit_code = 0`)** | [`reports/bsoc-console.log`](reports/bsoc-console.log) |
-| **RV64 Instructions / PLIC IRQ Traps** | `19,473` insns · `7` traps | [`reports/bsoc-simulation-report.md`](reports/bsoc-simulation-report.md) |
-| **SystemC Simulated Time / Total Bus Tx** | `1,103,328,000 ps` · `37,366` tx | [`reports/bsoc-simulation-report.md`](reports/bsoc-simulation-report.md) |
-| **Crossbar Traffic (`TL` / `AXI4-Ctrl` / `AXI4-Data`)** | `22,328` / `10,299` / `4,739` tx | [`reports/bsoc-simulation-report.md`](reports/bsoc-simulation-report.md) |
-| **Multi-Master Traffic (`CPU` / `Stream` / `DMA` / `JTAG`)** | `24,175` / `12,933` / `256` / `2` tx | [`reports/bsoc-simulation-report.md`](reports/bsoc-simulation-report.md) |
-| **Async CDC Crossings (`core_clk` ↔ `dsp_clk`)** | **`2,103`** crossings (`+12 ns` sync) | [`reports/bsoc-simulation-report.md`](reports/bsoc-simulation-report.md) |
+| **Telecom Firmware Telemetry & Markers** | **`12/12` matched + numeric telemetry (`exit_code = 0`)** | [`reports/bsoc-console.log`](reports/bsoc-console.log) |
+| **RV64 Instructions / PLIC IRQ Traps** | `29,131` insns · `7` traps (6 IRQ sources) | [`reports/bsoc-simulation-report.md`](reports/bsoc-simulation-report.md) |
+| **SystemC Simulated Time / Total Bus Tx** | `1,532,856,000 ps` · `50,346` tx | [`reports/bsoc-simulation-report.md`](reports/bsoc-simulation-report.md) |
+| **Crossbar Traffic (`TL` / `AXI4-Ctrl` / `AXI4-Data`)** | `33,392` / `12,215` / `4,739` tx | [`reports/bsoc-simulation-report.md`](reports/bsoc-simulation-report.md) |
+| **Multi-Master Traffic (`CPU` / `Stream` / `DMA` / `JTAG`)** | `37,155` / `12,933` / `256` / `2` tx | [`reports/bsoc-simulation-report.md`](reports/bsoc-simulation-report.md) |
+| **Async CDC Crossings (`core_clk` ↔ `dsp_clk`)** | **`4,019`** crossings (`+12 ns` sync) | [`reports/bsoc-backend-traces.log`](reports/bsoc-backend-traces.log) |
 | **5-Stage AXI4-Stream Packets** | **`2,432`** (`[1024, 1024, 128, 128, 128]`) | [`reports/bsoc-simulation-report.md`](reports/bsoc-simulation-report.md) |
-| **5× Verilator 5.032 RTL Active Cycles** | **`49,528`** (`L2:22279`, `FIR:22037`, `Tuner:4100`, `FFT:1095`, `Hwacha:17`) | [`reports/bsoc-calibration-report.json`](reports/bsoc-calibration-report.json) |
-| **LIVE `usp-mmio32-v1` Plugin (`polyphase_12t_0`)** | **`PASSED` · `517` live AF_UNIX IPC frames** | [`reports/bsoc-calibration-report.json`](reports/bsoc-calibration-report.json) |
-| **L2$ Coherency (`hits` / `misses` / `DMA snoops`)** | `22,090` / `57` / `128` (`512 B` DMA) | [`reports/bsoc-simulation-report.md`](reports/bsoc-simulation-report.md) |
-| **Hybrid (5× RTL + Live Plugin) vs. Pure TLM Calibration** | **`PASSED` · `0.00%` error · `functional_parity: true`** | [`reports/bsoc-calibration-report.json`](reports/bsoc-calibration-report.json) |
+| **5× Verilator 5.032 RTL Active Cycles** | **`60,592`** (`L2:33343`, `FIR:22037`, `Tuner:4100`, `FFT:1095`, `Hwacha:17`) | [`reports/bsoc-backend-traces.log`](reports/bsoc-backend-traces.log) |
+| **LIVE `usp-mmio32-v1` Plugin (`polyphase_12t_0`)** | **`PASSED` · `517` live AF_UNIX IPC frames** | [`reports/bsoc-backend-traces.log`](reports/bsoc-backend-traces.log) |
+| **L2$ Coherency (`hits` / `misses` / `DMA snoops`)** | `32,976` / `235` / `128` (`512 B` DMA) | [`reports/bsoc-simulation-report.md`](reports/bsoc-simulation-report.md) |
+| **Hybrid (5× RTL + Live Plugin) vs. Pure TLM Calibration** | **`PASSED` · `0.00%` error (`383,214` cyc) · `functional_parity: true`** | [`reports/bsoc-calibration-report.json`](reports/bsoc-calibration-report.json) |
 | **Live `qemu-system-riscv64` 10.0.13 Crosscheck** | **`PASSED` · `3/3` markers (`rc = 0`)** | [`reports/bsoc-qemu-crosscheck.log`](reports/bsoc-qemu-crosscheck.log) |
 
 ---

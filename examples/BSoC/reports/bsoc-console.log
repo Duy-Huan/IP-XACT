@@ -1,12 +1,25 @@
+[FW 01] Rocket RV64 boot -> CDC(core_clk 800MHz <-> dsp_clk 250MHz) UART ready
 BSOC_BOOT_CORE_DSP_CDC_OK
+[FW 01] CLINT mtime monotonic: t0=15 -> t1=363 ticks
+[FW 02] JTAG-to-AXI4 wrote sample0=0x08000C00 to PatGen@0x30100000 (1024 IF samples, IRQ12=1)
 BSOC_JTAG_AXI4_PATGEN_OK
+[FW 03] TISAR ADC LUT SRAM=18432 bytes, cal[2048]=0
 BSOC_TISAR_ADC_18KB_LUT_OK
+[FW 04] 5-Stage AXI4-Stream done: pkts=2432 (1024+1024+128+128+128), IRQ15=1, IRQ19=1
 BSOC_DSP_5STAGE_STREAM_OK
+[FW 05] Live AF_UNIX Plugin polyphase_12t_0: scale=1024, samples_done=128
 BSOC_POLYPHASE_PLUGIN_IPC_OK
+[FW 06] 128-pt Radix-2 FFT RTL: peak_bin=112, peak_mag2=5620, bin16=(-53,53)
 BSOC_FFT_128PT_PEAK_TONE_OK
+[FW 07] DMA transferred 512B SAM_FFT@0x300A0000 -> SRAM@0x80100000 (IRQ14=1)
 BSOC_DMA_CDC_SAM_TO_SRAM_OK
+[FW 08] Hwacha 4-Lane RTL power[14..17]=[25, 25, 5618, 17] (IRQ20=1)
 BSOC_HWACHA_VEC4_POWER_OK
+[FW 09] JTAG Logic Analyzer readback bin16=0x0035FFCB == SRAM (IRQ12=2)
 BSOC_LOGIC_ANALYZER_JTAG_OK
+[FW 10] TileLink Serial Adapter tx=0xB50C0070 -> rx=0xEF0C0070 (IRQ11=1)
 BSOC_SERIAL_ADAPTER_IRQ_OK
+[FW 11] L2$ 512KB RTL counters: hits=30822, misses=228, dma_snoops=128
 BSOC_L2_CACHE_512K_COHERENCY_OK
+[FW 12] All 6 PLIC IRQ sources serviced (total=7) -> halting via finisher 0x5555
 BSOC_TELECOM_ALL_PASS
