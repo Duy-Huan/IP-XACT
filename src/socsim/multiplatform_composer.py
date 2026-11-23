@@ -16,6 +16,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import tempfile
 import time
 from collections import defaultdict, deque
 from pathlib import Path
@@ -1596,54 +1597,57 @@ def run_composed_soc(
     def _exec_with_plugins(
         elf: Path, tag: str, vcd: Path | None
     ) -> tuple[subprocess.CompletedProcess[str], dict[str, dict[str, Any]]]:
-        procs: list[tuple[str, subprocess.Popen[str], Path]] = []
+        procs: list[tuple[str, subprocess.Popen[str], Path, Path]] = []
         plugin_args: list[str] = []
-        try:
-            for pname, pbin in plugin_bins.items():
-                sock_p = out_dir / f"{tag}_{pname}.sock"
-                trace_p = out_dir / f"{tag}_{pname}_trace.jsonl"
-                if sock_p.exists():
-                    sock_p.unlink()
-                p = subprocess.Popen(
-                    [str(pbin), str(sock_p), str(trace_p)],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                )
-                procs.append((pname, p, trace_p))
-                plugin_args += ["--plugin", f"{pname}={sock_p}"]
-            # Wait briefly for plugin sockets to bind
-            deadline = time.monotonic() + 5.0
-            for pname, p, _ in procs:
-                sock_p = out_dir / f"{tag}_{pname}.sock"
-                while not sock_p.exists():
-                    if p.poll() is not None or time.monotonic() > deadline:
-                        raise ContractError(
-                            f"E_COMPOSE_PLUGIN plugin {pname} failed to bind socket"
-                        )
-                    time.sleep(0.02)
+        with tempfile.TemporaryDirectory(prefix="usp-p-") as sock_tmp:
+            sock_dir = Path(sock_tmp)
+            try:
+                for idx, (pname, pbin) in enumerate(plugin_bins.items()):
+                    # Keep AF_UNIX sun_path well under Linux's 108-byte sockaddr_un limit.
+                    sock_p = sock_dir / f"p{idx}.sock"
+                    trace_p = out_dir / f"{tag}_{pname}_trace.jsonl"
+                    p = subprocess.Popen(
+                        [str(pbin), str(sock_p), str(trace_p)],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                    )
+                    procs.append((pname, p, sock_p, trace_p))
+                    plugin_args += ["--plugin", f"{pname}={sock_p}"]
+                # Wait briefly for plugin sockets to bind
+                deadline = time.monotonic() + 5.0
+                for pname, p, sock_p, _ in procs:
+                    while not sock_p.exists():
+                        if p.poll() is not None or time.monotonic() > deadline:
+                            err = p.stderr.read() if p.stderr else ""
+                            raise ContractError(
+                                f"E_COMPOSE_PLUGIN plugin {pname} failed to bind {sock_p}: {err}"
+                            )
+                        time.sleep(0.02)
 
-            cmd = [
-                str(emu_bin),
-                str(elf),
-                str(out_dir / f"{tag}-console.log"),
-                str(out_dir / f"{tag}-trace.jsonl"),
-                str(out_dir / f"{tag}-summary.json"),
-                str(max_steps),
-                *(["--vcd-out", str(vcd)] if vcd is not None else []),
-                *plugin_args,
-            ]
-            res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
-        finally:
-            for _, p, _ in procs:
-                try:
-                    p.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    p.kill()
-                    p.wait()
+                cmd = [
+                    str(emu_bin),
+                    str(elf),
+                    str(out_dir / f"{tag}-console.log"),
+                    str(out_dir / f"{tag}-trace.jsonl"),
+                    str(out_dir / f"{tag}-summary.json"),
+                    str(max_steps),
+                    *(["--vcd-out", str(vcd)] if vcd is not None else []),
+                    *plugin_args,
+                ]
+                res = subprocess.run(
+                    cmd, capture_output=True, text=True, timeout=timeout, check=False
+                )
+            finally:
+                for _, p, _, _ in procs:
+                    try:
+                        p.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        p.kill()
+                        p.wait()
 
         traces: dict[str, dict[str, Any]] = {}
-        for pname, _, trace_p in procs:
+        for pname, _, _, trace_p in procs:
             txs = (
                 [json.loads(ln) for ln in trace_p.read_text().splitlines() if ln.strip()]
                 if trace_p.is_file()
