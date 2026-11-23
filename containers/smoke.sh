@@ -3,6 +3,7 @@
 set -euo pipefail
 cd /opt/socsim
 out=$(mktemp -d /tmp/socsim-container-smoke.XXXXXXXX)
+trap 'rc=$?; echo "SMOKE FAILED (rc=$rc) at line $LINENO" >&2; ls -la "$out" >&2; for f in "$out"/*.json; do [ -s "$f" ] && echo "=== $f ===" >&2 && tail -n 40 "$f" >&2; done; exit "$rc"' ERR
 usp validate examples/rv64-ips > "$out/ipxact.json"
 usp generate systems/AI_SOC/bringup --out "$out/AI_SOC" > "$out/AI_SOC-generation.json"
 usp generate systems/AIZ_SOC/bringup --out "$out/AIZ_SOC" > "$out/AIZ_SOC-generation.json"

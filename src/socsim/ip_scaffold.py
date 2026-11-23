@@ -174,6 +174,10 @@ int sc_main(int argc, char **argv) {{
         }}
         sc_core::sc_start(
             delay == sc_core::SC_ZERO_TIME ? sc_core::sc_time(1, sc_core::SC_NS) : delay);
+        trace << "{{\\"op\\":" << op << ",\\"offset\\":" << off << ",\\"data\\":" << req[4]
+              << ",\\"value\\":" << val << ",\\"status\\":" << status << ",\\"irq\\":" << model.irq
+              << ",\\"systemc_time_ps\\":" << sc_core::sc_time_stamp().value() << "}}\\n"
+              << std::flush;
         res = {{htole32(0x31505355u), htole32(req[1]), htole32(status),
                htole32(val), htole32(model.irq)}};
         if (!transfer(fd, res.data(), true)) return 2;
