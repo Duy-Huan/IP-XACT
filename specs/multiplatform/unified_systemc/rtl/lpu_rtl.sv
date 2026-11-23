@@ -39,7 +39,7 @@ module lpu_rtl (
     assign p2_w   = x_q[2] * w_q[2];
     assign p3_w   = x_q[3] * w_q[3];
     assign sum_w  = p0_w + p1_w + p2_w + p3_w + bias_q;
-    assign relu_w = sum_w[31] ? 32'd0 : sum_w;
+    assign relu_w = sum_w[31] ? 32'd0 : unsigned'(sum_w);
 
     // 4-token signed comparator tree for Attention / Vocabulary Argmax
     logic signed [31:0] max01_w, max23_w, max_all_w;
@@ -76,33 +76,32 @@ module lpu_rtl (
             end else begin
                 case (req_addr_i)
                     8'h00: rsp_rdata_o = ops_done_q;
-                    8'h04: rsp_rdata_o = bias_q;
-                    8'h08: rsp_rdata_o = raw_out_q;
+                    8'h04: rsp_rdata_o = unsigned'(bias_q);
+                    8'h08: rsp_rdata_o = unsigned'(raw_out_q);
                     8'h0C: rsp_rdata_o = relu_out_q;
                     8'h10: rsp_rdata_o = {31'd0, irq_q};
                     8'h14: rsp_rdata_o = linear_ops_q;
                     8'h18: rsp_rdata_o = tokens_decoded_q;
                     8'h1C: rsp_rdata_o = argmax_idx_q;
-                    8'h20: rsp_rdata_o = x_q[0];
-                    8'h24: rsp_rdata_o = x_q[1];
-                    8'h28: rsp_rdata_o = x_q[2];
-                    8'h2C: rsp_rdata_o = x_q[3];
-                    8'h30: rsp_rdata_o = w_q[0];
-                    8'h34: rsp_rdata_o = w_q[1];
-                    8'h38: rsp_rdata_o = w_q[2];
-                    8'h3C: rsp_rdata_o = w_q[3];
-                    8'h40: rsp_rdata_o = logit_q[0];
-                    8'h44: rsp_rdata_o = logit_q[1];
-                    8'h48: rsp_rdata_o = logit_q[2];
-                    8'h4C: rsp_rdata_o = logit_q[3];
-                    8'h50: rsp_rdata_o = max_logit_q;
+                    8'h20: rsp_rdata_o = unsigned'(x_q[0]);
+                    8'h24: rsp_rdata_o = unsigned'(x_q[1]);
+                    8'h28: rsp_rdata_o = unsigned'(x_q[2]);
+                    8'h2C: rsp_rdata_o = unsigned'(x_q[3]);
+                    8'h30: rsp_rdata_o = unsigned'(w_q[0]);
+                    8'h34: rsp_rdata_o = unsigned'(w_q[1]);
+                    8'h38: rsp_rdata_o = unsigned'(w_q[2]);
+                    8'h3C: rsp_rdata_o = unsigned'(w_q[3]);
+                    8'h40: rsp_rdata_o = unsigned'(logit_q[0]);
+                    8'h44: rsp_rdata_o = unsigned'(logit_q[1]);
+                    8'h48: rsp_rdata_o = unsigned'(logit_q[2]);
+                    8'h4C: rsp_rdata_o = unsigned'(logit_q[3]);
+                    8'h50: rsp_rdata_o = unsigned'(max_logit_q);
                     default: rsp_err_o = 1'b1;
                 endcase
             end
         end
     end
 
-    integer k;
     always_ff @(posedge clk_i or negedge rst_ni) begin
         if (!rst_ni) begin
             bias_q           <= 32'sd0;
@@ -115,11 +114,18 @@ module lpu_rtl (
             tokens_decoded_q <= 32'd0;
             irq_q            <= 1'b0;
             cycle_cnt_q      <= 64'd0;
-            for (k = 0; k < 4; k = k + 1) begin
-                x_q[k]     <= 32'sd0;
-                w_q[k]     <= 32'sd0;
-                logit_q[k] <= 32'sd0;
-            end
+            x_q[0]           <= 32'sd0;
+            x_q[1]           <= 32'sd0;
+            x_q[2]           <= 32'sd0;
+            x_q[3]           <= 32'sd0;
+            w_q[0]           <= 32'sd0;
+            w_q[1]           <= 32'sd0;
+            w_q[2]           <= 32'sd0;
+            w_q[3]           <= 32'sd0;
+            logit_q[0]       <= 32'sd0;
+            logit_q[1]       <= 32'sd0;
+            logit_q[2]       <= 32'sd0;
+            logit_q[3]       <= 32'sd0;
         end else begin
             cycle_cnt_q <= cycle_cnt_q + 64'd1;
             if (req_valid_i && req_write_i && !rsp_err_o) begin

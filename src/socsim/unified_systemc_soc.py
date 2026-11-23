@@ -131,12 +131,18 @@ def expected_markers_for_spec(spec: dict[str, Any]) -> tuple[str, ...]:
 
 def resolve_unified_src_dir(spec_path: Path) -> Path:
     """Resolve the unified_systemc C++/RTL/SW source directory for a unified spec."""
-    local = spec_path.resolve().parent / "unified_systemc"
-    if (local / "unified_systemc_soc.cpp").is_file():
-        return local.resolve()
-    repo_fallback = Path(__file__).resolve().parents[2] / "specs/multiplatform/unified_systemc"
-    if (repo_fallback / "unified_systemc_soc.cpp").is_file():
-        return repo_fallback.resolve()
+    spec_resolved = spec_path.resolve()
+    candidates: list[Path] = [spec_resolved.parent / "unified_systemc"]
+    for ancestor in spec_resolved.parents:
+        candidates.append(ancestor / "specs" / "multiplatform" / "unified_systemc")
+    candidates.append(Path.cwd().resolve() / "specs" / "multiplatform" / "unified_systemc")
+    candidates.append(
+        Path(__file__).resolve().parents[2] / "specs" / "multiplatform" / "unified_systemc"
+    )
+    candidates.append(Path("/opt/socsim/specs/multiplatform/unified_systemc"))
+    for cand in candidates:
+        if (cand / "unified_systemc_soc.cpp").is_file():
+            return cand.resolve()
     raise ContractError(f"E_UNIFIED_SRC missing SystemC emulator source near {spec_path}")
 
 

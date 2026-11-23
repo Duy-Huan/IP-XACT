@@ -8,7 +8,7 @@ on_err() {
     local f
     echo "SMOKE FAILED (rc=$rc) at line $1" >&2
     ls -la "$out" >&2
-    for f in "$out"/*.json; do
+    for f in "$out"/*.json "$out"/asoc-run/*.log "$out"/asoc-run/report.json; do
         [ -s "$f" ] && echo "=== $f ===" >&2 && tail -n 40 "$f" >&2
     done
     exit "$rc"

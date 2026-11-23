@@ -23,6 +23,7 @@ from socsim.unified_systemc_soc import (
     generate_unified_artifacts,
     has_unified_toolchain,
     load_unified_spec,
+    resolve_unified_src_dir,
     run_unified_soc,
 )
 
@@ -175,7 +176,7 @@ def test_asoc_live_multicluster_7rtl_simulation_calibration_dse_loop_dashboard(
         cal_path = cal_dir / "calibration.json"
 
     loop_dir = tmp_path / "asoc-loop"
-    loop = run_chia_loop(ASOC_UNIFIED, loop_dir, max_iters=3, backend="systemc-tlm")
+    loop = run_chia_loop(ASOC_UNIFIED, loop_dir, max_iters=4, backend="systemc-tlm")
     assert loop["status"] == "PASSED"
     assert loop["converged"] is True
 
@@ -188,3 +189,14 @@ def test_asoc_live_multicluster_7rtl_simulation_calibration_dse_loop_dashboard(
     assert dash["status"] == "PASSED"
     html_text = (tmp_path / "asoc-dashboard.html").read_text()
     assert "ASoC" in html_text
+
+
+def test_resolve_unified_src_dir_works_for_examples_and_temp_copies(tmp_path: Path) -> None:
+    resolved_direct = resolve_unified_src_dir(ASOC_UNIFIED)
+    assert (resolved_direct / "unified_systemc_soc.cpp").is_file()
+    assert (resolved_direct / "rtl" / "lpu_rtl.sv").is_file()
+
+    copied = tmp_path / "copied_asoc.yaml"
+    copied.write_text(ASOC_UNIFIED.read_text())
+    resolved_copy = resolve_unified_src_dir(copied)
+    assert resolved_copy == resolved_direct
