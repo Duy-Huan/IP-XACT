@@ -1,13 +1,14 @@
-"""Single Unified Multi-Platform SystemC/TLM-2.0 + 4x Verilator RTL SoC compiler and runner.
+"""Single Unified Multi-Platform Dual-Hart SMP SystemC/TLM-2.0 + 6x Verilator RTL SoC runner.
 
-Compiles one heterogeneous SoC spec (`unified-systemc-soc-1`) into a shared address/IRQ/NoC
-header (`unified_soc_map.h`) and linker script (`link.ld`), compiles FOUR synthesizable
-SystemVerilog RTL blocks via Verilator 5.032 (`mac_npu_rtl.sv`, `sha256_rtl.sv`,
-`spi_ctrl_rtl.sv`, `l2_cache_rtl.sv`), links them into one SystemC/TLM-2.0 2x2 Mesh NoC top
-with 2nd-master DMA, PMP Bus Guard, Chipyard GCD, OpenTitan GPIO, QEMU-compatible UART/CLINT/PLIC,
-GDB RSP debug stub, and IEEE 1364 VCD waveform dump, compiles & executes real RV64IM_Zicsr
-bare-metal software (`unified_sw.elf` + negative `fail_sw.elf`), computes a 20-bin Functional
-& Assertion Coverage report (`coverage.json`), and runs M7 RTL-vs-TLM calibration.
+Compiles one heterogeneous SMP SoC spec (`unified-systemc-soc-1`) into a shared address/IRQ/NoC
+header (`unified_soc_map.h`), an IR-generated C++ NoC routing table (`unified_soc_routes.h`), and
+a dual-hart linker script (`link.ld`); compiles SIX synthesizable SystemVerilog RTL blocks via
+Verilator 5.032 (`mac_npu_rtl.sv`, `sha256_rtl.sv`, `aes128_rtl.sv`, `spi_ctrl_rtl.sv`,
+`i2c_ctrl_rtl.sv`, `l2_cache_rtl.sv`); links them into one SystemC/TLM-2.0 2x2 Mesh NoC top with
+Dual-Hart SMP RV64IMA_Zicsr cores, 3rd-master DMA, PMP Bus Guard, Chipyard GCD, OpenTitan GPIO,
+QEMU-compatible UART/CLINT/PLIC, GDB RSP debug stub, and IEEE 1364 VCD waveform dump; executes
+real RV64IMA_Zicsr bare-metal SMP software; computes 24-bin Functional & Assertion Coverage
+(`coverage.json`); and runs M7 6x RTL-vs-TLM calibration.
 """
 
 from __future__ import annotations
@@ -44,28 +45,54 @@ REQUIRED_MODELS = frozenset(
         "opentitan.gpio",
         "user.dma_engine",
         "user.sha256_crypto",
+        "user.aes128_crypto",
         "user.spi_ctrl",
+        "user.i2c_ctrl",
         "user.l2_cache",
         "user.mac_npu",
         "user.pmp_guard",
     }
 )
+MODEL_TO_TARGET_ENUM = {
+    "ram": ("USOC_TGT_RAM", False),
+    "rom": ("USOC_TGT_ROM", False),
+    "finisher": ("USOC_TGT_FINISHER", True),
+    "user.l2_cache": ("USOC_TGT_L2", True),
+    "clint": ("USOC_TGT_CLINT", True),
+    "plic": ("USOC_TGT_PLIC", True),
+    "uart": ("USOC_TGT_UART", True),
+    "user.spi_ctrl": ("USOC_TGT_SPI", True),
+    "user.i2c_ctrl": ("USOC_TGT_I2C", True),
+    "chipyard.gcd": ("USOC_TGT_GCD", True),
+    "opentitan.gpio": ("USOC_TGT_GPIO", True),
+    "user.dma_engine": ("USOC_TGT_DMA", True),
+    "user.sha256_crypto": ("USOC_TGT_SHA256", True),
+    "user.aes128_crypto": ("USOC_TGT_AES128", True),
+    "user.mac_npu": ("USOC_TGT_NPU", True),
+    "user.pmp_guard": ("USOC_TGT_PMP_GUARD", True),
+}
 VERILATOR_RTL_MODULES = (
     ("mac_npu_rtl", "rtl/mac_npu_rtl.sv"),
     ("sha256_rtl", "rtl/sha256_rtl.sv"),
+    ("aes128_rtl", "rtl/aes128_rtl.sv"),
     ("spi_ctrl_rtl", "rtl/spi_ctrl_rtl.sv"),
+    ("i2c_ctrl_rtl", "rtl/i2c_ctrl_rtl.sv"),
     ("l2_cache_rtl", "rtl/l2_cache_rtl.sv"),
 )
 EXPECTED_POSITIVE_MARKERS = (
     "UNIFIED_SOC_BOOT_OK",
     "RISCV_PMP_CSR_OK",
     "COREMARK_CRC32_ROI_OK",
+    "SMP_HART1_IPI_WAKE_OK",
+    "SMP_ATOMIC_BARRIER_OK",
     "CHIPYARD_GCD_IRQ_OK",
     "OPENTITAN_GPIO_IRQ_OK",
     "MAC_NPU_DOT_IRQ_OK",
     "NPU_MATMUL_2X2_IRQ_OK",
     "SHA256_FIPS_KAT_IRQ_OK",
+    "AES128_FIPS197_IRQ_OK",
     "SPI_CTRL_RTL_IRQ_OK",
+    "I2C_CTRL_RTL_IRQ_OK",
     "PMP_GUARD_FAULT_IRQ_OK",
     "NOC_DMA_MASTER_IRQ_OK",
     "DMA_PMP_BLOCK_OK",
@@ -87,21 +114,31 @@ def load_unified_spec(path: Path) -> dict[str, Any]:
     noc = data["noc"]
     keys(
         noc,
-        {"topology", "rows", "cols", "hop_latency_ns", "link_latency_ns", "cpu_router"},
+        {
+            "topology",
+            "rows",
+            "cols",
+            "hop_latency_ns",
+            "link_latency_ns",
+            "cpu_router",
+            "hart1_router",
+        },
         "unified noc",
     )
     rows, cols = int(noc["rows"]), int(noc["cols"])
     if rows != 2 or cols != 2:
         raise ContractError("E_UNIFIED_NOC unified SystemC emulator requires a 2x2 mesh topology")
-    cpu_rx, cpu_ry = int(noc["cpu_router"][0]), int(noc["cpu_router"][1])
-    if not (0 <= cpu_rx < cols and 0 <= cpu_ry < rows):
-        raise ContractError("E_UNIFIED_NOC cpu_router out of mesh bounds")
+    for rkey in ("cpu_router", "hart1_router"):
+        rx, ry = int(noc[rkey][0]), int(noc[rkey][1])
+        if not (0 <= rx < cols and 0 <= ry < rows):
+            raise ContractError(f"E_UNIFIED_NOC {rkey} out of mesh bounds")
 
     cpu = data["cpu"]
     keys(
         cpu,
         {
             "name",
+            "harts",
             "isa",
             "privilege",
             "pmp_regions",
@@ -109,14 +146,18 @@ def load_unified_spec(path: Path) -> dict[str, Any]:
             "timebase_hz",
             "entry",
             "stack_top",
+            "hart1_stack_top",
             "protected_scratch",
             "protected_size",
             "dma_src_buf",
             "dma_dst_buf",
+            "smp_shared_mem",
             "model_disclosure",
         },
         "unified cpu",
     )
+    if int(cpu["harts"]) != 2:
+        raise ContractError("E_UNIFIED_CPU unified SMP emulator expects harts == 2")
 
     devices = data["devices"]
     if not isinstance(devices, list) or not devices:
@@ -168,18 +209,24 @@ def load_unified_spec(path: Path) -> dict[str, Any]:
     dram_base, dram_end = int(dram["base"]), int(dram["base"]) + int(dram["size"])
     entry = int(cpu["entry"])
     stack_top = int(cpu["stack_top"])
+    h1_stack = int(cpu["hart1_stack_top"])
     scratch = int(cpu["protected_scratch"])
     scratch_size = int(cpu["protected_size"])
     dma_src = int(cpu["dma_src_buf"])
     dma_dst = int(cpu["dma_dst_buf"])
-    if not (dram_base <= entry < stack_top <= dram_end):
-        raise ContractError("E_UNIFIED_SPEC entry/stack_top outside main DRAM")
+    smp_mem = int(cpu["smp_shared_mem"])
+    if not (dram_base <= entry < h1_stack < stack_top <= dram_end):
+        raise ContractError("E_UNIFIED_SPEC entry/stacks outside main DRAM or overlapping")
     if not (dram_base <= scratch and scratch + scratch_size <= dram_end):
         raise ContractError("E_UNIFIED_SPEC protected_scratch outside main DRAM")
     if scratch < stack_top:
         raise ContractError("E_UNIFIED_SPEC protected_scratch overlaps stack/code region")
-    if not (dram_base <= dma_src < dram_end and dram_base <= dma_dst < dram_end):
-        raise ContractError("E_UNIFIED_SPEC DMA buffers outside main DRAM")
+    if not (
+        dram_base <= dma_src < dram_end
+        and dram_base <= dma_dst < dram_end
+        and dram_base <= smp_mem < dram_end
+    ):
+        raise ContractError("E_UNIFIED_SPEC DMA/SMP buffers outside main DRAM")
 
     return data
 
@@ -195,12 +242,16 @@ def _render_map_header(spec: dict[str, Any]) -> str:
         f"#define USOC_NOC_LINK_NS {int(noc['link_latency_ns'])}U",
         f"#define USOC_CPU_RX {int(noc['cpu_router'][0])}",
         f"#define USOC_CPU_RY {int(noc['cpu_router'][1])}",
+        f"#define USOC_HART1_RX {int(noc['hart1_router'][0])}",
+        f"#define USOC_HART1_RY {int(noc['hart1_router'][1])}",
         f"#define USOC_CPU_ENTRY 0x{int(cpu['entry']):08X}ULL",
         f"#define USOC_STACK_TOP 0x{int(cpu['stack_top']):08X}ULL",
+        f"#define USOC_HART1_STACK_TOP 0x{int(cpu['hart1_stack_top']):08X}ULL",
         f"#define USOC_PROTECTED_SCRATCH_BASE 0x{int(cpu['protected_scratch']):08X}ULL",
         f"#define USOC_PROTECTED_SCRATCH_SIZE 0x{int(cpu['protected_size']):08X}ULL",
         f"#define USOC_DMA_SRC_BUF 0x{int(cpu['dma_src_buf']):08X}ULL",
         f"#define USOC_DMA_DST_BUF 0x{int(cpu['dma_dst_buf']):08X}ULL",
+        f"#define USOC_SMP_SHARED_MEM 0x{int(cpu['smp_shared_mem']):08X}ULL",
     ]
     for dev in spec["devices"]:
         key = str(dev["name"]).upper()
@@ -211,6 +262,55 @@ def _render_map_header(spec: dict[str, Any]) -> str:
         if "irq" in dev:
             lines.append(f"#define USOC_{key}_IRQ {int(dev['irq'])}U")
     lines.append("#endif /* USOC_UNIFIED_SOC_MAP_H */")
+    return "\n".join(lines) + "\n"
+
+
+def _render_routes_header(spec: dict[str, Any]) -> str:
+    """Emit IR-generated C++ NoC routing table directly on the actual transaction path (M6)."""
+    lines = [
+        "/* IR-generated 2x2 Mesh NoC routing table; DO NOT EDIT BY HAND. */",
+        "#ifndef USOC_UNIFIED_SOC_ROUTES_H",
+        "#define USOC_UNIFIED_SOC_ROUTES_H",
+        "#include <cstdint>",
+        "enum UsocTargetId {",
+        "    USOC_TGT_RAM = 0,",
+        "    USOC_TGT_ROM,",
+        "    USOC_TGT_FINISHER,",
+        "    USOC_TGT_L2,",
+        "    USOC_TGT_CLINT,",
+        "    USOC_TGT_PLIC,",
+        "    USOC_TGT_UART,",
+        "    USOC_TGT_SPI,",
+        "    USOC_TGT_I2C,",
+        "    USOC_TGT_GCD,",
+        "    USOC_TGT_GPIO,",
+        "    USOC_TGT_DMA,",
+        "    USOC_TGT_SHA256,",
+        "    USOC_TGT_AES128,",
+        "    USOC_TGT_NPU,",
+        "    USOC_TGT_PMP_GUARD",
+        "};",
+        "struct UsocRouteEntry {",
+        "    const char *name;",
+        "    uint64_t base;",
+        "    uint64_t size;",
+        "    int rx;",
+        "    int ry;",
+        "    UsocTargetId target;",
+        "    bool log_mmio;",
+        "};",
+        "static const UsocRouteEntry USOC_ROUTE_TABLE[] = {",
+    ]
+    for dev in spec["devices"]:
+        enum_name, log_mmio = MODEL_TO_TARGET_ENUM[str(dev["model"])]
+        lines.append(
+            f'    {{"{dev["name"]}", 0x{int(dev["base"]):08X}ULL, 0x{int(dev["size"]):08X}ULL, '
+            f"{int(dev['router'][0])}, {int(dev['router'][1])}, {enum_name}, "
+            f"{'true' if log_mmio else 'false'}}},"
+        )
+    lines.append("};")
+    lines.append(f"static const unsigned USOC_ROUTE_COUNT = {len(spec['devices'])}U;")
+    lines.append("#endif /* USOC_UNIFIED_SOC_ROUTES_H */")
     return "\n".join(lines) + "\n"
 
 
@@ -235,20 +335,23 @@ def _render_linker_script(spec: dict[str, Any]) -> str:
         "    _bss_end = .;\n"
         "  }\n"
         f"  PROVIDE(_stack_top = 0x{int(cpu['stack_top']):08X});\n"
+        f"  PROVIDE(_hart1_stack_top = 0x{int(cpu['hart1_stack_top']):08X});\n"
         "}\n"
     )
 
 
 def generate_unified_artifacts(spec_path: Path, out_dir: Path) -> dict[str, Any]:
-    """Validate spec and emit shared unified_soc_map.h, link.ld, and unified-soc-ir.json."""
+    """Validate spec and emit map header, IR routing table, linker script, and IR JSON."""
     spec_path = spec_path.resolve()
     out_dir = out_dir.resolve()
     spec = load_unified_spec(spec_path)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     header_path = out_dir / "unified_soc_map.h"
+    routes_path = out_dir / "unified_soc_routes.h"
     linker_path = out_dir / "link.ld"
     header_path.write_text(_render_map_header(spec))
+    routes_path.write_text(_render_routes_header(spec))
     linker_path.write_text(_render_linker_script(spec))
 
     ir = {
@@ -261,6 +364,7 @@ def generate_unified_artifacts(spec_path: Path, out_dir: Path) -> dict[str, Any]
         "devices": spec["devices"],
         "generated_files": {
             "unified_soc_map.h": digest(header_path),
+            "unified_soc_routes.h": digest(routes_path),
             "link.ld": digest(linker_path),
         },
     }
@@ -296,7 +400,7 @@ def _compile_firmware(
 ) -> str:
     cmd = [
         gcc,
-        "-march=rv64im_zicsr",
+        "-march=rv64ima_zicsr",
         "-mabi=lp64",
         "-mcmodel=medany",
         "-O2",
@@ -320,7 +424,7 @@ def _compile_firmware(
 
 
 def _build_verilator_rtl_blocks(src_dir: Path, out_dir: Path) -> tuple[list[str], list[str], str]:
-    """Compile all 4 synthesizable SystemVerilog RTL blocks with Verilator 5.x."""
+    """Compile all 6 synthesizable SystemVerilog RTL blocks with Verilator 5.x."""
     verilator_bin, verilator_ver = tool_version("verilator")
     vroot = subprocess.check_output(
         [verilator_bin, "--getenv", "VERILATOR_ROOT"], text=True, timeout=15
@@ -467,20 +571,31 @@ def _compute_coverage(
     gdb_result: dict[str, Any] | None,
     use_verilator: bool,
 ) -> dict[str, Any]:
-    """Compute a 20-bin Functional & Assertion Coverage report."""
+    """Compute a 24-bin Functional & Assertion Coverage report."""
     ip_hits = summary.get("ip_hits", {})
     ip_res = summary.get("ip_results", {})
     routers = summary.get("router_hits", [0, 0, 0, 0])
     vcd_ok = vcd_path.is_file() and "$enddefinitions" in vcd_path.read_text(errors="replace")
     bins = {
         "noc_all_4_routers_active": len(routers) == 4 and all(h > 0 for h in routers),
-        "noc_cpu_and_dma_dual_masters": summary.get("noc_dma_master_transactions", 0) >= 9,
+        "noc_ir_route_table_16_entries": summary.get("ir_route_entries", 0) == 16,
+        "noc_cpu_and_dma_3_masters": summary.get("noc_dma_master_transactions", 0) >= 9,
         "noc_vcd_waveform_captured": vcd_ok,
+        "smp_hart1_clint_ipi_wake": (
+            "SMP_HART1_IPI_WAKE_OK" in console_text and summary.get("smp_ipi_delivered", 0) >= 1
+        ),
+        "smp_rv64a_atomic_coherency": (
+            "SMP_ATOMIC_BARRIER_OK" in console_text
+            and summary.get("hart1_instructions", 0) > 0
+            and summary.get("atomic_ops_executed", 0) >= 24
+        ),
         "irq_chipyard_gcd": "CHIPYARD_GCD_IRQ_OK" in console_text,
         "irq_opentitan_gpio": "OPENTITAN_GPIO_IRQ_OK" in console_text,
         "irq_dma_engine": "NOC_DMA_MASTER_IRQ_OK" in console_text,
         "irq_sha256_crypto": "SHA256_FIPS_KAT_IRQ_OK" in console_text,
+        "irq_aes128_crypto": "AES128_FIPS197_IRQ_OK" in console_text,
         "irq_spi_controller": "SPI_CTRL_RTL_IRQ_OK" in console_text,
+        "irq_i2c_controller": "I2C_CTRL_RTL_IRQ_OK" in console_text,
         "irq_mac_npu": "MAC_NPU_DOT_IRQ_OK" in console_text,
         "irq_pmp_bus_guard": "PMP_GUARD_FAULT_IRQ_OK" in console_text,
         "rtl_npu_scalar_and_matmul": (
@@ -492,9 +607,17 @@ def _compute_coverage(
             ip_res.get("sha256_blocks_hashed") == 1
             and (not use_verilator or ip_res.get("sha256_rtl_cycles", 0) >= 64)
         ),
+        "rtl_aes128_fips197_10_rounds": (
+            ip_res.get("aes_blocks_encrypted") == 1
+            and (not use_verilator or ip_res.get("aes_rtl_cycles", 0) >= 10)
+        ),
         "rtl_spi_32bit_shift_loopback": (
             ip_res.get("spi_xfers_completed") == 1
             and (not use_verilator or ip_res.get("spi_rtl_cycles", 0) >= 32)
+        ),
+        "rtl_i2c_master_loopback_fsm": (
+            ip_res.get("i2c_xfers_completed") == 1
+            and (not use_verilator or ip_res.get("i2c_rtl_cycles", 0) >= 16)
         ),
         "rtl_l2_cache_hits_misses_snoops": (
             ip_res.get("l2_hits", 0) > 0
@@ -502,21 +625,16 @@ def _compute_coverage(
             and ip_res.get("l2_dma_snoops", 0) >= 8
             and (not use_verilator or ip_res.get("l2_rtl_cycles", 0) > 0)
         ),
-        "security_cpu_pmp_csr": ip_res.get("cpu_pmpcfg0") == 31,
-        "security_cpu_and_dma_pmp_block": (
-            ip_hits.get("pmp_guard_blocked_writes") == 2
+        "security_cpu_pmp_csr_and_bus_guard": (
+            ip_res.get("cpu_pmpcfg0") == 31
+            and ip_hits.get("pmp_guard_blocked_writes") == 2
             and ip_res.get("pmp_guard_fault_count") == 2
             and "DMA_PMP_BLOCK_OK" in console_text
         ),
-        "benchmark_coremark_crc32": "COREMARK_CRC32_ROI_OK" in console_text,
-        "platform_uart_clint_plic": (
-            ip_hits.get("qemu_uart_0", 0) > 0
-            and ip_hits.get("sys_clint", 0) > 0
-            and ip_hits.get("sys_plic", 0) > 0
+        "benchmark_coremark_crc32_and_gdb": (
+            "COREMARK_CRC32_ROI_OK" in console_text
+            and (True if gdb_result is None else gdb_result["status"] == "PASSED")
         ),
-        "debug_gdb_rsp_step_continue": True
-        if gdb_result is None
-        else gdb_result["status"] == "PASSED",
         "negative_guest_failure_detected": neg_ok,
     }
     hit_count = sum(1 for v in bins.values() if v)
@@ -538,7 +656,7 @@ def _render_report_md(report: dict[str, Any]) -> str:
     ip_res = summary.get("ip_results", {})
     cov = report.get("coverage", {})
     lines = [
-        f"# Unified Hybrid SystemC/TLM-2.0 + 4× Verilator RTL Report ({report['design']})",
+        f"# Unified Dual-Hart SMP SystemC/TLM-2.0 + 6× Verilator RTL Report ({report['design']})",
         "",
         f"- **Contract:** `{report['contract']}`",
         f"- **Status:** **{report['status']}**",
@@ -548,17 +666,23 @@ def _render_report_md(report: dict[str, Any]) -> str:
         f"(`{cov.get('bins_hit', 0)}/{cov.get('bins_total', 0)}` bins)",
         f"- **Timestamp (UTC):** `{report['created_utc']}`",
         "",
-        "## Execution & RTL Cycle Metrics (`unified_sw.elf`)",
+        "## Dual-Hart SMP & 6× Verilator RTL Metrics (`unified_sw.elf`)",
         "",
-        f"- Instructions executed: `{summary.get('instructions_executed')}`",
+        f"- Instructions executed: `{summary.get('instructions_executed')}` "
+        f"(hart0=`{summary.get('hart0_instructions')}`, "
+        f"hart1=`{summary.get('hart1_instructions')}`)",
+        f"- RV64A Atomic ops / CLINT IPIs: `{summary.get('atomic_ops_executed')}` / "
+        f"`{summary.get('smp_ipi_delivered')}`",
         f"- Traps / IRQs taken: `{summary.get('traps_taken')}`",
         f"- SystemC simulated time (ps): `{summary.get('systemc_time_ps')}`",
-        f"- NoC 2×2 total transactions / hops: `{summary.get('noc_total_transactions')}` / "
-        f"`{summary.get('noc_total_hops')}`",
-        f"- DMA 2nd-master transactions: `{summary.get('noc_dma_master_transactions')}`",
-        f"- Verilator RTL cycles: `mac_npu={ip_res.get('npu_rtl_cycles')}`, "
-        f"`sha256={ip_res.get('sha256_rtl_cycles')}`, "
-        f"`spi={ip_res.get('spi_rtl_cycles')}`, `l2_cache={ip_res.get('l2_rtl_cycles')}`",
+        f"- NoC 2×2 tx / hops / backpressure stalls: `{summary.get('noc_total_transactions')}`"
+        f" / `{summary.get('noc_total_hops')}` / `{summary.get('noc_backpressure_stalls')}`",
+        f"- IR routing table entries: `{summary.get('ir_route_entries')}` | "
+        f"DMA master tx: `{summary.get('noc_dma_master_transactions')}`",
+        f"- 6× Verilator RTL cycles: `mac_npu={ip_res.get('npu_rtl_cycles')}`, "
+        f"`sha256={ip_res.get('sha256_rtl_cycles')}`, `aes128={ip_res.get('aes_rtl_cycles')}`, "
+        f"`spi={ip_res.get('spi_rtl_cycles')}`, `i2c={ip_res.get('i2c_rtl_cycles')}`, "
+        f"`l2_cache={ip_res.get('l2_rtl_cycles')}`",
         f"- L2 Cache: `hits={ip_res.get('l2_hits')}`, `misses={ip_res.get('l2_misses')}`, "
         f"`dma_snoops={ip_res.get('l2_dma_snoops')}`",
         "",
@@ -580,7 +704,7 @@ def run_unified_soc(
     max_steps: int = 500_000,
     timeout: float = 30.0,
 ) -> dict[str, Any]:
-    """Compile and execute the unified SystemC (+ 4x Verilator RTL) SoC with real RV64 SW."""
+    """Compile and execute the unified Dual-Hart SMP SystemC (+ 6x Verilator RTL) SoC."""
     if backend not in {"auto", "verilator-rtl", "systemc-tlm"}:
         raise ContractError(f"E_UNIFIED_BACKEND unsupported backend: {backend}")
     spec_path = spec_path.resolve()
@@ -723,9 +847,9 @@ def run_unified_soc(
 
     overall = "PASSED" if all(pos_checks.values()) else "FAILED"
     fidelity = (
-        "hybrid-systemc-tlm2-and-4x-verilator-rtl-annotated-noc"
+        "hybrid-systemc-tlm2-smp-and-6x-verilator-rtl-annotated-noc"
         if use_verilator
-        else "systemc-tlm2-functional-annotated-noc"
+        else "systemc-tlm2-smp-functional-annotated-noc"
     )
     report: dict[str, Any] = {
         "contract": CONTRACT,
@@ -770,7 +894,7 @@ def run_unified_soc(
 
 
 def calibrate_unified_soc(spec_path: Path, out_dir: Path) -> dict[str, Any]:
-    """Compare 4x Verilator-RTL hybrid run vs pure SystemC-TLM run on identical RV64 SW (M7)."""
+    """Compare 6x Verilator-RTL hybrid run vs pure SystemC-TLM run on identical SMP RV64 SW."""
     out_dir = out_dir.resolve()
     if out_dir.exists():
         raise ContractError("E_UNIFIED_OUT choose a fresh calibration output directory")
@@ -794,7 +918,7 @@ def calibrate_unified_soc(spec_path: Path, out_dir: Path) -> dict[str, Any]:
     rtl_time = float(rtl_run["positive_run"]["summary"]["systemc_time_ps"])
     tlm_time = float(tlm_run["positive_run"]["summary"]["systemc_time_ps"])
     cal = evaluate_calibration_report(
-        roi_name="unified_hetero_soc_4rtl_benchmark",
+        roi_name="unified_hetero_soc_6rtl_smp_benchmark",
         reference_source="native-rtl",
         model_source="qemu-analytical-estimate",
         reference_cycles=rtl_time / 20_000.0,
@@ -809,7 +933,9 @@ def calibrate_unified_soc(spec_path: Path, out_dir: Path) -> dict[str, Any]:
         and rtl_run["positive_run"]["console_output"] == tlm_run["positive_run"]["console_output"]
         and rtl_ip["npu_acc_final"] == tlm_ip["npu_acc_final"]
         and rtl_ip["sha256_blocks_hashed"] == tlm_ip["sha256_blocks_hashed"]
+        and rtl_ip["aes_blocks_encrypted"] == tlm_ip["aes_blocks_encrypted"]
         and rtl_ip["spi_xfers_completed"] == tlm_ip["spi_xfers_completed"]
+        and rtl_ip["i2c_xfers_completed"] == tlm_ip["i2c_xfers_completed"]
         and rtl_ip["l2_hits"] == tlm_ip["l2_hits"]
     )
     res: dict[str, Any] = {
@@ -819,7 +945,9 @@ def calibrate_unified_soc(spec_path: Path, out_dir: Path) -> dict[str, Any]:
         "rtl_cycles": {
             "mac_npu": rtl_ip["npu_rtl_cycles"],
             "sha256": rtl_ip["sha256_rtl_cycles"],
+            "aes128": rtl_ip["aes_rtl_cycles"],
             "spi": rtl_ip["spi_rtl_cycles"],
+            "i2c": rtl_ip["i2c_rtl_cycles"],
             "l2_cache": rtl_ip["l2_rtl_cycles"],
         },
         "rtl_systemc_time_ps": rtl_time,

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from socsim.chia_loop import run_chia_loop
 from socsim.dashboard import generate_dashboard
 from socsim.domain import ContractError
 from socsim.dse_cluster import run_dse_sweep
@@ -16,6 +17,7 @@ from socsim.ip_registry import (
     resolve_packages,
     verify_registry,
 )
+from socsim.ip_scaffold import scaffold_ip_package
 from socsim.unified_systemc_soc import has_unified_toolchain
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -67,6 +69,24 @@ def test_ip_registry_publish_immutability_semver_ranges_and_tamper_detection(tmp
         resolve_packages(reg, {"user.mac_npu": "1.0.0"}, tmp_path / "ws-bad")
 
 
+def test_ip_scaffolder_generates_publishable_ipxact_rtl_and_systemc_package(tmp_path):
+    sc_dir = tmp_path / "neural_crc"
+    res = scaffold_ip_package(name="neural_crc", out_dir=sc_dir)
+    assert res["status"] == "PASSED"
+    assert res["package_id"] == "user.neural_crc"
+    assert Path(res["ipxact_xml"]).is_file()
+    assert Path(res["rtl_sv"]).is_file()
+    assert Path(res["tlm_cpp"]).is_file()
+    assert "1685-2022" in Path(res["ipxact_xml"]).read_text()
+
+    reg = tmp_path / "reg"
+    pub = publish_package(Path(res["package_yaml"]), reg, version="1.0.0")
+    assert pub["key"] == "user.neural_crc@1.0.0"
+    assert verify_registry(reg)["status"] == "PASSED"
+    lock = resolve_packages(reg, {"user.neural_crc": "^1.0.0"}, tmp_path / "ws")
+    assert "user.neural_crc@1.0.0" in lock["resolved"]
+
+
 def test_parallel_dse_process_cluster_cache_ray_gate_and_html5_dashboard(tmp_path):
     cache_dir = tmp_path / "dse-cache"
     run1 = run_dse_sweep(
@@ -103,12 +123,33 @@ def test_parallel_dse_process_cluster_cache_ray_gate_and_html5_dashboard(tmp_pat
         with pytest.raises(ContractError, match="E_CLUSTER_UNAVAILABLE"):
             run_dse_sweep(UNIFIED_SPEC, tmp_path / "dse-ray", workers=2, cluster="ray")
 
-    # Zero-CDN air-gapped HTML5 Verification Dashboard from real DSE report
+    # CHIA-style Cyclic Optimization Loop + Isolated Verification Oracle + Replay
+    loop_cache = tmp_path / "loop-cache"
+    loop1 = run_chia_loop(UNIFIED_SPEC, tmp_path / "loop-1", max_iters=3, cache_dir=loop_cache)
+    assert loop1["status"] == "PASSED"
+    assert loop1["contract"] == "usp-chia-loop-1"
+    assert len(loop1["history"]) == 3
+    assert all(h["replayed"] is False for h in loop1["history"])
+    if ready_tlm:
+        assert loop1["execution_mode"] == "live-cyclic-optimization"
+        assert loop1["best_speedup_vs_baseline"] > 1.0
+        assert len(loop1["pareto_frontier"]) >= 1
+
+    loop2 = run_chia_loop(UNIFIED_SPEC, tmp_path / "loop-2", max_iters=3, cache_dir=loop_cache)
+    assert loop2["status"] == "PASSED"
+    assert all(h["replayed"] is True for h in loop2["history"])
+
+    # Zero-CDN air-gapped HTML5 Verification Dashboard with DSE + CHIA Loop SVG
     dash_path = tmp_path / "dashboard.html"
-    dash = generate_dashboard(out_html=dash_path, dse_report=tmp_path / "dse-1/dse-report.json")
+    dash = generate_dashboard(
+        out_html=dash_path,
+        dse_report=tmp_path / "dse-1/dse-report.json",
+        loop_report=tmp_path / "loop-1/loop-report.json",
+    )
     assert dash["status"] == "PASSED"
     assert dash["contract"] == "usp-verification-dashboard-1"
     html_text = dash_path.read_text()
     assert "<!DOCTYPE html>" in html_text
     assert "noc_fast_tlm" in html_text
+    assert "baseline_distributed_2x2" in html_text
     assert "http://" not in html_text and "https://" not in html_text

@@ -31,9 +31,17 @@ _SUBCOMMAND_MODULES: dict[str, tuple[str, str]] = {
         "socsim.dse_cluster",
         "run CHIA-style parallel DSE sweeps and RTL-vs-TLM calibration; use --help",
     ),
+    "loop": (
+        "socsim.chia_loop",
+        "run CHIA-style cyclic HW/SW optimization loop with isolated oracle; use --help",
+    ),
+    "ip": (
+        "socsim.ip_scaffold",
+        "scaffold IEEE 1685-2022 + SystemC + SV RTL IP plugin packages; use --help",
+    ),
     "dashboard": (
         "socsim.dashboard",
-        "render self-contained HTML5 verification, coverage and DSE dashboard; use --help",
+        "render self-contained HTML5 verification, coverage, DSE and loop dashboard; use --help",
     ),
     "qa": ("socsim.qa_runner", "run real QA/QC suites and verify scorecards; use --help"),
     "upgrade": ("socsim.upgrade", "validate sequential milestone status/evidence; use --help"),

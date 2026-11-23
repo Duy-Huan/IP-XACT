@@ -1,16 +1,20 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-/* Industrial End-to-End RISC-V64 Bare-Metal Verification & Benchmark Suite for Unified SoC:
- *   1. QEMU-compatible UART, CLINT, PLIC, Finisher
+/* Industrial End-to-End Dual-Hart SMP RISC-V64 Bare-Metal Verification & Benchmark Suite:
+ *   1. QEMU-compatible UART, CLINT (multi-hart IPI), PLIC (9 IRQs), Finisher
  *   2. CPU-internal RISC-V PMP CSRs (pmpaddr0 / pmpcfg0)
  *   3. CoreMark-style Integer ALU / IEEE 802.3 CRC-32 ("123456789" -> 0xCBF43926) ROI
- *   4. Chipyard GCD accelerator (3 vectors + PLIC IRQ 12)
- *   5. OpenTitan GPIO (loopback + rising-edge PLIC IRQ 13 + masked clear)
- *   6. Verilated MAC + 2x2 MatMul NPU RTL (dot=126 + [[1,2],[3,4]]x[[5,6],[7,8]] + PLIC IRQ 20)
- *   7. Verilated FIPS 180-4 SHA-256 Crypto RTL (NIST KAT SHA256("abc") + PLIC IRQ 15)
- *   8. Verilated 32-bit SPI Master Controller RTL (loopback 0xA55A1234 + PLIC IRQ 16)
- *   9. SystemC PMP Bus Guard (CPU unauthorized write Store Fault + PLIC IRQ 21)
- *  10. Second-master NoC DMA Engine (16B copy + PLIC IRQ 14 + unauthorized DMA PMP block)
- *  11. Verilated 64-line L2 Cache & DMA Coherency Snoop RTL performance counter audit
+ *   4. Dual-Hart SMP: Hart 0 triggers CLINT msip[1] IPI -> wakes Hart 1 -> concurrent RV64A
+ *      amoadd.w + lr.w/sc.w atomic barrier + parallel CRC-32 coherency verification
+ *   5. Chipyard GCD accelerator (3 vectors + PLIC IRQ 12)
+ *   6. OpenTitan GPIO (loopback + rising-edge PLIC IRQ 13 + masked clear)
+ *   7. Verilated MAC + 2x2 MatMul NPU RTL (dot=126 + 2x2 MatMul + PLIC IRQ 20)
+ *   8. Verilated FIPS 180-4 SHA-256 Crypto RTL (NIST KAT SHA256("abc") + PLIC IRQ 15)
+ *   9. Verilated FIPS 197 AES-128 Crypto RTL (NIST Appendix B KAT + PLIC IRQ 17)
+ *  10. Verilated 32-bit SPI Master Controller RTL (loopback 0xA55A1234 + PLIC IRQ 16)
+ *  11. Verilated I2C Master + Loopback Slave FSM RTL (addr 0x50 + byte 0xC3 + PLIC IRQ 18)
+ *  12. SystemC PMP Bus Guard (CPU unauthorized write Store Fault + PLIC IRQ 21)
+ *  13. Third-master NoC DMA Engine (16B copy + PLIC IRQ 14 + unauthorized DMA PMP block)
+ *  14. Verilated 64-line L2 Cache & SMP/DMA Coherency Snoop RTL counter audit
  */
 #include <stdint.h>
 #include "unified_soc_map.h"
@@ -26,12 +30,15 @@ static volatile uint32_t g_gpio_state = 0;
 static volatile uint32_t g_dma_irqs = 0;
 static volatile uint32_t g_dma_last_status = 0;
 static volatile uint32_t g_sha_irqs = 0;
+static volatile uint32_t g_aes_irqs = 0;
 static volatile uint32_t g_spi_irqs = 0;
+static volatile uint32_t g_i2c_irqs = 0;
 static volatile uint32_t g_npu_irqs = 0;
 static volatile uint32_t g_npu_acc = 0;
 static volatile uint32_t g_pmp_guard_irqs = 0;
 static volatile uint32_t g_store_faults = 0;
 static volatile uint64_t g_last_fault_addr = 0;
+static volatile uint32_t g_hart1_ipi_seen = 0;
 
 static void uart_puts(const char *s) {
     while (*s) {
@@ -63,7 +70,35 @@ static uint32_t crc32_ieee(const uint8_t *data, unsigned len) {
     return ~crc;
 }
 
+static inline uint32_t amo_add_w(volatile uint32_t *ptr, uint32_t delta) {
+    uint32_t prev;
+    __asm__ volatile("amoadd.w %0, %2, (%1)" : "=r"(prev) : "r"(ptr), "r"(delta) : "memory");
+    return prev;
+}
+
+static inline void lrsc_inc_w(volatile uint32_t *ptr) {
+    uint32_t val, status;
+    do {
+        __asm__ volatile("lr.w %0, (%1)" : "=r"(val) : "r"(ptr) : "memory");
+        val += 1U;
+        __asm__ volatile("sc.w %0, %2, (%1)" : "=r"(status) : "r"(ptr), "r"(val) : "memory");
+    } while (status != 0U);
+}
+
 uint64_t trap_dispatch(uint64_t mcause, uint64_t mepc, uint64_t mtval) {
+    /* Machine Software Interrupt (CLINT IPI) */
+    if (mcause == 0x8000000000000003ULL) {
+        uint64_t hid = 0;
+        __asm__ volatile("csrr %0, mhartid" : "=r"(hid));
+        if (hid == 1ULL) {
+            R32(USOC_SYS_CLINT_BASE + 4U) = 0U; /* Clear msip[1] */
+            g_hart1_ipi_seen++;
+        } else {
+            R32(USOC_SYS_CLINT_BASE + 0U) = 0U; /* Clear msip[0] */
+        }
+        return mepc;
+    }
+    /* Machine External Interrupt (PLIC) */
     if (mcause == 0x800000000000000bULL) {
         uint32_t irq = R32(USOC_SYS_PLIC_BASE + 0x200004U);
         if (irq == USOC_CHIPYARD_GCD_0_IRQ) {
@@ -81,9 +116,15 @@ uint64_t trap_dispatch(uint64_t mcause, uint64_t mepc, uint64_t mtval) {
         } else if (irq == USOC_SHA256_CRYPTO_0_IRQ) {
             R32(USOC_SHA256_CRYPTO_0_BASE + 0x04U) = 1U;
             g_sha_irqs++;
+        } else if (irq == USOC_AES128_CRYPTO_0_IRQ) {
+            R32(USOC_AES128_CRYPTO_0_BASE + 0x04U) = 1U;
+            g_aes_irqs++;
         } else if (irq == USOC_SPI_CTRL_0_IRQ) {
             R32(USOC_SPI_CTRL_0_BASE + 0x10U) = 1U;
             g_spi_irqs++;
+        } else if (irq == USOC_I2C_CTRL_0_IRQ) {
+            R32(USOC_I2C_CTRL_0_BASE + 0x14U) = 1U;
+            g_i2c_irqs++;
         } else if (irq == USOC_MAC_NPU_0_IRQ) {
             g_npu_acc = R32(USOC_MAC_NPU_0_BASE + 0x0CU);
             R32(USOC_MAC_NPU_0_BASE + 0x10U) = 1U;
@@ -106,24 +147,55 @@ uint64_t trap_dispatch(uint64_t mcause, uint64_t mepc, uint64_t mtval) {
     return mepc;
 }
 
+/* Hart 1 SMP worker: waits for CLINT msip[1] IPI, computes CRC-32, performs RV64A atomics */
+void hart1_main(void) {
+    volatile uint32_t *smp_atomic = (volatile uint32_t *)(uintptr_t)(USOC_SMP_SHARED_MEM + 0x00U);
+    volatile uint32_t *smp_crc    = (volatile uint32_t *)(uintptr_t)(USOC_SMP_SHARED_MEM + 0x04U);
+    volatile uint32_t *smp_done   = (volatile uint32_t *)(uintptr_t)(USOC_SMP_SHARED_MEM + 0x08U);
+
+    /* Enable Machine Software Interrupt (MSIE = bit 3) + MIE (mstatus bit 3) */
+    __asm__ volatile("csrw mie, %0" : : "r"(1ULL << 3));
+    __asm__ volatile("csrsi mstatus, 8");
+
+    while (g_hart1_ipi_seen == 0U) {
+        __asm__ volatile("wfi");
+    }
+
+    static const uint8_t crc_msg[9] = {'1','2','3','4','5','6','7','8','9'};
+    *smp_crc = crc32_ieee(crc_msg, 9U);
+
+    for (unsigned i = 0; i < 8U; ++i) {
+        amo_add_w(smp_atomic, 1U);
+    }
+    for (unsigned i = 0; i < 4U; ++i) {
+        lrsc_inc_w(smp_atomic);
+    }
+    amo_add_w(smp_done, 1U);
+    for (;;) {
+        __asm__ volatile("wfi");
+    }
+}
+
 static void enable_plic_irqs(void) {
-    const uint32_t irqs[7] = {
+    const uint32_t irqs[9] = {
         USOC_CHIPYARD_GCD_0_IRQ,
         USOC_OPENTITAN_GPIO_0_IRQ,
         USOC_DMA_ENGINE_0_IRQ,
         USOC_SHA256_CRYPTO_0_IRQ,
+        USOC_AES128_CRYPTO_0_IRQ,
         USOC_SPI_CTRL_0_IRQ,
+        USOC_I2C_CTRL_0_IRQ,
         USOC_MAC_NPU_0_IRQ,
         USOC_PMP_GUARD_0_IRQ,
     };
     uint32_t mask = 0;
-    for (unsigned i = 0; i < 7U; ++i) {
+    for (unsigned i = 0; i < 9U; ++i) {
         R32(USOC_SYS_PLIC_BASE + irqs[i] * 4U) = 1U;
         mask |= (1U << irqs[i]);
     }
     R32(USOC_SYS_PLIC_BASE + 0x2000U) = mask;
     R32(USOC_SYS_PLIC_BASE + 0x200000U) = 0U;
-    __asm__ volatile("csrw mie, %0" : : "r"(1ULL << 11));
+    __asm__ volatile("csrw mie, %0" : : "r"((1ULL << 11) | (1ULL << 3)));
     __asm__ volatile("csrsi mstatus, 8");
 }
 
@@ -154,7 +226,29 @@ int main(void) {
 
     enable_plic_irqs();
 
-    /* 4. Chipyard GCD over 2x2 NoC + PLIC IRQ 12 */
+    /* 4. Dual-Hart SMP: trigger CLINT IPI to Hart 1 + concurrent RV64A atomics */
+    volatile uint32_t *smp_atomic = (volatile uint32_t *)(uintptr_t)(USOC_SMP_SHARED_MEM + 0x00U);
+    volatile uint32_t *smp_crc    = (volatile uint32_t *)(uintptr_t)(USOC_SMP_SHARED_MEM + 0x04U);
+    volatile uint32_t *smp_done   = (volatile uint32_t *)(uintptr_t)(USOC_SMP_SHARED_MEM + 0x08U);
+    *smp_atomic = 0U;
+    *smp_crc = 0U;
+    *smp_done = 0U;
+    R32(USOC_SYS_CLINT_BASE + 4U) = 1U; /* Fire msip[1] IPI over 2x2 NoC */
+    for (unsigned i = 0; i < 8U; ++i) {
+        amo_add_w(smp_atomic, 1U);
+    }
+    for (unsigned i = 0; i < 4U; ++i) {
+        lrsc_inc_w(smp_atomic);
+    }
+    for (unsigned w = 0; *smp_done == 0U && w < 20000U; ++w) {
+        __asm__ volatile("nop");
+    }
+    if (*smp_done != 1U || g_hart1_ipi_seen != 1U) finish(0x13333U);
+    uart_puts("SMP_HART1_IPI_WAKE_OK\n");
+    if (*smp_atomic != 24U || *smp_crc != 0xCBF43926U) finish(0x13333U);
+    uart_puts("SMP_ATOMIC_BARRIER_OK\n");
+
+    /* 5. Chipyard GCD over 2x2 NoC + PLIC IRQ 12 */
     static const uint32_t gcd_vecs[3][3] = {
         {48U, 18U, 6U}, {270U, 192U, 6U}, {65535U, 255U, 255U},
     };
@@ -168,7 +262,7 @@ int main(void) {
     }
     uart_puts("CHIPYARD_GCD_IRQ_OK\n");
 
-    /* 5. OpenTitan GPIO over 2x2 NoC + PLIC IRQ 13 */
+    /* 6. OpenTitan GPIO over 2x2 NoC + PLIC IRQ 13 */
     if (R32(USOC_OPENTITAN_GPIO_0_BASE + 0x10U) != 0U ||
         R32(USOC_OPENTITAN_GPIO_0_BASE + 0x00U) != 0U) finish(0x13333U);
     R32(USOC_OPENTITAN_GPIO_0_BASE + 0x20U) = 1U;
@@ -182,7 +276,7 @@ int main(void) {
     if (R32(USOC_OPENTITAN_GPIO_0_BASE + 0x10U) != 0U) finish(0x13333U);
     uart_puts("OPENTITAN_GPIO_IRQ_OK\n");
 
-    /* 6a. Verilated MAC NPU RTL scalar dot product (6*7 + 5*8 + 11*4 = 126) + PLIC IRQ 20 */
+    /* 7a. Verilated MAC NPU RTL scalar dot product (6*7 + 5*8 + 11*4 = 126) + PLIC IRQ 20 */
     static const uint32_t mac_ops[3][2] = {{6U, 7U}, {5U, 8U}, {11U, 4U}};
     for (unsigned i = 0; i < 3U; ++i) {
         uint32_t before = g_npu_irqs;
@@ -195,13 +289,13 @@ int main(void) {
     if (g_npu_acc != 126U || R32(USOC_MAC_NPU_0_BASE + 0x00U) != 3U) finish(0x13333U);
     uart_puts("MAC_NPU_DOT_IRQ_OK\n");
 
-    /* 6b. Verilated MAC NPU RTL 2x2 Matrix Multiply: [[1,2],[3,4]] x [[5,6],[7,8]] = [[19,22],[43,50]] */
+    /* 7b. Verilated MAC NPU RTL 2x2 Matrix Multiply */
     uint32_t npu_before = g_npu_irqs;
     R32(USOC_MAC_NPU_0_BASE + 0x20U) = 1U; R32(USOC_MAC_NPU_0_BASE + 0x24U) = 2U;
     R32(USOC_MAC_NPU_0_BASE + 0x28U) = 3U; R32(USOC_MAC_NPU_0_BASE + 0x2CU) = 4U;
     R32(USOC_MAC_NPU_0_BASE + 0x30U) = 5U; R32(USOC_MAC_NPU_0_BASE + 0x34U) = 6U;
     R32(USOC_MAC_NPU_0_BASE + 0x38U) = 7U; R32(USOC_MAC_NPU_0_BASE + 0x3CU) = 8U;
-    R32(USOC_MAC_NPU_0_BASE + 0x00U) = 3U; /* MATMUL_CMD */
+    R32(USOC_MAC_NPU_0_BASE + 0x00U) = 3U;
     for (unsigned w = 0; g_npu_irqs == npu_before && w < 1000U; ++w) __asm__ volatile("nop");
     if (g_npu_irqs != npu_before + 1U ||
         R32(USOC_MAC_NPU_0_BASE + 0x40U) != 19U ||
@@ -210,11 +304,11 @@ int main(void) {
         R32(USOC_MAC_NPU_0_BASE + 0x4CU) != 50U) finish(0x13333U);
     uart_puts("NPU_MATMUL_2X2_IRQ_OK\n");
 
-    /* 7. Verilated FIPS 180-4 SHA-256 RTL: NIST KAT SHA-256("abc") + PLIC IRQ 15 */
+    /* 8. Verilated FIPS 180-4 SHA-256 RTL: NIST KAT SHA-256("abc") + PLIC IRQ 15 */
     for (unsigned i = 0; i < 16U; ++i) R32(USOC_SHA256_CRYPTO_0_BASE + 0x10U + i * 4U) = 0U;
-    R32(USOC_SHA256_CRYPTO_0_BASE + 0x10U) = 0x61626380U; /* "abc" + 0x80 pad */
-    R32(USOC_SHA256_CRYPTO_0_BASE + 0x4CU) = 24U;         /* bit length = 24 */
-    R32(USOC_SHA256_CRYPTO_0_BASE + 0x00U) = 1U;          /* start_first_block */
+    R32(USOC_SHA256_CRYPTO_0_BASE + 0x10U) = 0x61626380U;
+    R32(USOC_SHA256_CRYPTO_0_BASE + 0x4CU) = 24U;
+    R32(USOC_SHA256_CRYPTO_0_BASE + 0x00U) = 1U;
     for (unsigned w = 0; g_sha_irqs == 0U && w < 1000U; ++w) __asm__ volatile("nop");
     static const uint32_t expected_sha256_abc[8] = {
         0xba7816bfU, 0x8f01cfeaU, 0x414140deU, 0x5dae2223U,
@@ -228,16 +322,46 @@ int main(void) {
     }
     uart_puts("SHA256_FIPS_KAT_IRQ_OK\n");
 
-    /* 8. Verilated 32-bit SPI Master RTL loopback transfer + PLIC IRQ 16 */
+    /* 9. Verilated FIPS 197 AES-128 RTL: NIST Appendix B KAT + PLIC IRQ 17 */
+    R32(USOC_AES128_CRYPTO_0_BASE + 0x10U) = 0x2b7e1516U;
+    R32(USOC_AES128_CRYPTO_0_BASE + 0x14U) = 0x28aed2a6U;
+    R32(USOC_AES128_CRYPTO_0_BASE + 0x18U) = 0xabf71588U;
+    R32(USOC_AES128_CRYPTO_0_BASE + 0x1CU) = 0x09cf4f3cU;
+    R32(USOC_AES128_CRYPTO_0_BASE + 0x20U) = 0x3243f6a8U;
+    R32(USOC_AES128_CRYPTO_0_BASE + 0x24U) = 0x885a308dU;
+    R32(USOC_AES128_CRYPTO_0_BASE + 0x28U) = 0x313198a2U;
+    R32(USOC_AES128_CRYPTO_0_BASE + 0x2CU) = 0xe0370734U;
+    R32(USOC_AES128_CRYPTO_0_BASE + 0x00U) = 1U;
+    for (unsigned w = 0; g_aes_irqs == 0U && w < 1000U; ++w) __asm__ volatile("nop");
+    if (g_aes_irqs != 1U ||
+        R32(USOC_AES128_CRYPTO_0_BASE + 0x08U) != 1U ||
+        R32(USOC_AES128_CRYPTO_0_BASE + 0x30U) != 0x3925841dU ||
+        R32(USOC_AES128_CRYPTO_0_BASE + 0x34U) != 0x02dc09fbU ||
+        R32(USOC_AES128_CRYPTO_0_BASE + 0x38U) != 0xdc118597U ||
+        R32(USOC_AES128_CRYPTO_0_BASE + 0x3CU) != 0x196a0b32U) finish(0x13333U);
+    uart_puts("AES128_FIPS197_IRQ_OK\n");
+
+    /* 10. Verilated 32-bit SPI Master RTL loopback transfer + PLIC IRQ 16 */
     R32(USOC_SPI_CTRL_0_BASE + 0x08U) = 0xA55A1234U;
-    R32(USOC_SPI_CTRL_0_BASE + 0x00U) = 0x00000107U; /* enable | loopback | start | div=1 */
+    R32(USOC_SPI_CTRL_0_BASE + 0x00U) = 0x00000107U;
     for (unsigned w = 0; g_spi_irqs == 0U && w < 1000U; ++w) __asm__ volatile("nop");
     if (g_spi_irqs != 1U ||
         R32(USOC_SPI_CTRL_0_BASE + 0x0CU) != 0xA55A1234U ||
         R32(USOC_SPI_CTRL_0_BASE + 0x14U) != 1U) finish(0x13333U);
     uart_puts("SPI_CTRL_RTL_IRQ_OK\n");
 
-    /* 9. SystemC PMP Bus Guard blocking unauthorized CPU write (Store Fault + PLIC IRQ 21) */
+    /* 11. Verilated I2C Master + Loopback Slave FSM RTL (addr 0x50, data 0xC3) + PLIC IRQ 18 */
+    R32(USOC_I2C_CTRL_0_BASE + 0x08U) = 0x50U;
+    R32(USOC_I2C_CTRL_0_BASE + 0x0CU) = 0xC3U;
+    R32(USOC_I2C_CTRL_0_BASE + 0x00U) = 0x07U; /* enable | loopback_slave | start */
+    for (unsigned w = 0; g_i2c_irqs == 0U && w < 1000U; ++w) __asm__ volatile("nop");
+    if (g_i2c_irqs != 1U ||
+        (R32(USOC_I2C_CTRL_0_BASE + 0x04U) & 6U) != 6U ||
+        R32(USOC_I2C_CTRL_0_BASE + 0x10U) != 0xC3U ||
+        R32(USOC_I2C_CTRL_0_BASE + 0x18U) != 1U) finish(0x13333U);
+    uart_puts("I2C_CTRL_RTL_IRQ_OK\n");
+
+    /* 12. SystemC PMP Bus Guard blocking unauthorized CPU write (Store Fault + PLIC IRQ 21) */
     R32(USOC_PROTECTED_SCRATCH_BASE) = 0xCAFEBABEU;
     R32(USOC_PMP_GUARD_0_BASE + 0x04U) = (uint32_t)USOC_PROTECTED_SCRATCH_BASE;
     R32(USOC_PMP_GUARD_0_BASE + 0x08U) =
@@ -254,7 +378,7 @@ int main(void) {
         R32(USOC_PROTECTED_SCRATCH_BASE) != 0xCAFEBABEU) finish(0x13333U);
     uart_puts("PMP_GUARD_FAULT_IRQ_OK\n");
 
-    /* 10. Second-master NoC DMA Engine: valid 16B copy + PLIC IRQ 14 + unauthorized DMA PMP block */
+    /* 13. Third-master NoC DMA Engine: valid 16B copy + PLIC IRQ 14 + unauthorized DMA PMP block */
     static const uint32_t dma_pattern[4] = {
         0x11223344U, 0x55667788U, 0x99AABBCCU, 0xDDEEFF00U
     };
@@ -289,7 +413,7 @@ int main(void) {
         R32(USOC_PROTECTED_SCRATCH_BASE) != 0xCAFEBABEU) finish(0x13333U);
     uart_puts("DMA_PMP_BLOCK_OK\n");
 
-    /* 11. Verilated 64-line L2 Cache & DMA Coherency Snoop RTL counter audit */
+    /* 14. Verilated 64-line L2 Cache & SMP/DMA Coherency Snoop RTL counter audit */
     uint32_t l2_hits   = R32(USOC_L2_CACHE_0_BASE + 0x00U);
     uint32_t l2_misses = R32(USOC_L2_CACHE_0_BASE + 0x04U);
     uint32_t l2_snoops = R32(USOC_L2_CACHE_0_BASE + 0x08U);

@@ -1,8 +1,9 @@
-# Single Unified Multi-Platform Heterogeneous SoC mapped over a SystemC/TLM-2.0 2x2 Mesh NoC.
-# Hybrid Industrial Co-Simulation Top: FOUR Verilator-compiled synthesizable SystemVerilog RTL
-# modules (mac_npu_rtl.sv, sha256_rtl.sv, spi_ctrl_rtl.sv, l2_cache_rtl.sv) co-simulating live
-# alongside SystemC/TLM-2.0 models (Chipyard GCD, OpenTitan GPIO, 2nd-master DMA, PMP Bus Guard,
-# QEMU-compatible UART/CLINT/PLIC/RAM/ROM/Finisher) and GDB RSP debug stub on ONE 2x2 Mesh NoC.
+# Single Unified Multi-Platform Heterogeneous SMP SoC mapped over a SystemC/TLM-2.0 2x2 Mesh NoC.
+# Hybrid Industrial Co-Simulation Top: Dual-Hart SMP RV64IMA_Zicsr + SIX Verilator-compiled
+# synthesizable SystemVerilog RTL modules (mac_npu_rtl.sv, sha256_rtl.sv, aes128_rtl.sv,
+# spi_ctrl_rtl.sv, i2c_ctrl_rtl.sv, l2_cache_rtl.sv) co-simulating live alongside SystemC/TLM-2.0
+# models (Chipyard GCD, OpenTitan GPIO, 3rd-master DMA, PMP Bus Guard, QEMU-compatible UART/CLINT/
+# PLIC/RAM/ROM/Finisher), IR-generated NoC routing table, and GDB RSP debug stub on ONE 2x2 Mesh NoC.
 schema_version: unified-systemc-soc-1
 name: Unified_Hetero_MultiPlatform_SoC
 noc:
@@ -12,24 +13,29 @@ noc:
   hop_latency_ns: 10
   link_latency_ns: 5
   cpu_router: [0, 0]
+  hart1_router: [1, 0]
 cpu:
-  name: unified_rv64_core
-  isa: rv64im_zicsr
+  name: unified_rv64_smp
+  harts: 2
+  isa: rv64ima_zicsr
   privilege: M
   pmp_regions: 4
   clock_hz: 50000000
   timebase_hz: 10000000
   entry: 0x80000000
   stack_top: 0x800F0000
+  hart1_stack_top: 0x800E0000
   protected_scratch: 0x80100000
   protected_size: 0x1000
   dma_src_buf: 0x80110000
   dma_dst_buf: 0x80120000
+  smp_shared_mem: 0x80130000
   model_disclosure: >-
-    SystemC/TLM-2.0 RV64IM_Zicsr functional initiator with real M-mode PMP CSRs, trap controller,
-    and GDB RSP debug stub; co-simulates live with 4 Verilator-compiled SystemVerilog RTL blocks
-    (MAC/MatMul NPU, FIPS 180-4 SHA-256, 32-bit SPI Controller, 64-line L2 Cache/Snoop Monitor)
-    and a 2nd-master NoC DMA engine.
+    Dual-Hart SMP SystemC/TLM-2.0 RV64IMA_Zicsr functional initiators (Hart 0 & Hart 1) with real
+    M-mode PMP CSRs, RV64A atomics (LR/SC/AMO), CLINT IPI software interrupts, trap controllers,
+    and GDB RSP debug stub; co-simulates live with 6 Verilator-compiled clean-room SystemVerilog
+    RTL blocks (MAC/MatMul NPU, FIPS 180-4 SHA-256, FIPS 197 AES-128, 32-bit SPI Master, I2C
+    Master/Slave FSM, 64-line L2 Cache/Snoop Monitor) and a 3rd-master NoC DMA engine.
 devices:
 - name: boot_rom
   platform: qemu-io
@@ -59,7 +65,7 @@ devices:
   base: 0x1A000000
   size: 0x00001000
   router: [0, 0]
-  disclosure: Clean-room Verilator-compiled 64-line L2 cache tag & DMA coherency snoop RTL (l2_cache_rtl.sv).
+  disclosure: Clean-room Verilator-compiled 64-line L2 cache tag & DMA/SMP coherency snoop RTL (l2_cache_rtl.sv).
 - name: sys_clint
   platform: qemu-io
   model: clint
@@ -91,6 +97,15 @@ devices:
   irq: 16
   router: [1, 0]
   disclosure: Clean-room Verilator-compiled 32-bit SPI master controller RTL (spi_ctrl_rtl.sv).
+- name: i2c_ctrl_0
+  platform: rtl-io
+  model: user.i2c_ctrl
+  backend: verilator-rtl
+  base: 0x1C000000
+  size: 0x00001000
+  irq: 18
+  router: [1, 0]
+  disclosure: Clean-room Verilator-compiled I2C master + loopback slave FSM RTL (i2c_ctrl_rtl.sv).
 - name: chipyard_gcd_0
   platform: chipyard
   model: chipyard.gcd
@@ -115,7 +130,7 @@ devices:
   size: 0x00001000
   irq: 14
   router: [0, 1]
-  disclosure: Second TLM-2.0 bus master initiating real memory transfers across the 2x2 NoC.
+  disclosure: Third TLM-2.0 bus master initiating real memory transfers across the 2x2 NoC.
 - name: sha256_crypto_0
   platform: rtl-security
   model: user.sha256_crypto
@@ -134,6 +149,15 @@ devices:
   irq: 20
   router: [1, 1]
   disclosure: Clean-room Verilator-compiled MAC + 2x2 MatMul RTL (mac_npu_rtl.sv), distinct from Chipyard Gemmini.
+- name: aes128_crypto_0
+  platform: rtl-security
+  model: user.aes128_crypto
+  backend: verilator-rtl
+  base: 0x1B000000
+  size: 0x00001000
+  irq: 17
+  router: [1, 1]
+  disclosure: Clean-room Verilator-compiled FIPS 197 AES-128 10-round hardware engine RTL (aes128_rtl.sv).
 - name: pmp_guard_0
   platform: systemc-pmp
   model: user.pmp_guard
