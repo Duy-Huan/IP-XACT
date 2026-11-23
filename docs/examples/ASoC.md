@@ -54,6 +54,64 @@ The official **ASoC** example lives in [`examples/ASoC/`](../../examples/ASoC/RE
 
 ---
 
-## 3. Verified Execution Reports
+## 3. Verified Live Execution Reports (Podman SDK CI Run `45151702324`)
 
-See [`examples/ASoC/README.md`](../../examples/ASoC/README.md) for all reproducible CLI commands. Live measured Podman CI simulation metrics are recorded below upon CI completion.
+All numbers below are measured verbatim from GitHub Actions `Podman SDK and OCI release` run [`45151702324`](https://github.com/Duy-Huan/IP-XACT/actions/runs/45151702324) on commit `2fa29af` inside the offline Rootless Podman SDK (`c++ 14.2.0`, `SystemC 3.0.0 / libsystemc-dev 3.0.1-1`, `Verilator 5.032 2025-01-01 rev`, `riscv64-unknown-elf-gcc 14.2.0`).
+
+Official exported reports live under `examples/ASoC/reports/`:
+
+- [`examples/ASoC/reports/asoc-simulation-report.md`](../../examples/ASoC/reports/asoc-simulation-report.md)
+- [`examples/ASoC/reports/asoc-console.log`](../../examples/ASoC/reports/asoc-console.log)
+- [`examples/ASoC/reports/asoc-calibration-report.json`](../../examples/ASoC/reports/asoc-calibration-report.json)
+- [`examples/ASoC/reports/asoc-dse-report.md`](../../examples/ASoC/reports/asoc-dse-report.md)
+- [`examples/ASoC/reports/asoc-chia-loop-report.md`](../../examples/ASoC/reports/asoc-chia-loop-report.md)
+
+### 3.1 Multi-Cluster SMP, 4-Tier Bus & 7× Verilator RTL Simulation (`asoc_unified.yaml`)
+
+- **Status:** **PASSED** | **Functional Coverage:** **`100.0%` (`30/30` bins)** | **Console Markers:** **`25/25` PASS**
+- **GDB RSP Live Check:** **PASSED** | **Negative Guest Failure (`fail_sw.elf`):** **ENFORCED** | **IEEE 1364 VCD:** **CAPTURED**
+- **Instructions Executed:** **`22,539`** (`hart0=9,573`, `hart1=4,218`, `hart2=4,765`, `hart3=3,983`)
+- **SMP Synchronization:** `67` RV64A atomic ops, `3` CLINT IPIs (`msip[1..3]`), `25` traps/IRQs, `1` hardware mailbox IPC message (`19` MMIO tx)
+- **SystemC Simulated Time:** **`396,369,000 ps` (`396.369 us`)**
+- **2×2 Mesh NoC & 4-Tier Bridge Traffic:** `26,871` total tx, `19,736` hops, `11,237` backpressure stalls, `18` DMA master tx (`20` IR routes):
+  - `noc_backbone` (Tier 0): **`25,507`** tx
+  - `axi_ai_bridge` (Tier 1, `+4 ns`): **`83`** tx (`mac_npu_0=31`, `lpu_engine_0=28`, `ai_scratch_sram=12`, `chipyard_gcd_0=12`)
+  - `axi_sec_bridge` (Tier 2, `+6 ns`): **`62`** tx (`sha256_crypto_0=29`, `aes128_crypto_0=15`, `opentitan_gpio_0=11`, `pmp_guard_0=7`, `2` blocked writes)
+  - `apb_periph_bridge` (Tier 3, `+8 ns`): **`1,219`** tx (`uart_console_0=1,069`, `uart_debug_1=56`, `sys_plic=55`, `cluster_mailbox_0=19`, `sys_clint=8`, `i2c_ctrl_0=7`, `spi_ctrl_0=5`)
+
+| Verilator 5.032 RTL Block | Source File | Measured RTL Cycles | Verified Hardware Output |
+|---|---|---:|---|
+| `mac_npu_0` (NPU) | `rtl/mac_npu_rtl.sv` | `37` | Scalar dot `= 126`, 2×2 MatMul `= [[19,22],[43,50]]`, IRQ `20` |
+| `lpu_engine_0` (LPU) | `rtl/lpu_rtl.sv` | `33` | Linear+ReLU `+46` & clamp `0`, Argmax idx `= 1` (`max_logit=485`), IRQ `22` |
+| `sha256_crypto_0` | `rtl/sha256_rtl.sv` | `95` | NIST FIPS 180-4 `SHA256("abc")` exact KAT, IRQ `15` |
+| `aes128_crypto_0` | `rtl/aes128_rtl.sv` | `26` | NIST FIPS 197 Appendix B exact KAT, IRQ `17` |
+| `spi_ctrl_0` | `rtl/spi_ctrl_rtl.sv` | `38` | 32-bit shift loopback `0xA55A1234`, IRQ `16` |
+| `i2c_ctrl_0` | `rtl/i2c_ctrl_rtl.sv` | `28` | Master+Slave FSM addr `0x50`, data `0xC3`, IRQ `18` |
+| `l2_cache_0` | `rtl/l2_cache_rtl.sv` | `25,489` | `hits=25,230`, `misses=242` (`99.05%` hit rate), `dma_snoops=13` |
+
+### 3.2 7× Verilator RTL vs. SystemC TLM-2.0 Cycle Calibration
+
+- **Status:** **PASSED** (`functional_parity: true`, `within_budget: true`, `silicon_signoff: false`)
+- **RTL Hybrid Time:** `396,369,000 ps` (`19,818.45` cycles @ 20 ns/cycle)
+- **TLM Behavioral Time:** `396,260,000 ps` (`19,813.00` cycles @ 20 ns/cycle)
+- **Relative Timing Error:** **`0.000275` (`0.0275%`)** vs. budget `<= 10.0%` (`0.1`)
+
+### 3.3 Parallel DSE Sweep (`process`, `workers=2`) & CHIA 4-Iteration Optimization Loop
+
+| Point / Iteration | Hop / Link (ns) | Backend | Status / Oracle | Sim Time (ps) | NoC Hops | Speedup |
+|---|---|---|---:|---:|---:|---:|
+| DSE `noc_fast_tlm` (`train`) | `5 / 2` | `systemc-tlm` | **PASSED** | `323,194,000` | `18,996` | — |
+| DSE `noc_nom_tlm` (`train`) | `10 / 5` | `systemc-tlm` | **PASSED** | `396,260,000` | `19,731` | — |
+| DSE `noc_nom_rtl` (`train`) | `10 / 5` | `verilator-rtl` | **PASSED** | `396,369,000` | `19,736` | — |
+| DSE `noc_slow_tlm` (`holdout`) | `20 / 8` | `systemc-tlm` | **PASSED** | `495,504,000` | `19,971` | — |
+| CHIA Iter 1 `baseline_distributed_2x2` | `10 / 5` | `systemc-tlm` | **PASS** | `396,260,000` | `19,731` | `1.0000×` |
+| CHIA Iter 2 `co_locate_crypto_and_npu_near_hart0` | `10 / 5` | `systemc-tlm` | **PASS** | `395,359,000` | `19,611` | `1.0023×` |
+| CHIA Iter 3 `co_locate_accelerators_and_tune_noc_8ns` | `8 / 4` | `systemc-tlm` | **PASS** | `368,270,000` | `19,294` | `1.0760×` |
+| CHIA Iter 4 `pareto_low_latency_6ns_noc_balanced` | `6 / 3` | `systemc-tlm` | **PASS** | `343,053,000` | `19,076` | **`1.1551×`** |
+
+### 3.4 IEEE 1685-2022 Fabric Lowering, Flow Preflight & HTML5 Dashboard
+
+- `usp soc generate examples/ASoC/asoc_fabric.yaml --input-format fabric --engine both`: **GENERATED**, `20` instances, `ir_sha256=b324b7ee319165ee4f3a3897635ca3874c84e6b4062932542ec0c8ae83058e52`.
+- `usp flow preflight examples/ASoC/asoc_flow.yaml`: **READY**, `harts=4`, `workloads=[baremetal, linux]`, `blocking_issues=[]`.
+- `usp dashboard generate`: **PASSED**, `coverage_percent=100.0`, `sha256=049e0264f8b24af12964ed089b48bff623d69f4973c421550ed6ead13fb8429f`.
+- See [`examples/ASoC/README.md`](../../examples/ASoC/README.md) for all reproducible CLI commands and fidelity boundaries.

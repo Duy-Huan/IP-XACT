@@ -144,8 +144,24 @@ usp flow preflight examples/ASoC/asoc_flow.yaml
 
 ---
 
-## 4. Honest Fidelity & Scope Boundaries
+## 4. Verified Live Simulation Report Summary (Podman SDK CI Run `45151702324`)
+
+Captured verbatim from the offline Rootless Podman SDK CI run [`45151702324`](https://github.com/Duy-Huan/IP-XACT/actions/runs/45151702324) (`dev` @ `2fa29af`, `SystemC 3.0.0`, `Verilator 5.032`, `riscv64-unknown-elf-gcc 14.2.0`):
+
+| Verification Dimension | Measured Result | Official Report File |
+|---|---|---|
+| **Live 2-Cluster / 4-Hart + 7× RTL Run** | **PASSED** (`25/25` UART markers, **`30/30` = `100.0%`** coverage, `22,539` insns, `67` RV64A atomics, `3` IPIs, `25` traps/IRQs, `396.369 us`) | [`reports/asoc-simulation-report.md`](reports/asoc-simulation-report.md), [`reports/asoc-console.log`](reports/asoc-console.log) |
+| **4-Tier Bus & 2×2 Mesh NoC Traffic** | `26,871` total tx (`19,736` hops, `11,237` stalls, `18` DMA tx): `noc_backbone=25,507`, `axi_ai_bridge=83`, `axi_sec_bridge=62`, `apb_periph_bridge=1,219` | [`reports/asoc-simulation-report.md`](reports/asoc-simulation-report.md) |
+| **7× Verilator 5.032 RTL Cycles** | `mac_npu=37`, `lpu=33`, `sha256=95`, `aes128=26`, `spi=38`, `i2c=28`, `l2_cache=25,489` (`hits=25,230`, `misses=242`, `snoops=13`) | [`reports/asoc-simulation-report.md`](reports/asoc-simulation-report.md) |
+| **7× RTL vs. TLM-2.0 Calibration** | **PASSED** (`functional_parity=true`, RTL `396.369 us` vs TLM `396.260 us`, **`relative_error=0.000275` / `0.0275%`** vs `<= 10%` budget) | [`reports/asoc-calibration-report.json`](reports/asoc-calibration-report.json) |
+| **Parallel DSE Sweep (`process`, 2 workers)** | **PASSED** (`4/4` live points monotonic: `323.194 us` → `396.260 us` / `396.369 us` → `495.504 us`) | [`reports/asoc-dse-report.md`](reports/asoc-dse-report.md) |
+| **CHIA 4-Iter Cyclic Optimization Loop** | **PASSED** (`converged=true`, `4/4` isolated oracle PASS, **`1.1551×` speedup**: `396.260 us` → `343.053 us`, `-655` NoC hops) | [`reports/asoc-chia-loop-report.md`](reports/asoc-chia-loop-report.md) |
+| **HTML5 Dashboard, IP-XACT Fabric & Flow** | Dashboard **PASSED** (`100.0%`); Fabric **GENERATED** (`20` instances); Flow Preflight **READY** (`4` harts, `baremetal` + `linux`) | [`docs/examples/ASoC.md`](../../docs/examples/ASoC.md) |
+
+---
+
+## 5. Honest Fidelity & Scope Boundaries
 
 - In `verilator-rtl` mode (`hybrid-systemc-tlm2-multicluster-smp-and-7x-verilator-rtl-annotated-noc`), the 7 hardware blocks (`mac_npu_0`, `lpu_engine_0`, `sha256_crypto_0`, `aes128_crypto_0`, `spi_ctrl_0`, `i2c_ctrl_0`, `l2_cache_0`) execute real Verilator-compiled **clean-room** synthesizable SystemVerilog RTL cycle-by-cycle inside SystemC 3.0.1.
-- The 4 RV64IMA_Zicsr harts (across 2 clusters), 2×2 NoC + 3 hierarchical AXI/APB bridges, DMA master, IOPMP bus firewall, hardware mailbox, Chipyard GCD, and OpenTitan GPIO execute as SystemC/TLM-2.0 behavioral models—explicitly distinct from full upstream Chipyard Rocket/Gemmini silicon RTL, full OpenTitan EarlGrey RTL, or commercial cycle-accurate AXI5/CHI signoff models.
-- Verified live simulation outputs captured from CI are tracked in [`docs/examples/ASoC.md`](../../docs/examples/ASoC.md).
+- The 4 RV64IMA_Zicsr harts (across 2 clusters), 2×2 NoC + 3 hierarchical AXI/APB bridges, DMA master, IOPMP bus firewall, hardware mailbox, Chipyard GCD, and OpenTitan GPIO execute as SystemC/TLM-2.0 behavioral models—explicitly distinct from full upstream Chipyard Rocket/Gemmini silicon RTL, full OpenTitan EarlGrey RTL, or commercial cycle-accurate AXI5/CHI signoff models (`silicon_signoff: false`).
+- Full tables, provenance SHA-256 hashes, and walkthrough details are maintained in [`docs/examples/ASoC.md`](../../docs/examples/ASoC.md).

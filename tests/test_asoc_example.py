@@ -181,7 +181,7 @@ def test_asoc_live_multicluster_7rtl_simulation_calibration_dse_loop_dashboard(
     assert loop["converged"] is True
 
     dash = generate_dashboard(
-        tmp_path / "asoc-dashboard.html",
+        out_html=tmp_path / "asoc-dashboard.html",
         unified_report=run_dir / "report.json",
         calibration_report=cal_path,
         loop_report=loop_dir / "loop-report.json",
@@ -200,3 +200,26 @@ def test_resolve_unified_src_dir_works_for_examples_and_temp_copies(tmp_path: Pa
     copied.write_text(ASOC_UNIFIED.read_text())
     resolved_copy = resolve_unified_src_dir(copied)
     assert resolved_copy == resolved_direct
+
+
+def test_asoc_official_verified_reports_exist_and_are_well_formed() -> None:
+    reports_dir = ASOC_DIR / "reports"
+    console = (reports_dir / "asoc-console.log").read_text()
+    spec = load_unified_spec(ASOC_UNIFIED)
+    for marker in expected_markers_for_spec(spec):
+        assert marker in console, f"Official console report missing marker: {marker}"
+
+    cal = json.loads((reports_dir / "asoc-calibration-report.json").read_text())
+    assert cal["status"] == "PASSED"
+    assert cal["functional_parity"] is True
+    assert len(cal["rtl_cycles"]) == 7
+    assert cal["rtl_cycles"]["lpu"] > 0
+
+    for md_name in (
+        "asoc-simulation-report.md",
+        "asoc-dse-report.md",
+        "asoc-chia-loop-report.md",
+    ):
+        text = (reports_dir / md_name).read_text()
+        assert "PASSED" in text
+        assert "45151702324" in text
