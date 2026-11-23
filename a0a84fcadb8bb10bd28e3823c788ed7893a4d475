@@ -1,0 +1,27 @@
+{
+  "records": [
+    {
+      "artifacts": [],
+      "attempt": 1,
+      "conclusion": "success",
+      "created_utc": "2026-11-23T04:16:59.456861+00:00",
+      "event": "push",
+      "failure_details": [],
+      "jobs": {
+        "branch-policy": "success",
+        "custom-zephyr": "success",
+        "regression": "success",
+        "workflow-lint": "success"
+      },
+      "kind": "regression",
+      "publication": "not-applicable",
+      "ref": "refs/heads/dev",
+      "repository": "Duy-Huan/IP-XACT",
+      "run_id": 45109365303,
+      "scope": "hosted-required-jobs; native full/cold qualification separate",
+      "url": "https://github.com/Duy-Huan/IP-XACT/actions/runs/45109365303"
+    }
+  ],
+  "schema_version": "hosted-git-receipt-1",
+  "source_commit": "a0a84fcadb8bb10bd28e3823c788ed7893a4d475"
+}
