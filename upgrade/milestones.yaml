@@ -1,9 +1,9 @@
 schema_version: '1'
 baseline:
-  tag: v0.3.0-alpha.4
-  commit: a05dd99a6832f7fc1f8b9342636e5e1e811f2c9d
-  local_passed: 664
-  hosted_ci: unobserved
+  tag: v0.3.0-alpha.5
+  commit: 6a1492c9ad812862031dedab255ed7888014a1f6
+  local_passed: 826
+  hosted_ci: observed_failure
 policy:
   execution: sequential
   aggregate_ci: after_complete_batch
@@ -17,15 +17,47 @@ milestones:
   status: partial
   required_exits:
   - requirement: Canonical typed IR and equivalent YAML/IP-XACT intake
-    status: open
-    evidence: []
+    status: implemented
+    evidence:
+    - kind: implementation-reference
+      path: src/socsim/native_ir.py
+      qualification: scoped native IR v3-v6 contract; final qualification bound by release
+        receipt
+    - kind: implementation-reference
+      path: src/socsim/native_bus_xml.py
+      qualification: scoped standard bus XML intake; final qualification bound by release
+        receipt
+    - kind: implementation-reference
+      path: tests/test_native_ir.py
+      qualification: scoped native IR equivalence; final qualification bound by release
+        receipt
+    - kind: implementation-reference
+      path: tests/test_bus_xml.py
+      qualification: scoped XML/fabric equivalence; final qualification bound by release
+        receipt
   - requirement: Explicit CPU, memory, IRQ, clock/reset and hierarchy contracts
-    status: open
-    evidence: []
+    status: implemented
+    evidence:
+    - kind: implementation-reference
+      path: src/socsim/native_domains.py
+      qualification: scoped domain/hierarchy contract; full multi-domain hardware qualification
+        remains open
+    - kind: implementation-reference
+      path: tests/test_milestone_contracts.py
+      qualification: positive and negative domain-crossing unit checks; final qualification bound
+        by release receipt
   - requirement: General interface/address-space/translation representation and capability-checked
       lowering
-    status: open
-    evidence: []
+    status: implemented
+    evidence:
+    - kind: implementation-reference
+      path: src/socsim/native_domains.py
+      qualification: scoped per-initiator translation and lowering capability checks; timed/multi-view
+        backend lowering remains open
+    - kind: implementation-reference
+      path: tests/test_milestone_contracts.py
+      qualification: positive and negative initiator-view unit checks; final qualification bound
+        by release receipt
 - id: M2
   target_version: 0.3.0
   document: M2-model-packages.md
@@ -45,8 +77,16 @@ milestones:
       qualification: scoped native contract; final qualification bound by release
         receipt
   - requirement: Driver/register/reset/error and transaction capability contracts
-    status: open
-    evidence: []
+    status: implemented
+    evidence:
+    - kind: implementation-reference
+      path: src/socsim/native_package.py
+      qualification: scoped capability metadata and deterministic C register header synthesis;
+        wider transaction/DMA protocols remain open
+    - kind: implementation-reference
+      path: tests/test_milestone_contracts.py
+      qualification: package capability and header contract checks; final qualification bound by
+        release receipt
   - requirement: An independently authored package executes real MMIO/IRQ/error tests
       on both engines
     status: implemented
@@ -86,6 +126,9 @@ milestones:
       qualification: scoped native contract; final qualification bound by release
         receipt
     - kind: implementation-reference
+      path: src/socsim/lifecycle_preflight.py
+      qualification: unified design-agnostic ownership and capability preflight
+    - kind: implementation-reference
       path: tests/test_native_flow.py
       qualification: scoped native contract; final qualification bound by release
         receipt
@@ -109,8 +152,16 @@ milestones:
   status: partial
   required_exits:
   - requirement: IR-derived startup/linker/DTS/BSP and device drivers
-    status: open
-    evidence: []
+    status: implemented
+    evidence:
+    - kind: implementation-reference
+      path: src/socsim/native_bsp_gen.py
+      qualification: deterministic IR-derived map/linker/DTS/register-header bundle; arbitrary IP
+        driver synthesis and SMP RTOS remain open
+    - kind: implementation-reference
+      path: tests/test_milestone_contracts.py
+      qualification: IR BSP synthesis and eligibility checks; final qualification bound by release
+        receipt
   - requirement: Real bare-metal, FreeRTOS, Zephyr, both uCOS kernels and boot sequence
       tests
     status: implemented

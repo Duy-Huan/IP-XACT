@@ -1,10 +1,13 @@
 # Podman SDK on KDE Plasma (Linux amd64)
 
-The container packages the 0.2.0 application and SDK as `0.2.0-r1`. The independent
-tag `container-v0.2.0-r1` identifies this packaging revision, not a new compiler
-version or completed master specification. KDE Plasma can use this CLI from
-Konsole; guest serial output stays in the terminal. No X11/Wayland socket, desktop
-session, privileged mode, host container socket or KVM access is required.
+Current `dev` packages the CHIA-style HW/SW Emulator & QA SDK as `0.3.0a5-r1`
+(`localhost/socsim-sdk:0.3.0a5-r1`, archive `socsim-sdk-0.3.0a5-r1-linux-amd64.oci.tar`),
+adding `usp qa`, `socsim.sdk` (`EmulatorNode.run_in_podman()`), unseen-design
+QA (`Helios_QA_SoC`) and `bash scripts/podman.sh qa <suite>`. The earlier
+published tag `container-v0.2.0-r1` (`0.2.0-r1`) remains immutable and separate.
+KDE Plasma can use this CLI from Konsole; guest serial output stays in the
+terminal. No X11/Wayland socket, desktop session, privileged mode, host
+container socket or KVM access is required.
 
 ## Load the release
 

@@ -25,6 +25,149 @@ from .soc_spec import ROLE, catalog
 CONTRACT = "native-model-package-1"
 
 
+EXPECTED_INTERFACE = {
+    "protocol": "usp-mmio32-v1",
+    "access_bits": 32,
+    "aperture_bytes": 4096,
+    "endianness": "little",
+    "irq_mask": 1,
+    "irq_trigger": "level-high",
+    "state_owner": "peripheral-process",
+    "time": "annotated-systemc",
+}
+RESERVED_ARTIFACTS = frozenset({"model", "package.yaml", "package-build.json", "build.log"})
+SUPPORTED_REGISTER_ACCESS = frozenset({"read-only", "read-write", "write-one-clear"})
+
+
+def _validate_package_files(root, data):
+    if not isinstance(data["sources"], dict) or not 1 <= len(data["sources"]) <= 64:
+        raise ContractError("package requires explicit source hashes")
+    if data["build"]["entry"] not in data["sources"]:
+        raise ContractError("package build entry is not a pinned source")
+    files = dict(data["sources"])
+    for item in (data["license"], data["driver"]):
+        name = item.get("file", item.get("source"))
+        if not isinstance(name, str):
+            raise ContractError("package source/license paths must be strings")
+        if name in files and files[name] != item["sha256"]:
+            raise ContractError("ambiguous package source identity")
+        files[name] = item["sha256"]
+    for name, sha in files.items():
+        if name in RESERVED_ARTIFACTS:
+            raise ContractError("package input collides with a reserved build artifact")
+        p = inside(root, name)
+        if not isinstance(sha, str) or not re.fullmatch("[0-9a-f]{64}", sha) or digest(p) != sha:
+            raise ContractError("modified package input: " + name)
+    return files
+
+
+def _validate_package_markers(markers):
+    if (
+        not isinstance(markers, list)
+        or not markers
+        or len(set(markers)) != len(markers)
+        or any(
+            not isinstance(m, str) or not re.fullmatch(r"[A-Z][A-Z0-9_:.-]{0,100}", m)
+            for m in markers
+        )
+    ):
+        raise ContractError("package driver requires explicit unique acceptance markers")
+
+
+def _validate_package_registers(registers, aperture_bytes):
+    if not isinstance(registers, list) or not registers:
+        raise ContractError("package requires a register contract")
+    offsets = set()
+    register_names = set()
+    for register in registers:
+        keys(register, {"name", "offset", "access", "reset"}, "package register")
+        offset = register["offset"]
+        if (
+            type(offset) is not int
+            or offset % 4
+            or not 0 <= offset < aperture_bytes
+            or offset in offsets
+            or not isinstance(register["name"], str)
+            or not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", register["name"])
+            or register["name"] in register_names
+            or not isinstance(register["access"], str)
+            or register["access"] not in SUPPORTED_REGISTER_ACCESS
+            or type(register["reset"]) is not int
+            or not 0 <= register["reset"] < 2**32
+        ):
+            raise ContractError("invalid/unsupported package register contract")
+        offsets.add(offset)
+        register_names.add(register["name"])
+
+
+def _validate_package_conformance(vectors):
+    if not isinstance(vectors, list) or not 4 <= len(vectors) <= 64:
+        raise ContractError("package requires bounded reset/MMIO/IRQ/error conformance vectors")
+    for vector in vectors:
+        keys(vector, {"op", "offset", "data", "value", "status", "irq"}, "package conformance")
+        if (
+            any(type(v) is not int or not 0 <= v < 2**32 for v in vector.values())
+            or vector["op"] not in {0, 1, 2}
+            or vector["status"] not in {0, 1}
+            or vector["irq"] not in {0, 1}
+        ):
+            raise ContractError("invalid package conformance vector")
+    if not (
+        any(v["op"] == 2 for v in vectors)
+        and any(v["status"] == 1 for v in vectors)
+        and any(v["irq"] == 1 for v in vectors)
+        and any(v["op"] == 1 for v in vectors)
+    ):
+        raise ContractError("package qualification must cover reset, write, IRQ and bus error")
+
+
+def package_capabilities(package):
+    """Return explicit transaction, reset, error, register and driver capability metadata."""
+    iface = package["interface"]
+    vectors = package["conformance"]
+    return {
+        "contract": package["schema_version"],
+        "package_id": package["id"],
+        "vlnv": package["vlnv"],
+        "protocol": iface["protocol"],
+        "access_bits": iface["access_bits"],
+        "aperture_bytes": iface["aperture_bytes"],
+        "endianness": iface["endianness"],
+        "irq_trigger": iface["irq_trigger"],
+        "state_owner": iface["state_owner"],
+        "time_model": iface["time"],
+        "supports_reset": any(v["op"] == 2 for v in vectors),
+        "supports_bus_error": any(v["status"] == 1 for v in vectors),
+        "supports_irq": any(v["irq"] == 1 for v in vectors),
+        "register_count": len(package["registers"]),
+        "access_modes": sorted({r["access"] for r in package["registers"]}),
+        "driver_markers": list(package["driver"]["expected_markers"]),
+    }
+
+
+def generate_package_header(package, prefix=None):
+    """Synthesize a deterministic C register/reset/access contract header for a package."""
+    guard = re.sub(r"[^A-Z0-9]+", "_", (prefix or package["id"]).upper()).strip("_")
+    proto = package["interface"]["protocol"]
+    lines = [
+        f"#ifndef USP_PKG_{guard}_H",
+        f"#define USP_PKG_{guard}_H",
+        "#include <stdint.h>",
+        f"/* Generated from package {package['id']} ({package['vlnv']}); protocol {proto}. */",
+        f"#define USP_{guard}_APERTURE_BYTES 0x{package['interface']['aperture_bytes']:X}U",
+        f"#define USP_{guard}_ACCESS_BITS {package['interface']['access_bits']}U",
+    ]
+    for reg in sorted(package["registers"], key=lambda r: r["offset"]):
+        reg_name = reg["name"].upper()
+        lines.append(
+            f"#define USP_{guard}_REG_{reg_name}_OFFSET "
+            f"0x{reg['offset']:03X}U /* {reg['access']} */"
+        )
+        lines.append(f"#define USP_{guard}_REG_{reg_name}_RESET 0x{reg['reset']:08X}U")
+    lines.append(f"#endif /* USP_PKG_{guard}_H */")
+    return "\n".join(lines) + "\n"
+
+
 def read_package(path):
     path = path.resolve()
     data = read_yaml(path)
@@ -51,89 +194,12 @@ def read_package(path):
     keys(data["license"], {"spdx", "file", "sha256"}, "package license")
     keys(data["build"], {"language", "entry"}, "package build")
     keys(data["driver"], {"source", "sha256", "expected_markers"}, "package driver")
-    expected_interface = {
-        "protocol": "usp-mmio32-v1",
-        "access_bits": 32,
-        "aperture_bytes": 4096,
-        "endianness": "little",
-        "irq_mask": 1,
-        "irq_trigger": "level-high",
-        "state_owner": "peripheral-process",
-        "time": "annotated-systemc",
-    }
-    if data["interface"] != expected_interface or data["build"]["language"] != "systemc-c++17":
+    if data["interface"] != EXPECTED_INTERFACE or data["build"]["language"] != "systemc-c++17":
         raise ContractError("package requires an unimplemented transaction/build adapter")
-    if not isinstance(data["sources"], dict) or not 1 <= len(data["sources"]) <= 64:
-        raise ContractError("package requires explicit source hashes")
-    if data["build"]["entry"] not in data["sources"]:
-        raise ContractError("package build entry is not a pinned source")
-    files = dict(data["sources"])
-    for item in (data["license"], data["driver"]):
-        name = item.get("file", item.get("source"))
-        if not isinstance(name, str):
-            raise ContractError("package source/license paths must be strings")
-        if name in files and files[name] != item["sha256"]:
-            raise ContractError("ambiguous package source identity")
-        files[name] = item["sha256"]
-    for name, sha in files.items():
-        if name in {"model", "package.yaml", "package-build.json", "build.log"}:
-            raise ContractError("package input collides with a reserved build artifact")
-        p = inside(path.parent, name)
-        if not isinstance(sha, str) or not re.fullmatch("[0-9a-f]{64}", sha) or digest(p) != sha:
-            raise ContractError("modified package input: " + name)
-    markers = data["driver"]["expected_markers"]
-    if (
-        not isinstance(markers, list)
-        or not markers
-        or len(set(markers)) != len(markers)
-        or any(
-            not isinstance(m, str) or not re.fullmatch(r"[A-Z][A-Z0-9_:.-]{0,100}", m)
-            for m in markers
-        )
-    ):
-        raise ContractError("package driver requires explicit unique acceptance markers")
-    if not isinstance(data["registers"], list) or not data["registers"]:
-        raise ContractError("package requires a register contract")
-    offsets = set()
-    register_names = set()
-    for register in data["registers"]:
-        keys(register, {"name", "offset", "access", "reset"}, "package register")
-        offset = register["offset"]
-        if (
-            type(offset) is not int
-            or offset % 4
-            or not 0 <= offset < 4096
-            or offset in offsets
-            or not isinstance(register["name"], str)
-            or not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", register["name"])
-            or register["name"] in register_names
-            or not isinstance(register["access"], str)
-            or register["access"] not in {"read-only", "read-write", "write-one-clear"}
-            or type(register["reset"]) is not int
-            or not 0 <= register["reset"] < 2**32
-        ):
-            raise ContractError("invalid/unsupported package register contract")
-        offsets.add(offset)
-        register_names.add(register["name"])
-    vectors = data["conformance"]
-    if not isinstance(vectors, list) or not 4 <= len(vectors) <= 64:
-        raise ContractError("package requires bounded reset/MMIO/IRQ/error conformance vectors")
-    for vector in vectors:
-        keys(vector, {"op", "offset", "data", "value", "status", "irq"}, "package conformance")
-        if (
-            any(type(v) is not int or not 0 <= v < 2**32 for v in vector.values())
-            or vector["op"] not in {0, 1, 2}
-            or vector["status"] not in {0, 1}
-            or vector["irq"] not in {0, 1}
-        ):
-            raise ContractError("invalid package conformance vector")
-    if not (
-        any(v["op"] == 2 for v in vectors)
-        and any(v["status"] == 1 for v in vectors)
-        and any(v["irq"] == 1 for v in vectors)
-        and any(v["op"] == 1 for v in vectors)
-    ):
-        raise ContractError("package qualification must cover reset, write, IRQ and bus error")
+    files = _validate_package_files(path.parent, data)
+    _validate_package_markers(data["driver"]["expected_markers"])
+    _validate_package_registers(data["registers"], data["interface"]["aperture_bytes"])
+    _validate_package_conformance(data["conformance"])
     # Reuse the engine's exact identity/protocol validation without pretending a binary exists.
     validate_external(
         {
@@ -324,8 +390,27 @@ def main(argv):
     build.add_argument("package", type=Path)
     build.add_argument("--out", type=Path, required=True)
     commands.add_parser("verify").add_argument("out", type=Path)
+    commands.add_parser("inspect").add_argument("package", type=Path)
+    hdr = commands.add_parser("header")
+    hdr.add_argument("package", type=Path)
+    hdr.add_argument("--prefix")
+    hdr.add_argument("--out", type=Path)
     args = parser.parse_args(argv)
     try:
+        if args.command == "inspect":
+            package, _ = read_package(args.package)
+            print(json.dumps(package_capabilities(package), indent=2, sort_keys=True))
+            return 0
+        if args.command == "header":
+            package, _ = read_package(args.package)
+            text = generate_package_header(package, prefix=args.prefix)
+            if args.out:
+                args.out.parent.mkdir(parents=True, exist_ok=True)
+                args.out.write_text(text)
+                print(json.dumps({"status": "PASSED", "header": str(args.out)}))
+            else:
+                print(text, end="")
+            return 0
         result = (
             build_package(args.package, args.out)
             if args.command == "build"

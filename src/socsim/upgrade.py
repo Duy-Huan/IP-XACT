@@ -55,7 +55,13 @@ def validate_ledger(root):
                 or not isinstance(exit["evidence"], list)
             ):
                 raise ContractError("invalid milestone acceptance state")
-            if exit["status"] == "verified" and not exit["evidence"]:
+            if exit["status"] == "verified" and (
+                not exit["evidence"]
+                or all(
+                    isinstance(ev, dict) and ev.get("kind") == "implementation-reference"
+                    for ev in exit["evidence"]
+                )
+            ):
                 raise ContractError("verified exit requires actual qualification evidence")
         if item["status"] == "verified" and any(
             e["status"] != "verified" for e in item["required_exits"]
@@ -96,9 +102,20 @@ def validate_ledger(root):
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="usp upgrade")
     parser.add_argument("--root", type=Path, default=Path.cwd())
+    parser.add_argument(
+        "--audit",
+        action="store_true",
+        help="Include M1-M9 exit summary and AI_SOC/AIZ_SOC full-inventory readiness",
+    )
     args = parser.parse_args(argv)
     try:
-        print(json.dumps(validate_ledger(args.root), indent=2))
+        if args.audit:
+            from .readiness_audit import audit_milestone_readiness
+
+            payload = audit_milestone_readiness(args.root)
+        else:
+            payload = validate_ledger(args.root)
+        print(json.dumps(payload, indent=2))
         return 0
     except (ContractError, OSError, ValueError, TypeError, KeyError) as exc:
         print(json.dumps({"validation": "ERROR", "message": str(exc)}))

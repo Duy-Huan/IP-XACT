@@ -36,6 +36,7 @@ jobs:
           persist-credentials: false
       - name: Verify immutable tag and full local qualification
         run: |
+          git config --global --add safe.directory "${GITHUB_WORKSPACE:-$PWD}"
           uv python install 3.12.14
           uv sync --frozen --all-extras --python 3.12.14
           .venv/bin/python -m socsim.release check-tag "$GITHUB_REF_NAME" --out dist
@@ -87,4 +88,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           USP_NEEDS: ${{ toJSON(needs) }}
-        run: PYTHONPATH=src python3 -m socsim.hosted_ci publish --kind source-release
+        run: |
+          git config --global --add safe.directory "${GITHUB_WORKSPACE:-$PWD}"
+          PYTHONPATH=src python3 -m socsim.hosted_ci publish --kind source-release

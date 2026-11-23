@@ -1,0 +1,47 @@
+# Multi-platform Design 4 (Explicit Architectural Target & Honest Blocker Verification):
+# Documents the full combined user request:
+#   gem5 Garnet NoC + Chipyard Rocket CPU + Chipyard Gemmini NPU +
+#   OpenTitan PMP/ePMP + QEMU UART/IO in a single concurrent simulator.
+# Used by multiplatform QA to verify that unqualified adapters fail loudly
+# (E_CPU_ADAPTER / pinned-source-needs-adapter / unqualified device model)
+# rather than silently substituting an ISS or no-op stub.
+schema_version: multiplatform-target-audit-1
+name: MP_Design4_Full_Gemmini_OT_PMP_Target
+requested_blocks:
+- role: cpu
+  provider: chipyard
+  catalog_model: RocketConfig
+  adapter_model: chipyard.rocket_axi32
+  protocol: axi4-32-pa32
+  expected_readiness: qualified-native-or-rtl
+  note: Single-tile Rocket64 AXI32 RTL with hardware RISC-V PMP/Sv39 CSRs is qualified.
+- role: npu
+  provider: chipyard
+  catalog_model: gemmini-candidate
+  unqualified_device_model: chipyard.gemmini
+  protocol: tilelink
+  expected_readiness: pinned-source-needs-adapter
+  note: Upstream Chipyard Gemmini submodule is pinned; RoCC/DMA adapter and driver remain open.
+- role: pmp_security_core
+  provider: opentitan
+  catalog_model: rv_core_ibex
+  adapter_model: opentitan.earlgrey_full
+  unqualified_device_model: opentitan.pmp
+  protocol: tilelink-ul-32
+  expected_readiness: qualified-native-or-rtl
+  expected_adapter_error: E_CPU_ADAPTER
+  note: >-
+    RISC-V PMP/ePMP is an internal CPU-core CSR protection unit inside OpenTitan rv_core_ibex
+    (RV32) or Chipyard RocketTile (RV64), not a standalone MMIO peripheral. Concurrent
+    full EarlGrey top + Rocket + Gemmini + live gem5 Garnet + QEMU IO requires explicit
+    multi-engine ownership and RoCC/TL-UL adapters.
+- role: noc
+  provider: gem5
+  protocol: ruby-garnet-simple
+  expected_readiness: qualified-fabric-separate-engine
+  note: Live 4-router/6-router gem5 Garnet NoC runs in gem5 engine (fabric.py/coherent.py), not concurrently inside QEMU.
+- role: uart_io
+  provider: qemu
+  protocol: ns16550-mmio
+  expected_readiness: qualified-native-or-rtl
+  note: QEMU NS16550 UART, CLINT, PLIC, Finisher, ROM, RAM are qualified in native QEMU and qtest backing flows.

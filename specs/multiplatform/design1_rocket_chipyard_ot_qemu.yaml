@@ -1,0 +1,61 @@
+# Multi-platform Design 1:
+# Chipyard Rocket64 RTL CPU (with HW RISC-V PMP/Sv39 CSRs) + Chipyard GCD +
+# OpenTitan TL-UL GPIO + QEMU/gem5 backing UART, CLINT, PLIC, ROM, RAM, Finisher.
+schema_version: '1'
+name: MP_Design1_Rocket_OT_QEMU
+cpu:
+  name: chipyard_rocket_core
+  model: chipyard.rocket64-imac-sv39-axi32
+  timebase_hz: 10000000
+  clock_hz: 50000000
+boot:
+  ram: main_dram
+  rom: boot_rom
+  console: qemu_uart_console
+  entry: 2147483648
+devices:
+- name: main_dram
+  model: ram
+  base: 2147483648
+  size: 16777216
+- name: boot_rom
+  model: rom
+  base: 4096
+  size: 4096
+- name: sys_clint
+  model: clint
+  base: 33554432
+  size: 65536
+- name: sys_plic
+  model: plic
+  base: 201326592
+  size: 67108864
+- name: sim_finisher
+  model: finisher
+  base: 1048576
+  size: 4096
+- name: qemu_uart_console
+  model: uart
+  base: 285212672
+  size: 256
+  irq: 10
+- name: qemu_uart_telemetry
+  model: uart
+  base: 285216768
+  size: 256
+  irq: 11
+- name: chipyard_gcd_0
+  model: chipyard.gcd
+  base: 318767104
+  size: 4096
+  irq: 12
+- name: opentitan_gpio_0
+  model: opentitan.gpio
+  base: 335544320
+  size: 4096
+  irq: 13
+- name: opentitan_gpio_1
+  model: opentitan.gpio
+  base: 335548416
+  size: 4096
+  irq: 14

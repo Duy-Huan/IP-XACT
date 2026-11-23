@@ -1,0 +1,73 @@
+# Multi-platform Design 2:
+# 4-hart RV64 SMP cluster + IR-derived gem5 Ruby/Garnet 2x2 NoC topology +
+# dual Chipyard GCD + dual OpenTitan GPIO + dual QEMU UART/IO over >4 GiB map.
+schema_version: '1'
+name: MP_Design2_Gem5NoC_SMP
+cpu:
+  name: rv64_smp_cluster
+  model: qemu.rv64
+  gem5_model: gem5.RiscvTimingSimpleCPU
+  timebase_hz: 10000000
+  harts: 4
+  clock_hz: 800000000
+  memory_latency_ns: 20
+boot:
+  ram: main_dram_hi
+  rom: boot_rom
+  console: qemu_uart_0
+  entry: 8589934592
+devices:
+- name: main_dram_hi
+  model: ram
+  base: 8589934592
+  size: 67108864
+- name: noc_scratch_sram
+  model: ram
+  base: 8657043456
+  size: 131072
+- name: boot_rom
+  model: rom
+  base: 4096
+  size: 4096
+- name: sys_clint
+  model: clint
+  base: 33554432
+  size: 65536
+- name: sys_plic
+  model: plic
+  base: 201326592
+  size: 67108864
+- name: sim_finisher
+  model: finisher
+  base: 2097152
+  size: 4096
+- name: qemu_uart_0
+  model: uart
+  base: 8724152320
+  size: 256
+  irq: 6
+- name: qemu_uart_1
+  model: uart
+  base: 8724156416
+  size: 256
+  irq: 7
+- name: chipyard_gcd_east
+  model: chipyard.gcd
+  base: 8724160512
+  size: 4096
+  irq: 8
+- name: chipyard_gcd_west
+  model: chipyard.gcd
+  base: 8724164608
+  size: 4096
+  irq: 9
+- name: opentitan_gpio_east
+  model: opentitan.gpio
+  base: 8724168704
+  size: 4096
+  irq: 10
+- name: opentitan_gpio_west
+  model: opentitan.gpio
+  base: 8724172800
+  size: 4096
+  irq: 11

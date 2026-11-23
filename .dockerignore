@@ -23,6 +23,8 @@
 !tests/**
 !docs
 !docs/**
+!upgrade
+!upgrade/**
 !skills
 !skills/**
 !containers

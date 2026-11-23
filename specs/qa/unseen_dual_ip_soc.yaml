@@ -1,0 +1,71 @@
+# Unseen QA SoC specification: arbitrary names, high physical addresses and dual IPs.
+schema_version: '1'
+name: Helios_QA_SoC
+cpu:
+  name: helios_core
+  model: qemu.rv64
+  gem5_model: gem5.RiscvTimingSimpleCPU
+  timebase_hz: 10000000
+  harts: 1
+  clock_hz: 600000000
+  memory_latency_ns: 20
+boot:
+  ram: sram_main
+  rom: rom_boot
+  console: uart_primary
+  entry: 8589934592
+devices:
+- name: sram_main
+  model: ram
+  base: 8589934592
+  size: 67108864
+- name: sram_scratch
+  model: ram
+  base: 8657043456
+  size: 65536
+- name: rom_boot
+  model: rom
+  base: 4096
+  size: 4096
+- name: clint_sys
+  model: clint
+  base: 33554432
+  size: 65536
+- name: plic_sys
+  model: plic
+  base: 201326592
+  size: 67108864
+- name: exit_finisher
+  model: finisher
+  base: 2097152
+  size: 4096
+- name: uart_primary
+  model: uart
+  base: 8724152320
+  size: 256
+  irq: 4
+- name: uart_aux
+  model: uart
+  base: 8724156416
+  size: 256
+  irq: 5
+- name: gcd_alpha
+  model: chipyard.gcd
+  base: 8724160512
+  size: 4096
+  irq: 6
+- name: gcd_beta
+  model: chipyard.gcd
+  base: 8724164608
+  size: 4096
+  irq: 7
+- name: gpio_north
+  model: opentitan.gpio
+  base: 8724168704
+  size: 4096
+  irq: 8
+- name: gpio_south
+  model: opentitan.gpio
+  base: 8724172800
+  size: 4096
+  irq: 9
