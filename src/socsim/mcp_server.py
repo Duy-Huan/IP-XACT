@@ -28,6 +28,7 @@ from .dse_cluster import run_dse_sweep
 from .ip_catalog import IP_CATALOG, catalog_summary
 from .ip_registry import list_registry
 from .ip_scaffold import scaffold_ip_package
+from .multiplatform_composer import audit_composed_soc, plan_composed_soc, run_composed_soc
 from .native_bsp_gen import synthesize_bsp_bundle
 from .native_domains import derive_domains_from_ir
 from .native_flow import preflight_flow
@@ -180,6 +181,9 @@ class EmulatorMcpServer:
             "emulator_run_chia_loop": self._tool_run_chia_loop,
             "emulator_scaffold_ip": self._tool_scaffold_ip,
             "emulator_generate_dashboard": self._tool_generate_dashboard,
+            "emulator_compose_audit": self._tool_compose_audit,
+            "emulator_compose_plan": self._tool_compose_plan,
+            "emulator_compose_run": self._tool_compose_run,
         }
 
     def _resolve_path(self, raw: str, *, field: str = "path", must_exist: bool = False) -> Path:
@@ -618,6 +622,62 @@ class EmulatorMcpServer:
                 read_only=False,
                 idempotent=True,
             ),
+            McpToolSpec(
+                name="emulator_compose_audit",
+                description=(
+                    "Audit a generic multiplatform-soc-1 specification: clock domains, fabrics, "
+                    "CDC bridges, AXI4-Stream DAG, Chipyard/gem5/QEMU/RTL/usp-plugin bindings."
+                ),
+                input_schema={
+                    "type": "object",
+                    "required": ["spec_path"],
+                    "properties": {"spec_path": {"type": "string"}},
+                    "additionalProperties": False,
+                },
+                read_only=True,
+            ),
+            McpToolSpec(
+                name="emulator_compose_plan",
+                description=(
+                    "Validate a multiplatform-soc-1 spec and emit canonical IR, binding-lock.json, "
+                    "generated SystemC C++ top-level, IP-XACT 2022 XML, QEMU DTS, gem5 & Chipyard."
+                ),
+                input_schema={
+                    "type": "object",
+                    "required": ["spec_path", "out_dir"],
+                    "properties": {
+                        "spec_path": {"type": "string"},
+                        "out_dir": {"type": "string"},
+                    },
+                    "additionalProperties": False,
+                },
+                read_only=False,
+                idempotent=True,
+            ),
+            McpToolSpec(
+                name="emulator_compose_run",
+                description=(
+                    "Compile and execute a generic multiplatform-soc-1 SoC with Verilator RTL, "
+                    "live out-of-process usp-mmio32-v1 socket plugins, AXI4-Stream & QEMU check."
+                ),
+                input_schema={
+                    "type": "object",
+                    "required": ["spec_path", "out_dir"],
+                    "properties": {
+                        "spec_path": {"type": "string"},
+                        "out_dir": {"type": "string"},
+                        "mode": {
+                            "type": "string",
+                            "enum": ["auto", "hybrid", "tlm"],
+                            "default": "auto",
+                        },
+                        "verify_qemu_crosscheck": {"type": "boolean", "default": True},
+                    },
+                    "additionalProperties": False,
+                },
+                read_only=False,
+                idempotent=False,
+            ),
         )
 
     # --- Tool implementations ---
@@ -897,6 +957,25 @@ class EmulatorMcpServer:
             calibration_report=cal,
             dse_report=dse,
             loop_report=lp,
+        )
+
+    def _tool_compose_audit(self, args: dict[str, Any]) -> dict[str, Any]:
+        spec_path = self._resolve_path(args["spec_path"], field="spec_path", must_exist=True)
+        return audit_composed_soc(spec_path)
+
+    def _tool_compose_plan(self, args: dict[str, Any]) -> dict[str, Any]:
+        spec_path = self._resolve_path(args["spec_path"], field="spec_path", must_exist=True)
+        out_dir = self._resolve_path(args["out_dir"], field="out_dir", must_exist=False)
+        return plan_composed_soc(spec_path, out_dir)
+
+    def _tool_compose_run(self, args: dict[str, Any]) -> dict[str, Any]:
+        spec_path = self._resolve_path(args["spec_path"], field="spec_path", must_exist=True)
+        out_dir = self._resolve_path(args["out_dir"], field="out_dir", must_exist=False)
+        return run_composed_soc(
+            spec_path,
+            out_dir,
+            mode=str(args.get("mode", "auto")),
+            verify_qemu_crosscheck=bool(args.get("verify_qemu_crosscheck", True)),
         )
 
     # --- MCP Resources & Prompts ---

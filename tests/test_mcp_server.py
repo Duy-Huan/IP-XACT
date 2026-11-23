@@ -367,6 +367,12 @@ def test_mcp_cli_tools_and_client_configs():
     assert proc.returncode == 0, proc.stderr
     data = json.loads(proc.stdout)
     assert data["server"] == SERVER_NAME
-    assert len(data["tools"]) == 20
+    assert len(data["tools"]) == 23
+    names = {t["name"] for t in data["tools"]}
+    assert {
+        "emulator_compose_audit",
+        "emulator_compose_plan",
+        "emulator_compose_run",
+    } <= names
     assert len(data["resources"]) == 5
     assert len(data["prompts"]) == 3

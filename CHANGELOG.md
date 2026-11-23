@@ -2,6 +2,21 @@
 
 ## 0.3.0a5 — development candidate (v0.3.0-alpha.5)
 
+- Add the generic data-driven **Multi-Platform SoC Composer & Cross-Binding Engine**
+  (`multiplatform-soc-1`, `src/socsim/multiplatform_composer.py`,
+  `src/socsim/resources/composer/composer_runtime.hpp`, `usp compose`, 3 MCP tools)
+  and the official telecom baseband reference SoC **BSoC** (`examples/BSoC/`,
+  `docs/examples/BSoC.md`, `upgrade/bsoc-multiplatform-audit.md`,
+  `tests/test_bsoc_and_composer.py`): resolves 8 multi-platform bottlenecks with
+  dual-clock CDC (`core_clk 800 MHz <-> dsp_clk 250 MHz`), 3 crossbars
+  (`TileLink` + `AXI4 Control` + `AXI4 Data`), independent `JTAG-to-AXI4` and
+  `DMA` bus masters, 5-stage acyclic `AXI4-Stream` DSP pipeline, 5× Verilator
+  5.032 RTL blocks (`hwacha_vec4_rtl.sv`, `tuner_32ph_rtl.sv`, `fir_decim8_rtl.sv`,
+  `fft_128pt_rtl.sv`, `l2_cache_rtl.sv`), live out-of-process `usp-mmio32-v1`
+  Unix-socket plugin binding (`bsoc.polyphase_12t`), mixed-signal TISAR ADC +
+  18 KiB LUT, 5× SAM SRAMs, 512 KiB Pattern Gen/Logic Analyzer, Hybrid-vs-TLM
+  calibration, live QEMU RV64 crosscheck, and synchronized IP-XACT / QEMU / gem5 /
+  Chipyard exports.
 - Add the official flagship **ASoC** example (`examples/ASoC/`, `docs/examples/ASoC.md`,
   `tests/test_asoc_example.py`): a 20-IP, 2-CPU-cluster (4-hart RV64IMA_Zicsr),
   4-tier hierarchical interconnect (`noc_backbone` + `axi_ai_bridge` +

@@ -1,0 +1,95 @@
+schema_version: native-model-package-1
+id: bsoc.polyphase_12t
+vlnv: socsim.telecom:dsp:polyphase_12t:1.0
+license:
+  spdx: Apache-2.0
+  file: LICENSE
+  sha256: cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
+sources:
+  tlm-polyphase-12t.cpp: 93c1cec1de0c03168c21d863999cad08373a00f8af2a6beb8785d5b3d8c8baff
+build:
+  language: systemc-c++17
+  entry: tlm-polyphase-12t.cpp
+interface:
+  protocol: usp-mmio32-v1
+  access_bits: 32
+  aperture_bytes: 4096
+  endianness: little
+  irq_mask: 1
+  irq_trigger: level-high
+  state_owner: peripheral-process
+  time: annotated-systemc
+registers:
+- name: ctrl_cmd
+  offset: 0
+  access: read-write
+  reset: 0
+- name: phase_sel
+  offset: 4
+  access: read-write
+  reset: 0
+- name: in_sample
+  offset: 8
+  access: read-write
+  reset: 0
+- name: out_sample
+  offset: 12
+  access: read-only
+  reset: 0
+- name: irq_status
+  offset: 16
+  access: write-one-clear
+  reset: 0
+- name: tap_checksum
+  offset: 20
+  access: read-only
+  reset: 1024
+driver:
+  source: selftest.c
+  sha256: 8ee2579b4dacf09c604e9bf0757234e9b76e2bb79dc4454eccb18eccf0309e7f
+  expected_markers:
+  - BSOC_POLYPHASE_RESET_OK
+  - BSOC_POLYPHASE_FILTER_IRQ_OK
+conformance:
+- op: 2
+  offset: 0
+  data: 0
+  value: 0
+  status: 0
+  irq: 0
+- op: 0
+  offset: 20
+  data: 0
+  value: 1024
+  status: 0
+  irq: 0
+- op: 1
+  offset: 8
+  data: 64
+  value: 64
+  status: 0
+  irq: 0
+- op: 1
+  offset: 0
+  data: 1
+  value: 1
+  status: 0
+  irq: 1
+- op: 0
+  offset: 12
+  data: 0
+  value: 1
+  status: 0
+  irq: 1
+- op: 1
+  offset: 16
+  data: 1
+  value: 1
+  status: 0
+  irq: 0
+- op: 1
+  offset: 12
+  data: 99
+  value: 0
+  status: 1
+  irq: 0
