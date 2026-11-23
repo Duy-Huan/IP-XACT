@@ -175,7 +175,7 @@ bash scripts/podman.sh mcp
 All documentation is organized under the **Diataxis** taxonomy in [`docs/README.md`](docs/README.md):
 
 - **Onboarding & Environment:** [`docs/setup-and-environment.md`](docs/setup-and-environment.md) · [`docs/podman.md`](docs/podman.md) · [`docs/build-reproducibility.md`](docs/build-reproducibility.md)
-- **Architecture & Internals:** [`docs/architecture.md`](docs/architecture.md) · [`src/README.md`](src/README.md) · [`docs/canonical-native-ir.md`](docs/canonical-native-ir.md) · [`docs/unified-systemc-soc.md`](docs/unified-systemc-soc.md)
+- **Architecture & Internals:** [`docs/architecture.md`](docs/architecture.md) · [`src/README.md`](src/README.md) · [`docs/canonical-native-ir.md`](docs/canonical-native-ir.md) · [`docs/unified-systemc-soc.md`](docs/unified-systemc-soc.md) · [`examples/ASoC`](examples/ASoC/README.md) (Official 20-IP / 2-Cluster / NPU + LPU + PMP Example)
 - **AI & Automation Interfaces:** [`docs/mcp-server.md`](docs/mcp-server.md) · [`scripts/README.md`](scripts/README.md) · [`containers/README.md`](containers/README.md)
 - **Verification & Governance:** [`docs/verification-status.md`](docs/verification-status.md) · [`docs/industrial-readiness.md`](docs/industrial-readiness.md) · [`docs/roadmap.md`](docs/roadmap.md) · [`upgrade/enterprise-emulator-roadmap.md`](upgrade/enterprise-emulator-roadmap.md) · [`CHANGELOG.md`](CHANGELOG.md)
 

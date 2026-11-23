@@ -1,0 +1,12 @@
+schema_version: native-flow-1
+spec: asoc_fabric.yaml
+input_format: fabric
+engine: both
+packages: []
+software:
+  - id: baremetal
+    kind: baremetal
+    timeout: 90
+  - id: linux
+    kind: linux
+    timeout: 180

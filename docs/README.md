@@ -24,6 +24,7 @@
 | [`setup-and-environment.md`](setup-and-environment.md) | All engineers | Complete Python `.venv`, `requirements*.txt`, QEMU, gem5, Chipyard, OpenTitan & Podman SDK setup |
 | [`podman.md`](podman.md) | Workstation / KDE Plasma / CI | Building, verifying offline, exporting, and running the rootless Podman OCI SDK |
 | [`creating-soc.md`](creating-soc.md) | SoC Architects | Authoring a new IP-XACT 2022 project and running validation/elaboration |
+| [`examples/ASoC.md`](examples/ASoC.md) | SoC Architects / AI HW-SW | **Flagship Official Example (`ASoC`)**: 20-IP, 2-CPU-Cluster (4-Hart), 4-Tier Hierarchical Bus + 3 Bridges, Verilator NPU + LPU + 7× RTL, Dual-Layer PMP & CHIA Loop |
 | [`examples/rv64-minimal.md`](examples/rv64-minimal.md) | Hardware/SW Bring-up | Generated custom QEMU machine + Zephyr RTOS CLINT/PLIC interrupt bring-up |
 | [`examples/rv64-hybrid.md`](examples/rv64-hybrid.md) | SystemC / RTL Engineers | Connecting QEMU MMIO/IRQ to SystemC / Verilated OpenTitan FIFO RTL |
 | [`examples/rv64-ips.md`](examples/rv64-ips.md) | Multi-Platform Engineers | Integrating source-built Chipyard Chisel GCD + OpenTitan GPIO/TL-UL |
