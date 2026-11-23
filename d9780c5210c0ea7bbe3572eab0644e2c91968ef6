@@ -1,0 +1,33 @@
+{
+  "records": [
+    {
+      "artifacts": [],
+      "attempt": 1,
+      "conclusion": "cancelled",
+      "created_utc": "2026-11-23T11:51:45.688805+00:00",
+      "event": "push",
+      "failure_details": [
+        {
+          "excerpt": "2026-11-23T11:39:38.3275761Z       Built docopt==0.6.2\n2026-11-23T11:39:38.4839324Z       Built socsim-platform @ file:///__w/IP-XACT/IP-XACT\n2026-11-23T11:39:38.4854188Z Prepared 30 packages in 2.30s\n2026-11-23T11:39:38.4873238Z warning: Failed to hardlink files; falling back to full copy. This may lead to degraded performance.\n2026-11-23T11:39:38.4875267Z          If the cache and target directories are on different filesystems, hardlinking may not be supported.\n2026-11-23T11:39:38.4877507Z          If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning.\n2026-11-23T11:39:39.8961659Z Installed 30 packages in 1.41s\n2026-11-23T11:39:39.8965105Z  + attrs==26.1.0\n2026-11-23T11:39:39.8969733Z  + cmake==3.31.6\n2026-11-23T11:39:39.8970922Z  + colorama==0.4.6\n2026-11-23T11:39:39.8971739Z  + docopt==0.6.2\n2026-11-23T11:39:39.8972138Z  + iniconfig==2.3.1\n2026-11-23T11:39:39.8972537Z  + jsonschema==4.25.1\n2026-11-23T11:39:39.8973089Z  + jsonschema-specifications==2025.9.1\n2026-11-23T11:39:39.8973703Z  + lxml==6.0.2\n2026-11-23T11:39:39.8974100Z  + meson==1.7.0\n2026-11-23T11:39:39.8974513Z  + mypy==1.18.2\n2026-11-23T11:39:39.8974930Z  + mypy-extensions==1.2.0\n2026-11-23T11:39:39.8975580Z  + ninja==1.11.1.4\n2026-11-23T11:39:39.8976460Z  + packaging==26.3\n2026-11-23T11:39:39.8976947Z  + pathspec==1.1.1\n2026-11-23T11:39:39.8977383Z  + pluggy==1.7.0\n2026-11-23T11:39:39.8978056Z  + pyelftools==0.32\n2026-11-23T11:39:39.8978554Z  + pygments==2.21.0\n2026-11-23T11:39:39.8979036Z  + pykwalify==1.8.0",
+          "job": "custom-zephyr",
+          "log_prefix_sha256": "e79993a77cc7f58038a24bc884355d00c933fe910a7a6c328af560a232bd0e22"
+        }
+      ],
+      "jobs": {
+        "branch-policy": "success",
+        "custom-zephyr": "cancelled",
+        "regression": "success",
+        "workflow-lint": "success"
+      },
+      "kind": "regression",
+      "publication": "not-applicable",
+      "ref": "refs/heads/dev",
+      "repository": "Duy-Huan/IP-XACT",
+      "run_id": 45167052059,
+      "scope": "hosted-required-jobs; native full/cold qualification separate",
+      "url": "https://github.com/Duy-Huan/IP-XACT/actions/runs/45167052059"
+    }
+  ],
+  "schema_version": "hosted-git-receipt-1",
+  "source_commit": "d9780c5210c0ea7bbe3572eab0644e2c91968ef6"
+}
