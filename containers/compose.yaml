@@ -1,0 +1,73 @@
+# Rootless Podman / OCI Compose definitions for socsim-platform SDK (0.3.0a5-r1).
+#
+# Prerequisites:
+#   bash scripts/podman.sh build
+#   mkdir -p .podman/{build,tools,results,venv,cache}
+#
+# Usage:
+#   podman compose -f containers/compose.yaml run --rm sdk
+#   podman compose -f containers/compose.yaml run --rm qa
+#   podman compose -f containers/compose.yaml run --rm unified-soc
+#   podman compose -f containers/compose.yaml run --rm -T mcp
+#
+# Note: On SELinux-enforcing hosts prefer `bash scripts/podman.sh` which applies
+# `--userns=keep-id` and `:Z` relabeling automatically.
+
+x-socsim-common: &socsim-common
+  image: ${USP_CONTAINER_IMAGE:-localhost/socsim-sdk:0.3.0a5-r1}
+  working_dir: /workspace
+  user: "${UID:-1000}:${GID:-1000}"
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  pids_limit: 2048
+  environment:
+    PYTHONPATH: /workspace/src
+    USP_JOBS: ${USP_JOBS:-2}
+    HOME: /cache/home
+    XDG_CACHE_HOME: /cache/xdg
+    UV_CACHE_DIR: /cache/uv
+  volumes:
+    - ..:/workspace
+    - ../.podman/build:/workspace/build
+    - ../.podman/tools:/workspace/.tools
+    - ../.podman/results:/workspace/results
+    - ../.podman/venv:/workspace/.venv
+    - ../.podman/cache:/cache
+
+services:
+  sdk:
+    <<: *socsim-common
+    stdin_open: true
+    tty: true
+    command: ["bash"]
+
+  mcp:
+    <<: *socsim-common
+    stdin_open: true
+    tty: false
+    command: ["usp", "mcp", "serve", "--root", "/workspace"]
+
+  qa:
+    <<: *socsim-common
+    command:
+      - bash
+      - -c
+      - >-
+        set -euo pipefail;
+        out="results/compose-qa-$(date -u +%Y%m%dT%H%M%SZ)";
+        usp qa run --suite "${USP_QA_SUITE:-full}" --root /workspace --out "$out";
+        usp qa scorecard "$out" > /dev/null;
+        cat "$out/scorecard.md"
+
+  unified-soc:
+    <<: *socsim-common
+    command:
+      - bash
+      - -c
+      - >-
+        set -euo pipefail;
+        out="results/compose-unified-soc-$(date -u +%Y%m%dT%H%M%SZ)";
+        usp unified-soc run specs/multiplatform/unified_hetero_soc.yaml --out "$out";
+        cat "$out/console.log"

@@ -1,158 +1,188 @@
-# IP-XACT RISC-V virtual platform
+# IP-XACT RISC-V Virtual Platform (`socsim-platform` / `usp`)
 
-The next compiler increment adds typed local address spaces and checked static
-decoder lowering in native IR v4. See [the decoder guide](docs/native-address-decoder.md)
-and [candidate batch](upgrade/address-decoder-batch.md). Broad M1-M9 completion and
-release qualification remain separate from these implemented contracts.
+| Metadata Field | Value |
+|---|---|
+| **Project Version** | `0.3.0a5` (SDK Image `0.3.0a5-r1`) |
+| **Standards** | IEEE 1685-2022 (IP-XACT), IEEE 1666 (SystemC 3.0.1 / TLM-2.0), IEEE 1364 (VCD), MCP JSON-RPC 2.0 |
+| **Primary CLI** | `usp` (alias: `socsim`) |
+| **Governance & Rules** | [`agent.md`](agent.md) · [`docs/roadmap.md`](docs/roadmap.md) · [`docs/verification-status.md`](docs/verification-status.md) |
 
-A headless compiler and execution toolchain: IEEE 1685-2022 IP-XACT → typed SoC IR →
-strict model binding → generated QEMU machine and software artifacts → real guest
-execution with evidence. The master-spec objective and development rules are in
-[agent.md](agent.md).
+An industrial, headless **IP-XACT → Canonical SoC IR → Multi-Platform HW/SW Emulator & Verification Platform** for RISC-V SoCs. It compiles validated IEEE 1685-2022 hardware descriptions and typed SoC specifications into deterministic simulation targets spanning **QEMU**, **gem5 (SE / FS / Ruby-Garnet NoC)**, **SystemC 3.0.1 / TLM-2.0**, **Verilator 5.032 SystemVerilog RTL**, and **bare-metal / FreeRTOS / Zephyr / µC/OS / OpenSBI+Linux** software stacks—with zero silent ISS substitution and SHA-256 tamper-evident run bundles.
 
-The first priority is now the [native SoC generator](docs/native-soc-generator.md):
-input spec + memory map/I/O → generated IP-XACT/IR → compiled custom hardware
-simulator + bare-metal BSP/firmware. See specs/AI_SOC-native.yaml and
-specs/AIZ_SOC-native.yaml for different counts/maps with multiple source-IP
-instances. `usp soc` provides generation, build, run and evidence verification.
-`usp soc accept` runs the generated machine/ELF on QEMU and native gem5 concurrently,
-with per-instance SystemC IPs and native gem5 counters. Generic OS lowering remains open.
+---
 
-The 0.3.0 alpha programme adds [one native IR and direct IP-XACT input](docs/canonical-native-ir.md).
-Original direct examples are in specs/ipxact/AI_SOC, AIZ_SOC and AI_SOC-hierarchy.
-The [approved versioned plan](docs/versioned-upgrade-plan.md) defines M1-M9 and
-the evidence required before each immutable application tag.
+## Architecture Overview
 
-The implemented reference path generates and compiles an RV64 machine, generates
-an external Zephyr board, builds Zephyr and checks real CLINT timer and UART/PLIC
-interrupts. A FreeRTOS BSP verifies actual tick preemption, saved registers and
-UART/PLIC task notification. A separate OpenSBI/Linux path boots an original initramfs. A second
-profile connects guest MMIO/IRQ to real SystemC TLM or an OpenTitan FIFO compiled
-with Verilator. These are constrained, tested profiles, not arbitrary SoC support.
+```mermaid
+flowchart LR
+    subgraph Input["1. Hardware & Flow Inputs"]
+        XML["IEEE 1685-2022 IP-XACT XML"]
+        YAML["SoC Spec / Flow / Model Package YAML"]
+    end
 
-The source IP profile additionally compiles Chipyard's actual GCD Chisel core and
-OpenTitan's complete GPIO/TL-UL peripheral, connected to guest MMIO and distinct
-PLIC IRQs. It is a peripheral integration, not a Rocket/Earlgrey full-SoC build.
+    subgraph Frontend["2. Compiler & Validation Frontend"]
+        XSD["Offline XSD & Strict Semantic Checks"]
+        IR["Canonical Immutable SoC IR (v2–v6)"]
+        BIND["Explicit VLNV & Adapter Binding\n(Fail-Closed, No ISS Fallback)"]
+    end
 
-Actual RV32 RTL CPU masters now run source-built FreeRTOS and both µC/OS-II/III
-kernels with QEMU or gem5 owning memory; see [RTL OS](docs/rtl-os.md).
-RV32 Zephyr also runs on both RTL CPU masters with real kernel/source-IP IRQ
-acceptance; see [RTL Zephyr](docs/rtl-zephyr.md).
-Native gem5 CPU cache/memory traffic can also use a live Ruby/Garnet network while the
-same Zephyr guest exercises SystemC source IPs; see [live Garnet](docs/live-garnet.md).
-Both paths have mandatory native promotion gates and explicit remaining limits.
+    subgraph Backends["3. Multi-Platform Execution Engines"]
+        QEMU["Custom Generated QEMU 10.0.0\n(RV64 / Multi-Hart / Linux / RTOS)"]
+        GEM5["gem5 v24.1.0.3\n(FS / SE / Live Ruby-Garnet NoC)"]
+        UNIFIED["Unified SystemC 3.0.1 + 6x Verilator RTL\n(Dual-Hart SMP RV64IMA + 2x2 IR NoC)"]
+        RTLCPU["RTL CPU Masters\n(Chipyard RocketTile / Ibex)"]
+    end
 
-The next increment adds [native coherent DMA and two-hart Garnet](docs/coherent-dma.md)
-and [one platform configuration for all four RTL kernels](docs/rtl-software-platform.md).
-The complete [QA remediation matrix](docs/next-version.md) records the remaining
-CPU/MMU, full-inventory, Yocto, timing, physical-evaluation and release work.
+    subgraph Enterprise["4. Verification, Optimization & AI Control"]
+        DSE["Parallel DSE Cluster & CHIA Loop\n(Process / Ray + Isolated Oracle)"]
+        REG["SHA-256 IP Plugin Registry\n& IP Scaffolder (usp ip)"]
+        DASH["Air-Gapped HTML5 Dashboard\n& 24-Bin Coverage + VCD"]
+        MCP["20-Tool MCP Server\n(stdio JSON-RPC 2.0)"]
+    end
 
-The native generator now adds homogeneous multi-hart execution, 48-bit physical
-maps, configured gem5 clocks/latency, native OpenSBI/Linux boot and external
-MMIO model registration with explicit executable identity and guest drivers.
-See [native design capability assessment](docs/native-design-capabilities.md) and
-[external model contract](docs/native-external-models.md). These are qualified
-interfaces, not automatic arbitrary RTL/ISA/bus conversion.
+    XML --> XSD --> IR
+    YAML --> IR
+    IR --> BIND
+    BIND --> QEMU
+    BIND --> GEM5
+    BIND --> UNIFIED
+    BIND --> RTLCPU
+    UNIFIED --> DSE
+    UNIFIED --> DASH
+    REG --> UNIFIED
+    MCP --> Frontend
+    MCP --> Backends
+    MCP --> Enterprise
+```
 
-## Development setup
+---
 
-Before publishing changes, follow [local CI and native promotion](docs/ci-local.md).
-Local checks must pass before pushing; hosted workflow status is reported separately.
+## Quickstart
 
-Podman users on KDE Plasma can use the versioned SDK container and separate
-source/build caches; see [Podman SDK and OCI release](docs/podman.md).
+### Option A: Rootless Podman SDK (Recommended — Zero Host Pollution)
 
-Python 3.11+; use the pinned dependencies through uv. Native build prerequisites
-and exact source pins are documented in [build reproducibility](docs/build-reproducibility.md).
+Pre-packages Python 3.12.14, QEMU 10.0.13, RISC-V bare-metal & Linux GCC toolchains, SystemC 3.0.1, Verilator 5.032, Yosys 0.52, and OpenJDK 21 in an isolated rootless OCI container:
 
 ```bash
-uv sync --frozen --extra dev --extra bringup --extra models
+bash scripts/podman.sh build               # Build from committed HEAD (git archive)
+bash scripts/podman.sh smoke               # Offline (--network=none) full native + 6x RTL + MCP smoke
+bash scripts/podman.sh qa full             # Run full QA/QC scorecard inside Podman
+bash scripts/podman.sh run                 # Open interactive SDK shell in /workspace
+```
+
+Or using Podman Compose ([`containers/compose.yaml`](containers/compose.yaml)):
+
+```bash
+mkdir -p .podman/{build,tools,results,venv,cache}
+podman compose -f containers/compose.yaml run --rm unified-soc
+```
+
+### Option B: Native Linux Python Virtual Environment (`uv` or `pip` + `requirements*.txt`)
+
+```bash
+# 1. Create & verify .venv (auto-selects uv sync --frozen or python3 -m venv + requirements-all.txt)
+bash scripts/setup_venv.sh --extra all --verify
 source .venv/bin/activate
-bash scripts/fetch_upstreams.sh
-export CROSS_COMPILE=riscv64-unknown-elf-
-bash scripts/bringup.sh
+
+# Or explicitly via standard pip + pinned requirements files:
+bash scripts/setup_venv.sh --method pip --extra all --verify
+
+# 2. Audit host & pinned multi-platform toolchains (non-destructive)
+bash scripts/setup_all.sh --check
+
+# 3. Fetch pinned upstream sources (QEMU v10.0.0, gem5 v24.1.0.3, Chipyard 1.13.0, OpenTitan)
+bash scripts/setup_all.sh --all --fetch-only
+
+# 4. Run full local quality gate via Makefile
+make check
 ```
 
-Set USP_FETCH_LINUX=1, USP_FETCH_MODELS=1 or USP_FETCH_FREERTOS=1 during explicit dependency acquisition
-for the additional sources. Normal generation and simulation do not download
-workloads. QEMU's first Meson configuration fetches three immutable wrap-git
-subprojects; those acquisition steps are documented with the upstream pins.
+See [`docs/setup-and-environment.md`](docs/setup-and-environment.md) for per-platform build flags (`setup_qemu.sh`, `setup_gem5.sh`, `setup_chipyard.sh`, `setup_opentitan.sh`).
 
-## Supported commands
+---
+
+## Multi-Platform IP & Simulator Traceability Matrix
+
+| Platform / Subsystem | Pinned Upstream / Origin | Setup Script | Execution Engine & Actual Binding |
+|---|---|---|---|
+| **QEMU RISC-V** | `qemu/qemu` `v10.0.0` (`7c949c53e936`) | [`scripts/setup_qemu.sh`](scripts/setup_qemu.sh) | Custom generated `usp-rv64` machine (bare-metal, Zephyr, FreeRTOS, OpenSBI+Linux) + Debian 10.0.13 `virt` smoke |
+| **gem5 & Garnet NoC** | `gem5/gem5` `v24.1.0.3` (`b9da2bfe1e21`) | [`scripts/setup_gem5.sh`](scripts/setup_gem5.sh) | Native FS/SE + Live Ruby/MI_example/Garnet mesh + out-of-tree MMIO/PLIC/DMA bridges (`USE_SYSTEMC=0`) |
+| **Chipyard / Chisel** | `ucb-bar/chipyard` `1.13.0` (`69eba860a352`) | [`scripts/setup_chipyard.sh`](scripts/setup_chipyard.sh) | Source-built `RocketTile` AXI CPU, Chipyard Ibex RTL master, Chisel/CIRCT GCD core (`sbt 1.10.7`, `firtool 1.62.0`) |
+| **OpenTitan RTL** | `lowRISC/opentitan` `earlgrey_silver_release_v5` (`ed044fc9760b`) | [`scripts/setup_opentitan.sh`](scripts/setup_opentitan.sh) | Verilated upstream `gpio.sv` / `tlul_pkg.sv` / `prim_fifo_sync.sv` over SystemC 3.0.1 bridge |
+| **Unified SystemC + 6× Verilator RTL SoC** | Original clean-room RTL + SystemC 3.0.1 (`specs/multiplatform/unified_systemc/`) | Bundled in SDK (`Containerfile`) | Single `sc_main` binary: Dual-Hart SMP `RV64IMA_Zicsr` + IR-generated 2×2 NoC + 6× Verilator 5.032 RTL IPs (`MAC NPU`, `SHA-256`, `AES-128`, `SPI`, `I2C`, `L2 Cache`) + DMA + IOPMP + GDB RSP + VCD + 24-bin coverage |
+
+---
+
+## Repository Structure
+
+```text
+.
+├── Containerfile                 # Digest-pinned multi-stage OCI SDK (uv 0.13.5 + Debian trixie)
+├── Makefile                      # Standard industrial targets (venv, setup-*, check, podman-*)
+├── pyproject.toml / uv.lock      # Canonical Python package & frozen dependency lockfile
+├── requirements*.txt             # Pinned pip requirements (base, dev, models, bringup, all)
+├── containers/                   # OCI entrypoint, proxy trust secret hook, offline smoke, compose.yaml
+├── docs/                         # Industrial engineering documentation (Diataxis hub: docs/README.md)
+├── examples/                     # Validated reference IP-XACT & QEMU/Zephyr/FreeRTOS/SystemC SoCs
+├── models/                       # Versioned hardware model catalog & SystemC bridge templates
+├── native/ & platforms/          # Native backend boards & platform configuration profiles
+├── scripts/                      # Modular setup_*, bring-up, CI lint, regression & Podman scripts
+├── skills/                       # Agent operational setup & update playbooks
+├── specs/                        # Native SoC YAML specs, IP-XACT 2022, flows & unified multi-platform SoC
+├── src/socsim/                   # Python compiler, IR, backends, unified emulator, DSE, CHIA loop, MCP server
+├── systems/                      # Sanitized AI_SOC / AIZ_SOC inventories and executable bring-up profiles
+├── tests/                        # 610+ automated unit, contract, container, MCP & integration tests
+└── upgrade/                      # Approved M1–M9 milestone ledger & enterprise roadmap audit specs
+```
+
+---
+
+## Core CLI & AI MCP Commands
 
 ```bash
-usp ipxact validate examples/rv64-minimal
-usp elaborate examples/rv64-minimal --out build/soc-ir.json
-usp generate examples/rv64-minimal --out build/rv64-minimal
-usp models explain examples/rv64-minimal --instance uart
-usp build examples/rv64-minimal --generated build/rv64-minimal --source-qemu .tools/upstream/qemu
-usp software build examples/rv64-minimal --os zephyr --generated build/rv64-minimal \
-  --source-zephyr .tools/upstream/zephyr --cross-compile riscv64-unknown-elf-
-usp test examples/rv64-minimal --generated build/rv64-minimal --out results/zephyr-001
-usp report results/zephyr-001 --format md
+# 1. Native IP-XACT / SoC compiler & validation
+usp validate examples/rv64-ips
+usp soc generate specs/AI_SOC-native.yaml --engine both --out build/ai-soc
+
+# 2. Single Unified Multi-Platform SystemC/TLM-2.0 + 6x Verilator RTL SoC
+usp unified-soc run specs/multiplatform/unified_hetero_soc.yaml --out results/unified-soc
+usp unified-soc calibrate specs/multiplatform/unified_hetero_soc.yaml --out results/unified-cal
+
+# 3. CHIA-Style Parallel DSE Sweep, Cyclic Optimization Loop & HTML5 Dashboard
+usp dse sweep specs/multiplatform/unified_hetero_soc.yaml --out results/dse --workers 2 --cluster process --cache results/dse-cache
+usp loop run specs/multiplatform/unified_hetero_soc.yaml --out results/chia-loop --max-iters 4 --cache results/loop-cache
+usp dashboard generate --out results/dashboard.html \
+  --unified results/unified-soc/report.json \
+  --calibration results/unified-cal/calibration.json \
+  --dse results/dse/dse-report.json \
+  --loop results/chia-loop/loop-report.json
+
+# 4. IP Plugin Scaffolder & SHA-256 Versioned Registry
+usp ip scaffold xor_accel --out results/xor_accel
+usp registry publish results/xor_accel/package.yaml --registry results/reg --version 1.0.0
+usp registry verify --registry results/reg
+
+# 5. Model Context Protocol (MCP) 20-Tool Server for AI Coding Agents
+usp mcp tools --root .
+usp mcp config --client podman --root .
+bash scripts/podman.sh mcp
 ```
 
-`usp` and `socsim` share the CLI. Keep each run in a new output directory. Source,
-generator, registry and artifact identity changes require regeneration/rebuild;
-old evidence is not overwritten. Failed guests/timeouts remain failed results.
-`usp backends` reports scope and availability, not universal engine equivalence.
+---
 
-## Guides and status
+## Documentation Hub
 
-- [Industrial readiness, arbitrary-SoC limits and CHIA reference status](docs/industrial-readiness.md)
-- [AI_SOC executable example](examples/AI_SOC/README.md)
-- [AIZ_SOC executable example](examples/AIZ_SOC/README.md)
+All documentation is organized under the **Diataxis** taxonomy in [`docs/README.md`](docs/README.md):
 
-- [Verification status and phase exits](docs/verification-status.md)
-- [Milestone checklist and multi-SoC acceptance](docs/milestone-checklist.md)
-- [AI_SOC / AIZ_SOC designs and scoped flow](docs/dual-soc.md)
-- [OpenROAD RTL-to-layout reference flow](docs/openroad.md)
-- [Complete CPU-owned RTL test-chip flow](docs/rtl-testchips.md)
-- [Architecture and supported IP-XACT subset](docs/architecture.md)
-- [Component parameters and safe integer expressions](docs/parameters.md)
-- [Scalar registers and executable model contracts](docs/registers.md)
-- [Configured structural hierarchy](docs/examples/rv64-hierarchy.md)
-- [Create a SoC](docs/creating-soc.md)
-- [Generated QEMU/Zephyr reference](docs/examples/rv64-minimal.md)
-- [SystemC/OpenTitan RTL bridge](docs/examples/rv64-hybrid.md)
-- [Chipyard GCD and OpenTitan GPIO](docs/examples/rv64-ips.md)
-- [One SoC/Zephyr ELF with SystemC IPs on QEMU or gem5](docs/unified-soc.md)
-- [Configurable CPU providers, engines and workloads](docs/cpu-platforms.md)
-- [Software layers and native/estimated CPI/IPC](docs/software-layers-performance.md)
-- [Research direction and reference-paper ledger](docs/research-direction.md)
-- [Full Rocket/Earlgrey integration boundary](docs/full-soc-integration.md)
-- [Shared gem5 SE workload](docs/gem5-se.md)
-- [FreeRTOS preemption and interrupt acceptance](docs/freertos.md)
-- [Firmware, Linux, Yocto and RTOS](docs/firmware-and-os.md)
-- [Development, CI and promotion](docs/development.md)
-- [Cloud startup](docs/cloud-environment.md)
-- [Project setup/update skills](skills/README.md)
+- **Onboarding & Environment:** [`docs/setup-and-environment.md`](docs/setup-and-environment.md) · [`docs/podman.md`](docs/podman.md) · [`docs/build-reproducibility.md`](docs/build-reproducibility.md)
+- **Architecture & Internals:** [`docs/architecture.md`](docs/architecture.md) · [`src/README.md`](src/README.md) · [`docs/canonical-native-ir.md`](docs/canonical-native-ir.md) · [`docs/unified-systemc-soc.md`](docs/unified-systemc-soc.md)
+- **AI & Automation Interfaces:** [`docs/mcp-server.md`](docs/mcp-server.md) · [`scripts/README.md`](scripts/README.md) · [`containers/README.md`](containers/README.md)
+- **Verification & Governance:** [`docs/verification-status.md`](docs/verification-status.md) · [`docs/industrial-readiness.md`](docs/industrial-readiness.md) · [`docs/roadmap.md`](docs/roadmap.md) · [`upgrade/enterprise-emulator-roadmap.md`](upgrade/enterprise-emulator-roadmap.md) · [`CHANGELOG.md`](CHANGELOG.md)
 
-The legacy `examples/riscv-virt` QEMU 10.0.13 bare-metal smoke remains a separate
-compatibility test. The generated machine uses pinned QEMU 10.0.0 and deliberately
-relocates UART away from virt. The parser supports bounded component integer
-parameters, structural hierarchy and scalar register/field metadata. The GCD
-profile checks its exact executable register contract and generates a header used
-by the real guest. General access side effects, buses, unsupported parameter types
-and nonstructural views are rejected.
-Yocto image completion depends on permitted upstream downloads; consult the phase
-status for observed blockers. Full Chipyard/Earlgrey SoCs and generic hardware/security integrations
-remain future work. No calibrated timing or silicon equivalence is claimed.
+---
 
-No internal archive, source or private Git history is included. Examples and
-adapters are original; public Accellera schemas retain their Apache-2.0 notices
-and checksums under src/socsim/schemas. Referenced upstream source licenses remain
-in their external checkouts. Choose project-wide redistribution terms before a
-public binary release; per-file SPDX identifiers apply to the indicated files.
+## Honest Scope & Confidentiality
 
-Actual Chipyard Ibex and normalized custom RTL CPUs run bare-metal with QEMU or
-gem5 memory/peripherals. See [the adapter guide](docs/rtl-cpu-adapters.md).
-
-## Native source-package and software flow
-
-[usp flow](docs/native-flow.md) plans, builds and runs a canonical-IR SoC with
-source-pinned SystemC packages and generated RV64 single-hart FreeRTOS, Zephyr,
-µC/OS-II/III and Linux software. AI_SOC/AIZ_SOC examples and a gem5-only variant
-are in [specs/flows](specs/flows/README.md). Optional QEMU per-hart event costs
-remain distinct from native gem5 cycles. The complete approved milestone ledger
-and one final aggregate CI/CD policy are in [upgrade/](upgrade/README.md).
+- **Explicit Fidelity Boundaries**: Clean-room Verilator RTL IPs in `specs/multiplatform/unified_systemc/rtl/` are distinct from full upstream Chipyard Rocket/Gemmini or OpenTitan EarlGrey silicon RTL. Functional/annotated TLM timing does not claim cycle-accurate silicon or foundry signoff equivalence.
+- **Open Program Gates**: Broad `v0.3.0` / `v0.4.0` / `v1.0.0` M1–M9 milestone exits (including full 46/37-instance aggregate qualification and Yocto rootfs builds) remain tracked explicitly in [`docs/versioned-upgrade-plan.md`](docs/versioned-upgrade-plan.md) and [`docs/verification-status.md`](docs/verification-status.md).
+- **Confidentiality**: Zero confidential source, private archives, or customer RTL are stored in this repository. Public Accellera IEEE 1685-2022 schemas retain their Apache-2.0 notices and SHA-256 manifests under `src/socsim/schemas/`.

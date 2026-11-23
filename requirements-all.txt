@@ -1,0 +1,8 @@
+# Complete Python dependency set (core + dev + models + bringup).
+# Equivalent to: uv sync --frozen --all-extras
+# Usage: pip install -r requirements-all.txt && pip install --no-deps -e .
+
+-r requirements.txt
+-r requirements-dev.txt
+-r requirements-models.txt
+-r requirements-bringup.txt

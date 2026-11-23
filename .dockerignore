@@ -1,8 +1,14 @@
 # Build context allowlist; do not send Git history, private references or host caches.
 **
 !Containerfile
+!Makefile
 !pyproject.toml
 !uv.lock
+!requirements.txt
+!requirements-dev.txt
+!requirements-models.txt
+!requirements-bringup.txt
+!requirements-all.txt
 !src
 !src/**
 !examples

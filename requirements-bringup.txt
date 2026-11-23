@@ -1,0 +1,11 @@
+# Embedded OS & simulator bring-up build dependencies (QEMU Meson, Zephyr West/CMake/Ninja).
+# Strictly synchronized with [project.optional-dependencies].bringup in pyproject.toml.
+
+-r requirements.txt
+
+cmake==3.31.6
+ninja==1.11.1.4
+west==1.4.0
+meson==1.7.0
+pykwalify==1.8.0
+packaging==26.3

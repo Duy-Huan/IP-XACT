@@ -3,7 +3,17 @@
 set -euo pipefail
 cd /opt/socsim
 out=$(mktemp -d /tmp/socsim-container-smoke.XXXXXXXX)
-trap 'rc=$?; echo "SMOKE FAILED (rc=$rc) at line $LINENO" >&2; ls -la "$out" >&2; for f in "$out"/*.json; do [ -s "$f" ] && echo "=== $f ===" >&2 && tail -n 40 "$f" >&2; done; exit "$rc"' ERR
+on_err() {
+    local rc=$?
+    local f
+    echo "SMOKE FAILED (rc=$rc) at line $1" >&2
+    ls -la "$out" >&2
+    for f in "$out"/*.json; do
+        [ -s "$f" ] && echo "=== $f ===" >&2 && tail -n 40 "$f" >&2
+    done
+    exit "$rc"
+}
+trap 'on_err $LINENO' ERR
 usp validate examples/rv64-ips > "$out/ipxact.json"
 usp generate systems/AI_SOC/bringup --out "$out/AI_SOC" > "$out/AI_SOC-generation.json"
 usp generate systems/AIZ_SOC/bringup --out "$out/AIZ_SOC" > "$out/AIZ_SOC-generation.json"
@@ -46,7 +56,8 @@ usp upgrade --root /opt/socsim --audit > "$out/upgrade-audit.json"
 SOCSIM_REQUIRE_INTEGRATION=1 USP_REQUIRE_SYSTEMC=1 python -m pytest \
     tests/test_qemu.py tests/test_sdk_qa.py tests/test_milestone_contracts.py \
     tests/test_multiplatform_soc.py tests/test_unified_systemc_soc.py \
-    tests/test_enterprise_registry_dse.py tests/test_mcp_server.py -q \
+    tests/test_enterprise_registry_dse.py tests/test_mcp_server.py \
+    tests/test_project_standardization.py -q \
     -o cache_dir="$out/pytest-cache" --basetemp="$out/tests" --junitxml="$out/junit.xml"
 printf 'SDK native smoke + QA + Dual-Hart SMP + 6x Verilator RTL + CHIA Loop + IP Scaffold + Dashboard + MCP passed; source revision: '
 cat /usr/local/share/socsim-revision
