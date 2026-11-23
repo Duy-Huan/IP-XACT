@@ -1,11 +1,12 @@
-"""CHIA-style Parallel DSE & Timing Calibration Cluster Orchestrator (E4).
+"""CHIA-style Parallel DSE & Timing Calibration Cluster Orchestrator (E4/E7).
 
-Executes multi-configuration SoC design-space sweeps across bounded parallel workers with:
-  - Content-addressed tamper-checked ArtifactCache (replayed results explicitly labeled)
-  - Separate training / holdout design-point tracking (per CHIA arXiv:2606.27350 discipline)
-  - Real SystemC/Verilator hybrid execution when toolchains are installed, or deterministic
-    spec/IR/NoC evaluation when running on a minimal host without simulators
-  - Machine-readable `dse-report.json` and human-readable `dse-report.md` Pareto summary.
+Executes multi-configuration SoC design-space sweeps across pluggable parallel cluster backends:
+  - `thread`: bounded local `ThreadPoolExecutor`
+  - `process`: true multi-core local `ProcessPoolExecutor` (zero GIL contention)
+  - `ray`: enterprise distributed Ray cluster (requires `ray`; fails explicitly with
+    `E_CLUSTER_UNAVAILABLE` when requested without Ray — never silently falls back)
+Features content-addressed tamper-checked `ArtifactCache`, `train`/`holdout` split tracking,
+monotonicity verification, and M7 RTL-vs-TLM timing calibration.
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ import argparse
 import concurrent.futures
 import copy
 import datetime
+import importlib
 import json
 import time
 from dataclasses import dataclass
@@ -35,6 +37,7 @@ from .v04_contracts import evaluate_calibration_report
 from .version import __version__
 
 CONTRACT = "usp-dse-cluster-1"
+CLUSTER_BACKENDS = ("thread", "process", "ray")
 
 
 @dataclass(frozen=True)
@@ -63,22 +66,25 @@ def _materialize_variant_spec(base_spec_path: Path, point: DsePoint, work_dir: P
     variant_path = work_dir / f"{point.point_id}.yaml"
     variant_path.parent.mkdir(parents=True, exist_ok=True)
     variant_path.write_text(yaml.safe_dump(data, sort_keys=False))
-    # Symlink unified_systemc sources next to variant spec so run_unified_soc resolves them cleanly
     src_link = work_dir / "unified_systemc"
     if not src_link.exists():
         src_link.symlink_to((base_spec_path.parent / "unified_systemc").resolve())
     return variant_path
 
 
-def _evaluate_point(
-    base_spec_path: Path,
+def _evaluate_point_worker(
+    base_spec_str: str,
     point: DsePoint,
-    out_dir: Path,
-    cache: ArtifactCache | None,
-    *,
+    out_dir_str: str,
+    cache_dir_str: str | None,
     simulate: bool,
 ) -> dict[str, Any]:
+    """Top-level picklable worker for thread, process, and Ray cluster backends."""
+    base_spec_path = Path(base_spec_str)
+    out_dir = Path(out_dir_str)
+    cache = ArtifactCache(Path(cache_dir_str)) if cache_dir_str is not None else None
     started = time.monotonic()
+
     cache_inputs = {
         "spec_sha": base_spec_path.read_text(),
         "point_id": point.point_id,
@@ -102,6 +108,7 @@ def _evaluate_point(
             verify_gdb=False,
         )
         summary = run_res.get("positive_run", {}).get("summary", {})
+        ip_res = summary.get("ip_results", {})
         result: dict[str, Any] = {
             "point_id": point.point_id,
             "split": point.split,
@@ -113,7 +120,11 @@ def _evaluate_point(
             "systemc_time_ps": summary.get("systemc_time_ps"),
             "instructions_executed": summary.get("instructions_executed"),
             "noc_total_hops": summary.get("noc_total_hops"),
-            "npu_rtl_cycles": summary.get("ip_results", {}).get("npu_rtl_cycles", 0),
+            "npu_rtl_cycles": ip_res.get("npu_rtl_cycles", 0),
+            "sha256_rtl_cycles": ip_res.get("sha256_rtl_cycles", 0),
+            "l2_hits": ip_res.get("l2_hits", 0),
+            "l2_misses": ip_res.get("l2_misses", 0),
+            "coverage_percent": run_res.get("coverage", {}).get("coverage_percent"),
             "wall_seconds": round(time.monotonic() - started, 4),
             "replayed": False,
         }
@@ -132,6 +143,10 @@ def _evaluate_point(
             "instructions_executed": None,
             "noc_total_hops": None,
             "npu_rtl_cycles": 0,
+            "sha256_rtl_cycles": 0,
+            "l2_hits": 0,
+            "l2_misses": 0,
+            "coverage_percent": None,
             "wall_seconds": round(time.monotonic() - started, 4),
             "replayed": False,
         }
@@ -141,14 +156,60 @@ def _evaluate_point(
     return result
 
 
+def _dispatch_cluster(
+    cluster: str,
+    workers: int,
+    base_spec_path: Path,
+    active_points: list[DsePoint],
+    out_dir: Path,
+    cache_dir: Path | None,
+    simulate: bool,
+) -> list[dict[str, Any]]:
+    if cluster not in CLUSTER_BACKENDS:
+        raise ContractError(f"E_DSE_CLUSTER unsupported cluster backend: {cluster}")
+    base_str = str(base_spec_path)
+    out_str = str(out_dir)
+    cache_str = str(cache_dir.resolve()) if cache_dir is not None else None
+
+    if cluster == "ray":
+        try:
+            ray = importlib.import_module("ray")
+        except ImportError as exc:
+            raise ContractError(
+                "E_CLUSTER_UNAVAILABLE Ray is not installed; install ray on cluster workers "
+                "or select --cluster process/thread (silent fallback is forbidden)"
+            ) from exc
+        if not ray.is_initialized():
+            ray.init(ignore_reinit_error=True, num_cpus=workers)
+        remote_fn = ray.remote(num_cpus=1)(_evaluate_point_worker)
+        refs = [remote_fn.remote(base_str, p, out_str, cache_str, simulate) for p in active_points]
+        return list(ray.get(refs))
+
+    pool_cls = (
+        concurrent.futures.ProcessPoolExecutor
+        if cluster == "process"
+        else concurrent.futures.ThreadPoolExecutor
+    )
+    results_by_id: dict[str, dict[str, Any]] = {}
+    with pool_cls(max_workers=workers) as pool:
+        futs = {
+            pool.submit(_evaluate_point_worker, base_str, p, out_str, cache_str, simulate): p
+            for p in active_points
+        }
+        for fut in concurrent.futures.as_completed(futs):
+            res = fut.result()
+            results_by_id[res["point_id"]] = res
+    return [results_by_id[p.point_id] for p in active_points]
+
+
 def _render_dse_md(report: dict[str, Any]) -> str:
     lines = [
         "# Parallel DSE & RTL↔TLM Calibration Report",
         "",
         f"- **Contract:** `{report['contract']}`",
         f"- **Status:** **{report['status']}**",
+        f"- **Cluster Backend:** `{report['cluster_backend']}` (`workers={report['workers']}`)",
         f"- **Execution Mode:** `{report['execution_mode']}`",
-        f"- **Parallel Workers:** `{report['workers']}`",
         f"- **Timestamp (UTC):** `{report['created_utc']}`",
         "",
         "| Point | Split | Backend | Hop/Link | Status | Sim Time (ps) | NoC Hops | Replayed |",
@@ -178,10 +239,11 @@ def run_dse_sweep(
     out_dir: Path,
     *,
     workers: int = 2,
+    cluster: str = "process",
     cache_dir: Path | None = None,
     points: tuple[DsePoint, ...] = DEFAULT_SWEEP,
 ) -> dict[str, Any]:
-    """Execute a bounded parallel DSE sweep across multiple NoC/backend points."""
+    """Execute a bounded parallel DSE sweep across pluggable cluster backends."""
     if not 1 <= workers <= 8:
         raise ContractError("E_DSE_WORKERS workers must be in 1..8")
     spec_path = spec_path.resolve()
@@ -192,26 +254,16 @@ def run_dse_sweep(
 
     ready_rtl, _ = has_unified_toolchain(require_verilator=True)
     ready_tlm, _ = has_unified_toolchain(require_verilator=False)
-    cache = ArtifactCache(cache_dir) if cache_dir is not None else None
-
     active_points = [
         p for p in points if (p.backend != "verilator-rtl" or ready_rtl or not ready_tlm)
     ]
     simulate = ready_tlm
 
-    results_by_id: dict[str, dict[str, Any]] = {}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
-        futs = {
-            pool.submit(_evaluate_point, spec_path, p, out_dir, cache, simulate=simulate): p
-            for p in active_points
-        }
-        for fut in concurrent.futures.as_completed(futs):
-            res = fut.result()
-            results_by_id[res["point_id"]] = res
+    ordered = _dispatch_cluster(
+        cluster, workers, spec_path, active_points, out_dir, cache_dir, simulate
+    )
+    results_by_id = {r["point_id"]: r for r in ordered}
 
-    ordered = [results_by_id[p.point_id] for p in active_points]
-
-    # Compute real RTL vs TLM calibration whenever both nominal points simulated live
     calibration: dict[str, Any] | None = None
     nom_rtl = results_by_id.get("noc_nom_rtl")
     nom_tlm = results_by_id.get("noc_nom_tlm")
@@ -223,7 +275,7 @@ def run_dse_sweep(
         and nom_tlm.get("systemc_time_ps")
     ):
         calibration = evaluate_calibration_report(
-            roi_name="dse_nominal_rtl_vs_tlm",
+            roi_name="dse_nominal_4rtl_vs_tlm",
             reference_source="native-rtl",
             model_source="qemu-analytical-estimate",
             reference_cycles=float(nom_rtl["systemc_time_ps"]) / 20_000.0,
@@ -231,7 +283,6 @@ def run_dse_sweep(
             max_relative_error=0.10,
         )
 
-    # Latency monotonicity check across train/holdout sweep when simulated live
     monotonic_ok = True
     if simulate and all(
         k in results_by_id and results_by_id[k]["systemc_time_ps"] is not None
@@ -253,6 +304,7 @@ def run_dse_sweep(
         "platform_version": __version__,
         "created_utc": datetime.datetime.now(datetime.UTC).isoformat(),
         "status": "PASSED" if all_passed else "FAILED",
+        "cluster_backend": cluster,
         "execution_mode": "live-parallel-simulation" if simulate else "plan-and-ir-parallel",
         "workers": workers,
         "latency_monotonic_across_train_and_holdout": monotonic_ok,
@@ -276,15 +328,23 @@ def main(argv: list[str] | None = None) -> int:
     )
     sweep.add_argument("--out", type=Path, required=True)
     sweep.add_argument("--workers", type=int, default=2)
+    sweep.add_argument("--cluster", choices=CLUSTER_BACKENDS, default="process")
     sweep.add_argument("--cache", type=Path)
 
     args = parser.parse_args(argv)
     try:
-        report = run_dse_sweep(args.spec, args.out, workers=args.workers, cache_dir=args.cache)
+        report = run_dse_sweep(
+            args.spec,
+            args.out,
+            workers=args.workers,
+            cluster=args.cluster,
+            cache_dir=args.cache,
+        )
         print(
             json.dumps(
                 {
                     "status": report["status"],
+                    "cluster_backend": report["cluster_backend"],
                     "execution_mode": report["execution_mode"],
                     "points": len(report["points"]),
                     "report": str(args.out / "dse-report.json"),

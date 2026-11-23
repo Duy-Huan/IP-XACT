@@ -21,6 +21,7 @@ from typing import Any, BinaryIO
 
 import yaml
 
+from .dashboard import generate_dashboard
 from .domain import ContractError
 from .dse_cluster import run_dse_sweep
 from .ip_catalog import IP_CATALOG, catalog_summary
@@ -174,6 +175,7 @@ class EmulatorMcpServer:
             "emulator_run_unified_soc": self._tool_run_unified_soc,
             "emulator_registry_list": self._tool_registry_list,
             "emulator_run_dse_sweep": self._tool_run_dse_sweep,
+            "emulator_generate_dashboard": self._tool_generate_dashboard,
         }
 
     def _resolve_path(self, raw: str, *, field: str = "path", must_exist: bool = False) -> Path:
@@ -530,12 +532,37 @@ class EmulatorMcpServer:
                         },
                         "out_dir": {"type": "string"},
                         "workers": {"type": "integer", "minimum": 1, "maximum": 8, "default": 2},
+                        "cluster": {
+                            "type": "string",
+                            "enum": ["thread", "process", "ray"],
+                            "default": "process",
+                        },
                         "cache_dir": {"type": "string"},
                     },
                     "additionalProperties": False,
                 },
                 read_only=False,
                 idempotent=False,
+            ),
+            McpToolSpec(
+                name="emulator_generate_dashboard",
+                description=(
+                    "Generate a self-contained HTML5 Verification, Coverage, Calibration and "
+                    "DSE Dashboard from real run JSON artifacts."
+                ),
+                input_schema={
+                    "type": "object",
+                    "required": ["out_html"],
+                    "properties": {
+                        "out_html": {"type": "string"},
+                        "unified_report": {"type": "string"},
+                        "calibration_report": {"type": "string"},
+                        "dse_report": {"type": "string"},
+                    },
+                    "additionalProperties": False,
+                },
+                read_only=False,
+                idempotent=True,
             ),
         )
 
@@ -746,12 +773,41 @@ class EmulatorMcpServer:
         spec_path = self._resolve_path(spec_rel, field="spec_path", must_exist=True)
         out_dir = self._resolve_path(args["out_dir"], field="out_dir", must_exist=False)
         workers = int(args.get("workers", 2))
+        cluster = str(args.get("cluster", "process"))
         cache_dir = (
             self._resolve_path(args["cache_dir"], field="cache_dir", must_exist=False)
             if args.get("cache_dir")
             else None
         )
-        return run_dse_sweep(spec_path, out_dir, workers=workers, cache_dir=cache_dir)
+        return run_dse_sweep(
+            spec_path, out_dir, workers=workers, cluster=cluster, cache_dir=cache_dir
+        )
+
+    def _tool_generate_dashboard(self, args: dict[str, Any]) -> dict[str, Any]:
+        out_html = self._resolve_path(args["out_html"], field="out_html", must_exist=False)
+        unified = (
+            self._resolve_path(args["unified_report"], field="unified_report", must_exist=True)
+            if args.get("unified_report")
+            else None
+        )
+        cal = (
+            self._resolve_path(
+                args["calibration_report"], field="calibration_report", must_exist=True
+            )
+            if args.get("calibration_report")
+            else None
+        )
+        dse = (
+            self._resolve_path(args["dse_report"], field="dse_report", must_exist=True)
+            if args.get("dse_report")
+            else None
+        )
+        return generate_dashboard(
+            out_html=out_html,
+            unified_report=unified,
+            calibration_report=cal,
+            dse_report=dse,
+        )
 
     # --- MCP Resources & Prompts ---
 

@@ -122,22 +122,66 @@ def list_registry(registry_dir: Path) -> dict[str, Any]:
     }
 
 
+def _parse_semver(ver: str) -> tuple[int, int, int]:
+    core = ver.split("-", 1)[0]
+    parts = core.split(".")
+    if len(parts) != 3 or not all(p.isdigit() for p in parts):
+        raise ContractError(f"E_REGISTRY_VERSION invalid semver: {ver}")
+    return int(parts[0]), int(parts[1]), int(parts[2])
+
+
+def _matches_constraint(version: str, constraint: str) -> bool:
+    cand = _parse_semver(version)
+    constraint = constraint.strip()
+    if constraint.startswith("^"):
+        maj, min_, pat = _parse_semver(constraint[1:])
+        return cand >= (maj, min_, pat) and cand < (maj + 1, 0, 0)
+    if constraint.startswith("~"):
+        maj, min_, pat = _parse_semver(constraint[1:])
+        return cand >= (maj, min_, pat) and cand < (maj, min_ + 1, 0)
+    if "," in constraint or constraint.startswith((">=", "<=", ">", "<")):
+        for clause in constraint.split(","):
+            c = clause.strip()
+            if c.startswith(">="):
+                if not (cand >= _parse_semver(c[2:])):
+                    return False
+            elif c.startswith("<="):
+                if not (cand <= _parse_semver(c[2:])):
+                    return False
+            elif c.startswith(">"):
+                if not (cand > _parse_semver(c[1:])):
+                    return False
+            elif c.startswith("<"):
+                if not (cand < _parse_semver(c[1:])):
+                    return False
+            elif version != c:
+                return False
+        return True
+    return version == constraint
+
+
 def resolve_packages(
     registry_dir: Path,
     requirements: dict[str, str],
     dest_dir: Path,
 ) -> dict[str, Any]:
-    """Verify SHA-256 archives, safely unpack into dest_dir, re-verify manifests, emit lockfile."""
+    """Verify SHA-256 archives, resolve semver/ranges, unpack safely, and emit lockfile."""
     registry_dir = registry_dir.resolve()
     dest_dir = dest_dir.resolve()
     index = _load_index(registry_dir)
     resolved: dict[str, Any] = {}
 
-    for pkg_id, version in sorted(requirements.items()):
-        key = f"{pkg_id}@{version}"
-        entry = index["packages"].get(key)
-        if entry is None:
-            raise ContractError(f"E_REGISTRY_MISSING unresolved IP package: {key}")
+    for pkg_id, constraint in sorted(requirements.items()):
+        candidates = [
+            entry
+            for entry in index["packages"].values()
+            if entry["package_id"] == pkg_id and _matches_constraint(entry["version"], constraint)
+        ]
+        if not candidates:
+            raise ContractError(f"E_REGISTRY_MISSING unresolved IP package: {pkg_id}@{constraint}")
+        entry = max(candidates, key=lambda e: _parse_semver(e["version"]))
+        key = entry["key"]
+        version = entry["version"]
         archive_path = registry_dir / entry["archive"]
         if not archive_path.is_file() or digest(archive_path) != entry["archive_sha256"]:
             raise ContractError(f"E_REGISTRY_TAMPER archive hash mismatch for {key}")
@@ -148,6 +192,7 @@ def resolve_packages(
             raise ContractError(f"E_REGISTRY_TAMPER extracted package inputs mismatch for {key}")
         resolved[key] = {
             "package_id": pkg_id,
+            "requested": constraint,
             "version": version,
             "vlnv": entry["vlnv"],
             "archive_sha256": entry["archive_sha256"],
