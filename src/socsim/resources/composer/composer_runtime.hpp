@@ -576,7 +576,16 @@ struct L2CacheBase : sc_core::sc_module, ComposedDevice {
     tlm_utils::simple_target_socket<L2CacheBase> target;
     uint32_t hits = 0, misses = 0, snoops = 0;
     uint64_t cycles = 0;
-    explicit L2CacheBase(sc_core::sc_module_name name) : sc_module(name), target("target") {}
+
+    explicit L2CacheBase(sc_core::sc_module_name name) : sc_module(name), target("target") {
+        target.register_b_transport(this, &L2CacheBase::transport_dispatch);
+    }
+
+    void transport_dispatch(tlm::tlm_generic_payload &tx, sc_core::sc_time &delay) {
+        handle_transport(tx, delay);
+    }
+
+    virtual void handle_transport(tlm::tlm_generic_payload &tx, sc_core::sc_time &delay) = 0;
     virtual bool lookup(uint64_t phys_addr, bool is_dma, bool is_write) = 0;
     uint64_t rtl_cycles() const override { return cycles; }
 };
@@ -585,9 +594,7 @@ struct L2CacheTlm : L2CacheBase {
     std::array<uint32_t, 64> tags{};
     uint64_t valid = 0ULL;
 
-    explicit L2CacheTlm(sc_core::sc_module_name name) : L2CacheBase(name) {
-        target.register_b_transport(this, &L2CacheTlm::transport);
-    }
+    explicit L2CacheTlm(sc_core::sc_module_name name) : L2CacheBase(name) {}
 
     bool lookup(uint64_t phys_addr, bool is_dma, bool is_write) override {
         const unsigned idx = static_cast<unsigned>((phys_addr >> 6) & 63u);
@@ -606,7 +613,7 @@ struct L2CacheTlm : L2CacheBase {
         return hit;
     }
 
-    void transport(tlm::tlm_generic_payload &tx, sc_core::sc_time &delay) {
+    void handle_transport(tlm::tlm_generic_payload &tx, sc_core::sc_time &delay) override {
         const uint64_t off = tx.get_address();
         uint32_t data = 0;
         std::memcpy(&data, tx.get_data_ptr(), 4u);
@@ -617,7 +624,7 @@ struct L2CacheTlm : L2CacheBase {
             if (off == 0x00u) data = hits;
             else if (off == 0x04u) data = misses;
             else if (off == 0x08u) data = snoops;
-            else if (off == 0x0Cu) data = 512u * 1024u;
+            else if (off == 0x0Cu) data = 64u;
             else { tx.set_response_status(tlm::TLM_ADDRESS_ERROR_RESPONSE); return; }
             std::memcpy(tx.get_data_ptr(), &data, 4u);
         }
@@ -631,10 +638,9 @@ struct L2CacheRtl : L2CacheBase {
     Vl2_cache_rtl dut;
 
     explicit L2CacheRtl(sc_core::sc_module_name name) : L2CacheBase(name) {
-        target.register_b_transport(this, &L2CacheRtl::transport);
         dut.clk_i = 0; dut.rst_ni = 0; dut.lookup_valid_i = 0;
         dut.lookup_addr_i = 0; dut.lookup_is_dma_i = 0; dut.lookup_is_write_i = 0;
-        dut.flush_i = 0;
+        dut.mmio_valid_i = 0; dut.mmio_write_i = 0; dut.mmio_addr_i = 0; dut.mmio_wdata_i = 0;
         tick();
         dut.rst_ni = 1;
         tick();
@@ -642,12 +648,25 @@ struct L2CacheRtl : L2CacheBase {
 
     const char *runtime_backend() const override { return "verilator-rtl"; }
 
+    uint32_t peek_mmio(uint8_t off) {
+        dut.mmio_valid_i = 1; dut.mmio_write_i = 0; dut.mmio_addr_i = off; dut.mmio_wdata_i = 0;
+        dut.eval();
+        uint32_t val = dut.mmio_rdata_o;
+        dut.mmio_valid_i = 0; dut.eval();
+        return val;
+    }
+
     void tick() {
         dut.clk_i = 0; dut.eval();
         dut.clk_i = 1; dut.eval();
         dut.clk_i = 0; dut.eval();
-        hits = dut.hits_o; misses = dut.misses_o; snoops = dut.snoops_o;
         cycles = dut.rtl_cycles_o;
+    }
+
+    void sync_counters() {
+        hits = peek_mmio(0x00u);
+        misses = peek_mmio(0x04u);
+        snoops = peek_mmio(0x08u);
     }
 
     bool lookup(uint64_t phys_addr, bool is_dma, bool is_write) override {
@@ -659,25 +678,37 @@ struct L2CacheRtl : L2CacheBase {
         bool hit = dut.lookup_hit_o != 0;
         tick();
         dut.lookup_valid_i = 0; dut.eval();
+        if (is_dma) snoops++;
+        else if (hit) hits++;
+        else misses++;
         return hit;
     }
 
-    void transport(tlm::tlm_generic_payload &tx, sc_core::sc_time &delay) {
-        const uint64_t off = tx.get_address();
+    void handle_transport(tlm::tlm_generic_payload &tx, sc_core::sc_time &delay) override {
+        if (tx.get_data_length() != 4u || tx.get_address() > 0xFFu) {
+            tx.set_response_status(tlm::TLM_ADDRESS_ERROR_RESPONSE);
+            return;
+        }
+        const uint8_t off = static_cast<uint8_t>(tx.get_address());
         uint32_t data = 0;
         std::memcpy(&data, tx.get_data_ptr(), 4u);
-        if (tx.is_write()) {
-            if (off == 0x0Cu && (data & 1u)) {
-                dut.flush_i = 1; tick(); dut.flush_i = 0; dut.eval();
-            } else { tx.set_response_status(tlm::TLM_ADDRESS_ERROR_RESPONSE); return; }
-        } else {
-            if (off == 0x00u) data = hits;
-            else if (off == 0x04u) data = misses;
-            else if (off == 0x08u) data = snoops;
-            else if (off == 0x0Cu) data = 512u * 1024u;
-            else { tx.set_response_status(tlm::TLM_ADDRESS_ERROR_RESPONSE); return; }
-            std::memcpy(tx.get_data_ptr(), &data, 4u);
+        dut.mmio_valid_i = 1;
+        dut.mmio_write_i = tx.is_write() ? 1 : 0;
+        dut.mmio_addr_i = off;
+        dut.mmio_wdata_i = data;
+        dut.eval();
+        if (dut.mmio_err_o) {
+            dut.mmio_valid_i = 0; dut.eval();
+            tx.set_response_status(tlm::TLM_ADDRESS_ERROR_RESPONSE);
+            return;
         }
+        if (!tx.is_write()) {
+            uint32_t val = dut.mmio_rdata_o;
+            std::memcpy(tx.get_data_ptr(), &val, 4u);
+        }
+        tick();
+        dut.mmio_valid_i = 0; dut.eval();
+        sync_counters();
         delay += sc_core::sc_time(10, sc_core::SC_NS);
         tx.set_response_status(tlm::TLM_OK_RESPONSE);
     }
