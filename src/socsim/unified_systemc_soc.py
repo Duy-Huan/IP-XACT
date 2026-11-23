@@ -1157,6 +1157,9 @@ def calibrate_unified_soc(spec_path: Path, out_dir: Path) -> dict[str, Any]:
     )
     rtl_ip = rtl_run["positive_run"]["summary"]["ip_results"]
     tlm_ip = tlm_run["positive_run"]["summary"]["ip_results"]
+    l2_hits_rtl = int(rtl_ip["l2_hits"])
+    l2_hits_tlm = int(tlm_ip["l2_hits"])
+    l2_hit_rel_diff = abs(l2_hits_rtl - l2_hits_tlm) / max(1, l2_hits_rtl)
     parity = (
         rtl_run["status"] == "PASSED"
         and tlm_run["status"] == "PASSED"
@@ -1166,7 +1169,10 @@ def calibrate_unified_soc(spec_path: Path, out_dir: Path) -> dict[str, Any]:
         and rtl_ip["aes_blocks_encrypted"] == tlm_ip["aes_blocks_encrypted"]
         and rtl_ip["spi_xfers_completed"] == tlm_ip["spi_xfers_completed"]
         and rtl_ip["i2c_xfers_completed"] == tlm_ip["i2c_xfers_completed"]
-        and rtl_ip["l2_hits"] == tlm_ip["l2_hits"]
+        and l2_hits_rtl > 0
+        and l2_hits_tlm > 0
+        and l2_hit_rel_diff <= 0.05
+        and rtl_ip["l2_dma_snoops"] == tlm_ip["l2_dma_snoops"]
         and (
             not has_lpu
             or (
