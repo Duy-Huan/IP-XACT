@@ -91,6 +91,25 @@ usp compose calibrate examples/BSoC/bsoc_composed.yaml --out "$out/bsoc-cal" \
     > "$out/bsoc-cal.json"
 echo "=== BSOC CALIBRATION JSON ==="
 cat "$out/bsoc-cal/calibration.json"
+echo "=== BSOC VERILATOR BUILD LOGS ==="
+for vlog in "$out"/bsoc-run/verilator-*.log; do
+    [ -f "$vlog" ] || continue
+    printf -- "--- %s ---\n" "$(basename "$vlog")"
+    grep -E "Verilation Report|Verilator: Built|Verilator: Walltime" "$vlog" || tail -n 5 "$vlog"
+done
+echo "=== BSOC BUS & CDC TRACE (EXCERPT) ==="
+head -n 15 "$out/bsoc-run/pos-trace.jsonl"
+echo "... [first 10 CDC crossings core_clk <-> dsp_clk] ..."
+grep '"cdc":true' "$out/bsoc-run/pos-trace.jsonl" | head -n 10 || true
+echo "... [tail 12 transactions] ..."
+tail -n 12 "$out/bsoc-run/pos-trace.jsonl"
+echo "=== BSOC LIVE PLUGIN AF_UNIX IPC TRACE (EXCERPT) ==="
+head -n 12 "$out/bsoc-run/pos_polyphase_12t_0_trace.jsonl"
+echo "... [tail 8 AF_UNIX IPC frames] ..."
+tail -n 8 "$out/bsoc-run/pos_polyphase_12t_0_trace.jsonl"
+echo "=== BSOC VCD WAVEFORM EXCERPT ==="
+head -n 30 "$out/bsoc-run/composed-soc.vcd"
+echo "=== BSOC BACKEND LOGS END ==="
 usp mcp tools --root /opt/socsim > "$out/mcp-tools.json"
 usp mcp config --client podman --root /opt/socsim > "$out/mcp-podman-config.json"
 usp upgrade --root /opt/socsim --audit > "$out/upgrade-audit.json"
