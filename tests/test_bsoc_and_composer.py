@@ -194,3 +194,25 @@ def test_bsoc_live_multiplatform_5rtl_live_plugin_qemu_and_calibration(tmp_path:
         assert cal["status"] == "PASSED", json.dumps(cal, indent=2)
         assert cal["functional_parity"] is True
         assert cal["calibration"]["within_budget"] is True
+
+
+def test_bsoc_official_reports_artifacts_contract() -> None:
+    """Verify official verbatim BSoC CI reports in examples/BSoC/reports/ are complete."""
+    rep_dir = ROOT / "examples/BSoC/reports"
+    console = (rep_dir / "bsoc-console.log").read_text(encoding="utf-8")
+    sim_md = (rep_dir / "bsoc-simulation-report.md").read_text(encoding="utf-8")
+    cal = json.loads((rep_dir / "bsoc-calibration-report.json").read_text(encoding="utf-8"))
+    qemu_log = (rep_dir / "bsoc-qemu-crosscheck.log").read_text(encoding="utf-8")
+
+    for marker in load_composed_spec(BSOC_SPEC)["firmware"]["expected_markers"]:
+        assert marker in console
+    assert "PASSED" in sim_md
+    assert "100.0%" in sim_md
+    assert "usp-mmio32-v1-live-plugin" in sim_md
+    assert cal["status"] == "PASSED"
+    assert cal["functional_parity"] is True
+    assert cal["calibration"]["within_budget"] is True
+    assert cal["live_plugins"]["polyphase_12t_0"]["status"] == "PASSED"
+    assert cal["rtl_cycles"]["fft_128pt_0"] >= 704
+    assert cal["rtl_cycles"]["fir_decim8_0"] >= 17000
+    assert "BSOC_QEMU_CROSSCHECK_PASS" in qemu_log

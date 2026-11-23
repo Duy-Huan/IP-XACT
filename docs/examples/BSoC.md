@@ -55,6 +55,31 @@ The official **BSoC** example lives in [`examples/BSoC/`](../../examples/BSoC/RE
 
 ---
 
-## 3. Verified Live Execution Reports
+## 3. Verified Live Execution Reports (`Podman SDK CI Run 45171596002`)
 
-See [`examples/BSoC/README.md`](../../examples/BSoC/README.md) for all reproducible CLI commands. Live measured Podman SDK CI numbers and verbatim exported reports in `examples/BSoC/reports/` are populated immediately upon CI execution.
+All metrics below are **verbatim measured outputs** from 100%-GREEN Rootless Podman SDK CI run [`45171596002`](https://github.com/Duy-Huan/IP-XACT/actions/runs/45171596002) (commit `7a88f46`, `2026-11-23T12:16:36Z`, `SoC regression` `45171595907` also `PASSED`):
+
+### 3.1 Summary Scorecard & Cross-Engine Provenance
+
+| Verification Dimension | Measured Result | Artifact / SHA-256 Provenance |
+|---|---|---|
+| **Overall Verdict & Coverage** | **`PASSED` · `100.0%` (`18/18` bins)** | [`examples/BSoC/reports/bsoc-simulation-report.md`](../../examples/BSoC/reports/bsoc-simulation-report.md) |
+| **Telecom Firmware Console (`12/12`)** | **`BSOC_TELECOM_ALL_PASS` (`rc = 0`)** | [`examples/BSoC/reports/bsoc-console.log`](../../examples/BSoC/reports/bsoc-console.log) (`5a89d52b...6919e`) |
+| **Negative Guest Fault Test** | **`expected_failure_detected: true` (`rc = 1`)** | `negative_elf_sha256: b98657ab...f97d5` |
+| **RV64 Execution & Interconnect** | `19,473` insns · `7` PLIC traps · `37,366` bus tx · `1,103,328,000 ps` | `vcd_sha256: 827f61d7...96847` |
+| **3 Crossbars & Async CDC** | `tilelink_xbar: 22,328` · `axi4_ctrl_xbar: 10,299` · `axi4_data_xbar: 4,739` · **`2,103` CDC crossings** | `generated_cpp_sha256: c562a19b...635fc` |
+| **4 Independent Bus Masters** | `rocket_cpu_0: 24,175` · `tisar_adc_0_stream: 12,933` · `dma_accel_0: 256` (`512 B`) · `jtag_to_axi4_0: 2` | `emulator_binary_sha256: 0d307423...61a93` |
+| **5-Stage AXI4-Stream Dataflow** | **`2,432` packets**: `[1024, 1024, 128, 128, 128]` across all 5 SAMs + 512KB Pattern Gen/LA | `spec_sha256: 5b2dfdf4...de72d` |
+| **5× Verilator 5.032 RTL Cycles** | **`49,528` cycles** (`l2_cache_512k: 22,279`, `fir_decim8_0: 22,037`, `tuner_32ph_0: 4,100`, `fft_128pt_0: 1,095`, `hwacha_vec_0: 17`) | [`examples/BSoC/reports/bsoc-calibration-report.json`](../../examples/BSoC/reports/bsoc-calibration-report.json) |
+| **LIVE `usp-mmio32-v1` Plugin (`polyphase_12t_0`)** | **`PASSED` · `517` AF_UNIX IPC frames** (`516` MMIO + `1` RESET) | `trace_sha256: f425c4d5...7d6bd5` |
+| **Hybrid vs. Pure TLM Calibration** | **`PASSED` · `275,832.0` vs. `275,832.0` cycles (`0.00%` error, `functional_parity: true`)** | [`examples/BSoC/reports/bsoc-calibration-report.json`](../../examples/BSoC/reports/bsoc-calibration-report.json) |
+| **Live `qemu-system-riscv64` 10.0.13 Crosscheck** | **`PASSED` · `3/3` markers (`rc = 0`, DTB compiled)** | [`examples/BSoC/reports/bsoc-qemu-crosscheck.log`](../../examples/BSoC/reports/bsoc-qemu-crosscheck.log) (`88c253d4...4e445`) |
+
+### 3.2 Verbatim Exported Report Files
+
+- [`examples/BSoC/reports/bsoc-console.log`](../../examples/BSoC/reports/bsoc-console.log) — 12/12 bare-metal telecom UART markers
+- [`examples/BSoC/reports/bsoc-simulation-report.md`](../../examples/BSoC/reports/bsoc-simulation-report.md) — full per-fabric, per-master, and 22-device hit/RTL-cycle report
+- [`examples/BSoC/reports/bsoc-calibration-report.json`](../../examples/BSoC/reports/bsoc-calibration-report.json) — 5× Verilator RTL + live socket plugin vs. pure SystemC-TLM calibration JSON (`relative_error: 0.0`)
+- [`examples/BSoC/reports/bsoc-qemu-crosscheck.log`](../../examples/BSoC/reports/bsoc-qemu-crosscheck.log) — live `qemu-system-riscv64` cross-engine output
+
+See [`examples/BSoC/README.md`](../../examples/BSoC/README.md) for all reproducible CLI commands and [`upgrade/bsoc-multiplatform-audit.md`](../../upgrade/bsoc-multiplatform-audit.md) for the pre/post architectural bottleneck audit.

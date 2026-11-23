@@ -1,0 +1,34 @@
+{
+  "calibration": {
+    "contract": "native-calibration-report-1",
+    "error_budget": 0.1,
+    "estimated_cycles": 275832.0,
+    "model_source": "qemu-analytical-estimate",
+    "reference_cycles": 275832.0,
+    "reference_source": "native-rtl",
+    "relative_error": 0.0,
+    "roi": "bsoc_hybrid_rtl_plugin_vs_tlm",
+    "silicon_signoff": false,
+    "within_budget": true
+  },
+  "contract": "usp-composed-calibration-1",
+  "design": "BSoC",
+  "functional_parity": true,
+  "hybrid_systemc_time_ps": 1103328000.0,
+  "live_plugins": {
+    "polyphase_12t_0": {
+      "status": "PASSED",
+      "trace_sha256": "f425c4d52a684f9192efdd63d6e4ae4d66152f72bb94bb9661966f84197d6bd5",
+      "tx_count": 517
+    }
+  },
+  "rtl_cycles": {
+    "fft_128pt_0": 1095,
+    "fir_decim8_0": 22037,
+    "hwacha_vec_0": 17,
+    "l2_cache_512k": 22279,
+    "tuner_32ph_0": 4100
+  },
+  "status": "PASSED",
+  "tlm_systemc_time_ps": 1103328000.0
+}
