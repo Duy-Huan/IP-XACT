@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from socsim.dashboard import generate_dashboard
 from socsim.domain import ContractError
 from socsim.dse_cluster import run_dse_sweep
 from socsim.ip_registry import (
@@ -23,11 +24,13 @@ COUNTER_PKG = ROOT / "specs/flows/packages/counter/package.yaml"
 UNIFIED_SPEC = ROOT / "specs/multiplatform/unified_hetero_soc.yaml"
 
 
-def test_ip_registry_publish_immutability_resolve_and_tamper_detection(tmp_path):
+def test_ip_registry_publish_immutability_semver_ranges_and_tamper_detection(tmp_path):
     reg = tmp_path / "registry"
     e1 = publish_package(MAC_NPU_PKG, reg, version="1.0.0")
+    e1_minor = publish_package(MAC_NPU_PKG, reg, version="1.2.0")
     e2 = publish_package(COUNTER_PKG, reg, version="1.0.0")
     assert e1["key"] == "user.mac_npu@1.0.0"
+    assert e1_minor["key"] == "user.mac_npu@1.2.0"
     assert e2["key"] == "user.counter@1.0.0"
 
     # Re-publishing the exact same version must fail immutably
@@ -35,20 +38,25 @@ def test_ip_registry_publish_immutability_resolve_and_tamper_detection(tmp_path)
         publish_package(MAC_NPU_PKG, reg, version="1.0.0")
 
     listing = list_registry(reg)
-    assert listing["count"] == 2
+    assert listing["count"] == 3
     assert verify_registry(reg)["status"] == "PASSED"
 
-    # Resolve into a fresh collaborator workspace
+    # Resolve using semver ranges (^1.0.0 picks 1.2.0; >=1.0.0,<2.0.0 picks 1.0.0)
     ws = tmp_path / "team-workspace"
     lock = resolve_packages(
         reg,
-        {"user.mac_npu": "1.0.0", "user.counter": "1.0.0"},
+        {"user.mac_npu": "^1.0.0", "user.counter": ">=1.0.0,<2.0.0"},
         ws,
     )
     assert lock["contract"] == "usp-ip-registry-lock-1"
-    assert len(lock["resolved"]) == 2
+    assert "user.mac_npu@1.2.0" in lock["resolved"]
+    assert "user.counter@1.0.0" in lock["resolved"]
     assert (ws / "ip-registry.lock.json").is_file()
-    assert Path(lock["resolved"]["user.mac_npu@1.0.0"]["package_yaml"]).is_file()
+    assert Path(lock["resolved"]["user.mac_npu@1.2.0"]["package_yaml"]).is_file()
+
+    # Tilde constraint ~1.0.0 must pick 1.0.0 (not 1.2.0)
+    lock_tilde = resolve_packages(reg, {"user.mac_npu": "~1.0.0"}, tmp_path / "ws-tilde")
+    assert "user.mac_npu@1.0.0" in lock_tilde["resolved"]
 
     # Corrupting an archive must be caught by both verify_registry and resolve_packages
     archive = reg / e1["archive"]
@@ -59,10 +67,13 @@ def test_ip_registry_publish_immutability_resolve_and_tamper_detection(tmp_path)
         resolve_packages(reg, {"user.mac_npu": "1.0.0"}, tmp_path / "ws-bad")
 
 
-def test_parallel_dse_sweep_cache_replay_and_calibration(tmp_path):
+def test_parallel_dse_process_cluster_cache_ray_gate_and_html5_dashboard(tmp_path):
     cache_dir = tmp_path / "dse-cache"
-    run1 = run_dse_sweep(UNIFIED_SPEC, tmp_path / "dse-1", workers=2, cache_dir=cache_dir)
+    run1 = run_dse_sweep(
+        UNIFIED_SPEC, tmp_path / "dse-1", workers=2, cluster="process", cache_dir=cache_dir
+    )
     assert run1["status"] == "PASSED"
+    assert run1["cluster_backend"] == "process"
     assert (tmp_path / "dse-1/dse-report.json").is_file()
     assert (tmp_path / "dse-1/dse-report.md").is_file()
     assert all(pt["replayed"] is False for pt in run1["points"])
@@ -79,6 +90,25 @@ def test_parallel_dse_sweep_cache_replay_and_calibration(tmp_path):
         assert run1["execution_mode"] == "plan-and-ir-parallel"
 
     # Second sweep using same cache MUST replay and explicitly mark replayed=True
-    run2 = run_dse_sweep(UNIFIED_SPEC, tmp_path / "dse-2", workers=2, cache_dir=cache_dir)
+    run2 = run_dse_sweep(
+        UNIFIED_SPEC, tmp_path / "dse-2", workers=2, cluster="thread", cache_dir=cache_dir
+    )
     assert run2["status"] == "PASSED"
     assert all(pt["replayed"] is True for pt in run2["points"])
+
+    # Requesting Ray cluster without ray installed MUST fail explicitly (no silent fallback)
+    try:
+        import ray  # noqa: F401
+    except ImportError:
+        with pytest.raises(ContractError, match="E_CLUSTER_UNAVAILABLE"):
+            run_dse_sweep(UNIFIED_SPEC, tmp_path / "dse-ray", workers=2, cluster="ray")
+
+    # Zero-CDN air-gapped HTML5 Verification Dashboard from real DSE report
+    dash_path = tmp_path / "dashboard.html"
+    dash = generate_dashboard(out_html=dash_path, dse_report=tmp_path / "dse-1/dse-report.json")
+    assert dash["status"] == "PASSED"
+    assert dash["contract"] == "usp-verification-dashboard-1"
+    html_text = dash_path.read_text()
+    assert "<!DOCTYPE html>" in html_text
+    assert "noc_fast_tlm" in html_text
+    assert "http://" not in html_text and "https://" not in html_text

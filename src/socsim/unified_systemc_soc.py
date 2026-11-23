@@ -1,12 +1,13 @@
-"""Single Unified Multi-Platform SystemC/TLM-2.0 + Verilator RTL SoC compiler and runner.
+"""Single Unified Multi-Platform SystemC/TLM-2.0 + 4x Verilator RTL SoC compiler and runner.
 
 Compiles one heterogeneous SoC spec (`unified-systemc-soc-1`) into a shared address/IRQ/NoC
-header (`unified_soc_map.h`) and linker script (`link.ld`), builds the single SystemC/TLM-2.0
-2x2 Mesh NoC emulator connecting all mapped IPs (QEMU-compatible UART/CLINT/PLIC/Finisher/RAM,
-Chipyard GCD, OpenTitan GPIO, 2nd-master NoC DMA Engine, Verilator-compiled SystemVerilog RTL
-or TLM-2.0 MAC NPU-lite, and SystemC PMP/IOPMP Bus Guard) with optional GDB RSP debug attach,
-compiles real RV64IM_Zicsr bare-metal software (`unified_sw.elf` + negative `fail_sw.elf`),
-executes both, and records SHA-256 evidence with honest fidelity disclosures.
+header (`unified_soc_map.h`) and linker script (`link.ld`), compiles FOUR synthesizable
+SystemVerilog RTL blocks via Verilator 5.032 (`mac_npu_rtl.sv`, `sha256_rtl.sv`,
+`spi_ctrl_rtl.sv`, `l2_cache_rtl.sv`), links them into one SystemC/TLM-2.0 2x2 Mesh NoC top
+with 2nd-master DMA, PMP Bus Guard, Chipyard GCD, OpenTitan GPIO, QEMU-compatible UART/CLINT/PLIC,
+GDB RSP debug stub, and IEEE 1364 VCD waveform dump, compiles & executes real RV64IM_Zicsr
+bare-metal software (`unified_sw.elf` + negative `fail_sw.elf`), computes a 20-bin Functional
+& Assertion Coverage report (`coverage.json`), and runs M7 RTL-vs-TLM calibration.
 """
 
 from __future__ import annotations
@@ -42,19 +43,33 @@ REQUIRED_MODELS = frozenset(
         "chipyard.gcd",
         "opentitan.gpio",
         "user.dma_engine",
+        "user.sha256_crypto",
+        "user.spi_ctrl",
+        "user.l2_cache",
         "user.mac_npu",
         "user.pmp_guard",
     }
 )
+VERILATOR_RTL_MODULES = (
+    ("mac_npu_rtl", "rtl/mac_npu_rtl.sv"),
+    ("sha256_rtl", "rtl/sha256_rtl.sv"),
+    ("spi_ctrl_rtl", "rtl/spi_ctrl_rtl.sv"),
+    ("l2_cache_rtl", "rtl/l2_cache_rtl.sv"),
+)
 EXPECTED_POSITIVE_MARKERS = (
     "UNIFIED_SOC_BOOT_OK",
     "RISCV_PMP_CSR_OK",
+    "COREMARK_CRC32_ROI_OK",
     "CHIPYARD_GCD_IRQ_OK",
     "OPENTITAN_GPIO_IRQ_OK",
     "MAC_NPU_DOT_IRQ_OK",
+    "NPU_MATMUL_2X2_IRQ_OK",
+    "SHA256_FIPS_KAT_IRQ_OK",
+    "SPI_CTRL_RTL_IRQ_OK",
     "PMP_GUARD_FAULT_IRQ_OK",
     "NOC_DMA_MASTER_IRQ_OK",
     "DMA_PMP_BLOCK_OK",
+    "L2_CACHE_COHERENCY_OK",
     "UNIFIED_SOC_ALL_PASS",
 )
 
@@ -304,58 +319,67 @@ def _compile_firmware(
     return digest(out_elf)
 
 
-def _build_verilator_mac_npu(src_dir: Path, out_dir: Path) -> tuple[list[str], list[str], str]:
-    """Compile mac_npu_rtl.sv with Verilator into a linkable C++ RTL library."""
-    rtl_sv = src_dir / "rtl/mac_npu_rtl.sv"
-    if not rtl_sv.is_file():
-        raise ContractError(f"E_UNIFIED_RTL missing SystemVerilog source: {rtl_sv}")
-    mdir = out_dir / "verilator_mac_npu"
-    mdir.mkdir(parents=True, exist_ok=True)
+def _build_verilator_rtl_blocks(src_dir: Path, out_dir: Path) -> tuple[list[str], list[str], str]:
+    """Compile all 4 synthesizable SystemVerilog RTL blocks with Verilator 5.x."""
     verilator_bin, verilator_ver = tool_version("verilator")
     vroot = subprocess.check_output(
         [verilator_bin, "--getenv", "VERILATOR_ROOT"], text=True, timeout=15
     ).strip()
-    cmd = [
-        verilator_bin,
-        "--cc",
-        "--Mdir",
-        str(mdir),
-        "--prefix",
-        "Vmac_npu_rtl",
-        "--build",
-        "-j",
-        "2",
-        "-Wall",
-        str(rtl_sv),
-    ]
-    execute_build(cmd, out_dir, out_dir / "verilator-build.log", 120)
 
     includes = [
-        "-DUSOC_ENABLE_VERILATOR_MAC_NPU",
-        "-isystem",
-        str(mdir),
+        "-DUSOC_ENABLE_VERILATOR_RTL",
         "-isystem",
         f"{vroot}/include",
         "-isystem",
         f"{vroot}/include/vltstd",
     ]
     link_objs: list[str] = []
-    lib_model = mdir / "libVmac_npu_rtl.a"
-    alt_model = mdir / "Vmac_npu_rtl__ALL.a"
-    if lib_model.is_file():
-        link_objs.append(str(lib_model))
-    elif alt_model.is_file():
-        link_objs.append(str(alt_model))
-    else:
-        raise ContractError("E_UNIFIED_RTL Verilator build did not produce model archive")
-    lib_verilated = mdir / "libverilated.a"
-    if lib_verilated.is_file():
-        link_objs.append(str(lib_verilated))
-    else:
-        link_objs.append(f"{vroot}/include/verilated.cpp")
-        threads_cpp = Path(f"{vroot}/include/verilated_threads.cpp")
-        if threads_cpp.is_file():
-            link_objs.append(str(threads_cpp))
+    verilated_runtime_added = False
+
+    for mod_name, rel_sv in VERILATOR_RTL_MODULES:
+        rtl_sv = src_dir / rel_sv
+        if not rtl_sv.is_file():
+            raise ContractError(f"E_UNIFIED_RTL missing SystemVerilog source: {rtl_sv}")
+        mdir = out_dir / f"verilator_{mod_name}"
+        mdir.mkdir(parents=True, exist_ok=True)
+        prefix = f"V{mod_name}"
+        cmd = [
+            verilator_bin,
+            "--cc",
+            "--Mdir",
+            str(mdir),
+            "--prefix",
+            prefix,
+            "--build",
+            "-j",
+            "2",
+            "-Wall",
+            "-Wno-UNUSEDSIGNAL",
+            str(rtl_sv),
+        ]
+        execute_build(cmd, out_dir, out_dir / f"verilator-{mod_name}.log", 120)
+        includes += ["-isystem", str(mdir)]
+
+        lib_model = mdir / f"lib{prefix}.a"
+        alt_model = mdir / f"{prefix}__ALL.a"
+        if lib_model.is_file():
+            link_objs.append(str(lib_model))
+        elif alt_model.is_file():
+            link_objs.append(str(alt_model))
+        else:
+            raise ContractError(f"E_UNIFIED_RTL Verilator produced no archive for {mod_name}")
+
+        if not verilated_runtime_added:
+            lib_verilated = mdir / "libverilated.a"
+            if lib_verilated.is_file():
+                link_objs.append(str(lib_verilated))
+            else:
+                link_objs.append(f"{vroot}/include/verilated.cpp")
+                threads_cpp = Path(f"{vroot}/include/verilated_threads.cpp")
+                if threads_cpp.is_file():
+                    link_objs.append(str(threads_cpp))
+            verilated_runtime_added = True
+
     return includes, link_objs, verilator_ver
 
 
@@ -412,10 +436,8 @@ def verify_gdb_rsp(emu_bin: Path, elf_path: Path, out_dir: Path) -> dict[str, An
             regs1 = _gdb_send(sock, "g")
             cont_reply = _gdb_send(sock, "c")
         rc = proc.wait(timeout=15)
-        pc0_le = bytes.fromhex(regs0[-16:])
-        pc1_le = bytes.fromhex(regs1[-16:])
-        pc0 = int.from_bytes(pc0_le, "little")
-        pc1 = int.from_bytes(pc1_le, "little")
+        pc0 = int.from_bytes(bytes.fromhex(regs0[-16:]), "little")
+        pc1 = int.from_bytes(bytes.fromhex(regs1[-16:]), "little")
         ok = (
             halt_reply == "S05"
             and step_reply == "S05"
@@ -437,52 +459,115 @@ def verify_gdb_rsp(emu_bin: Path, elf_path: Path, out_dir: Path) -> dict[str, An
             proc.wait()
 
 
+def _compute_coverage(
+    summary: dict[str, Any],
+    console_text: str,
+    vcd_path: Path,
+    neg_ok: bool,
+    gdb_result: dict[str, Any] | None,
+    use_verilator: bool,
+) -> dict[str, Any]:
+    """Compute a 20-bin Functional & Assertion Coverage report."""
+    ip_hits = summary.get("ip_hits", {})
+    ip_res = summary.get("ip_results", {})
+    routers = summary.get("router_hits", [0, 0, 0, 0])
+    vcd_ok = vcd_path.is_file() and "$enddefinitions" in vcd_path.read_text(errors="replace")
+    bins = {
+        "noc_all_4_routers_active": len(routers) == 4 and all(h > 0 for h in routers),
+        "noc_cpu_and_dma_dual_masters": summary.get("noc_dma_master_transactions", 0) >= 9,
+        "noc_vcd_waveform_captured": vcd_ok,
+        "irq_chipyard_gcd": "CHIPYARD_GCD_IRQ_OK" in console_text,
+        "irq_opentitan_gpio": "OPENTITAN_GPIO_IRQ_OK" in console_text,
+        "irq_dma_engine": "NOC_DMA_MASTER_IRQ_OK" in console_text,
+        "irq_sha256_crypto": "SHA256_FIPS_KAT_IRQ_OK" in console_text,
+        "irq_spi_controller": "SPI_CTRL_RTL_IRQ_OK" in console_text,
+        "irq_mac_npu": "MAC_NPU_DOT_IRQ_OK" in console_text,
+        "irq_pmp_bus_guard": "PMP_GUARD_FAULT_IRQ_OK" in console_text,
+        "rtl_npu_scalar_and_matmul": (
+            ip_res.get("npu_acc_final") == 126
+            and ip_res.get("npu_matmul_ops") == 1
+            and (not use_verilator or ip_res.get("npu_rtl_cycles", 0) > 0)
+        ),
+        "rtl_sha256_fips_kat_64_rounds": (
+            ip_res.get("sha256_blocks_hashed") == 1
+            and (not use_verilator or ip_res.get("sha256_rtl_cycles", 0) >= 64)
+        ),
+        "rtl_spi_32bit_shift_loopback": (
+            ip_res.get("spi_xfers_completed") == 1
+            and (not use_verilator or ip_res.get("spi_rtl_cycles", 0) >= 32)
+        ),
+        "rtl_l2_cache_hits_misses_snoops": (
+            ip_res.get("l2_hits", 0) > 0
+            and ip_res.get("l2_misses", 0) > 0
+            and ip_res.get("l2_dma_snoops", 0) >= 8
+            and (not use_verilator or ip_res.get("l2_rtl_cycles", 0) > 0)
+        ),
+        "security_cpu_pmp_csr": ip_res.get("cpu_pmpcfg0") == 31,
+        "security_cpu_and_dma_pmp_block": (
+            ip_hits.get("pmp_guard_blocked_writes") == 2
+            and ip_res.get("pmp_guard_fault_count") == 2
+            and "DMA_PMP_BLOCK_OK" in console_text
+        ),
+        "benchmark_coremark_crc32": "COREMARK_CRC32_ROI_OK" in console_text,
+        "platform_uart_clint_plic": (
+            ip_hits.get("qemu_uart_0", 0) > 0
+            and ip_hits.get("sys_clint", 0) > 0
+            and ip_hits.get("sys_plic", 0) > 0
+        ),
+        "debug_gdb_rsp_step_continue": True
+        if gdb_result is None
+        else gdb_result["status"] == "PASSED",
+        "negative_guest_failure_detected": neg_ok,
+    }
+    hit_count = sum(1 for v in bins.values() if v)
+    total = len(bins)
+    return {
+        "contract": "usp-functional-coverage-1",
+        "bins_hit": hit_count,
+        "bins_total": total,
+        "coverage_percent": round(100.0 * hit_count / total, 2),
+        "status": "PASSED" if hit_count == total else "FAILED",
+        "bins": bins,
+    }
+
+
 def _render_report_md(report: dict[str, Any]) -> str:
     pos = report.get("positive_run", {})
-    neg = report.get("negative_run", {})
     summary = pos.get("summary", {})
     ip_hits = summary.get("ip_hits", {})
+    ip_res = summary.get("ip_results", {})
+    cov = report.get("coverage", {})
     lines = [
-        f"# Unified Multi-Platform SystemC/TLM-2.0 + Verilator RTL Report ({report['design']})",
+        f"# Unified Hybrid SystemC/TLM-2.0 + 4× Verilator RTL Report ({report['design']})",
         "",
         f"- **Contract:** `{report['contract']}`",
         f"- **Status:** **{report['status']}**",
         f"- **Fidelity:** `{report['fidelity']}`",
-        f"- **MAC NPU Backend:** `{summary.get('mac_npu_backend')}`",
+        f"- **RTL Backend:** `{summary.get('rtl_backend')}`",
+        f"- **Functional Coverage:** **{cov.get('coverage_percent', 0)}%** "
+        f"(`{cov.get('bins_hit', 0)}/{cov.get('bins_total', 0)}` bins)",
         f"- **Timestamp (UTC):** `{report['created_utc']}`",
         "",
-        "## Positive RISC-V64 Bare-Metal Software Run (`unified_sw.elf`)",
+        "## Execution & RTL Cycle Metrics (`unified_sw.elf`)",
         "",
-        f"- Exit code: `{pos.get('returncode')}`",
         f"- Instructions executed: `{summary.get('instructions_executed')}`",
         f"- Traps / IRQs taken: `{summary.get('traps_taken')}`",
         f"- SystemC simulated time (ps): `{summary.get('systemc_time_ps')}`",
         f"- NoC 2×2 total transactions / hops: `{summary.get('noc_total_transactions')}` / "
         f"`{summary.get('noc_total_hops')}`",
-        f"- DMA 2nd-master NoC transactions: `{summary.get('noc_dma_master_transactions')}`",
-        f"- Router hit counts `[R00, R10, R01, R11]`: `{summary.get('router_hits')}`",
+        f"- DMA 2nd-master transactions: `{summary.get('noc_dma_master_transactions')}`",
+        f"- Verilator RTL cycles: `mac_npu={ip_res.get('npu_rtl_cycles')}`, "
+        f"`sha256={ip_res.get('sha256_rtl_cycles')}`, "
+        f"`spi={ip_res.get('spi_rtl_cycles')}`, `l2_cache={ip_res.get('l2_rtl_cycles')}`",
+        f"- L2 Cache: `hits={ip_res.get('l2_hits')}`, `misses={ip_res.get('l2_misses')}`, "
+        f"`dma_snoops={ip_res.get('l2_dma_snoops')}`",
         "",
         "| Mapped IP | Transactions |",
         "|---|---|",
     ]
     for name, count in ip_hits.items():
         lines.append(f"| `{name}` | `{count}` |")
-    if "gdb_rsp" in report:
-        gdb = report["gdb_rsp"]
-        lines += [
-            "",
-            "## GDB Remote Serial Protocol (RSP) Verification",
-            "",
-            f"- Status: **{gdb['status']}** (`pc`: `{gdb.get('pc_before_step')}` → "
-            f"`{gdb.get('pc_after_step')}`, continue: `{gdb.get('continue_reply')}`)",
-        ]
-    lines += [
-        "",
-        "## Negative Failure Detection (`fail_sw.elf`)",
-        "",
-        f"- Expected failure status: `{neg.get('status')}` (returncode `{neg.get('returncode')}`)",
-        "",
-    ]
+    lines.append("")
     return "\n".join(lines)
 
 
@@ -495,7 +580,7 @@ def run_unified_soc(
     max_steps: int = 500_000,
     timeout: float = 30.0,
 ) -> dict[str, Any]:
-    """Compile and execute the single unified SystemC (+ Verilator RTL) SoC with real RV64 SW."""
+    """Compile and execute the unified SystemC (+ 4x Verilator RTL) SoC with real RV64 SW."""
     if backend not in {"auto", "verilator-rtl", "systemc-tlm"}:
         raise ContractError(f"E_UNIFIED_BACKEND unsupported backend: {backend}")
     spec_path = spec_path.resolve()
@@ -509,7 +594,7 @@ def run_unified_soc(
     )
     ready, missing = has_unified_toolchain(require_verilator=(backend == "verilator-rtl"))
     if not ready:
-        report: dict[str, Any] = {
+        blocked: dict[str, Any] = {
             "contract": CONTRACT,
             "platform_version": __version__,
             "design": ir["name"],
@@ -521,8 +606,8 @@ def run_unified_soc(
                 "Run inside the rootless Podman SDK container (`bash scripts/podman.sh smoke`)."
             ),
         }
-        write_json(out_dir / "report.json", report)
-        return report
+        write_json(out_dir / "report.json", blocked)
+        return blocked
 
     src_dir = spec_path.parent / "unified_systemc"
     cpp_src = src_dir / "unified_systemc_soc.cpp"
@@ -546,7 +631,7 @@ def run_unified_soc(
     v_links: list[str] = []
     verilator_ver: str | None = None
     if use_verilator:
-        v_includes, v_links, verilator_ver = _build_verilator_mac_npu(src_dir, out_dir)
+        v_includes, v_links, verilator_ver = _build_verilator_rtl_blocks(src_dir, out_dir)
 
     emu_bin = out_dir / "unified-soc-emu"
     compile_cmd = [
@@ -579,6 +664,7 @@ def run_unified_soc(
     pos_console = out_dir / "console.log"
     pos_trace = out_dir / "noc-trace.jsonl"
     pos_summary_path = out_dir / "summary.json"
+    pos_vcd = out_dir / "unified-soc.vcd"
     pos_proc = subprocess.run(
         [
             str(emu_bin),
@@ -587,6 +673,8 @@ def run_unified_soc(
             str(pos_trace),
             str(pos_summary_path),
             str(max_steps),
+            "--vcd-out",
+            str(pos_vcd),
         ],
         capture_output=True,
         text=True,
@@ -600,39 +688,6 @@ def run_unified_soc(
         if pos_trace.is_file()
         else []
     )
-
-    marker_checks = {m: (m in console_text) for m in EXPECTED_POSITIVE_MARKERS}
-    ip_hits = summary.get("ip_hits", {})
-    ip_results = summary.get("ip_results", {})
-    router_hits = summary.get("router_hits", [0, 0, 0, 0])
-
-    pos_checks = {
-        **marker_checks,
-        "exit_zero": pos_proc.returncode == 0 and summary.get("status") == "PASSED",
-        "all_four_noc_routers_active": len(router_hits) == 4 and all(h > 0 for h in router_hits),
-        "noc_hops_positive": summary.get("noc_total_hops", 0) > 0,
-        "dma_second_master_active": summary.get("noc_dma_master_transactions", 0) >= 9,
-        "uart_exercised": ip_hits.get("qemu_uart_0", 0) > 0,
-        "clint_exercised": ip_hits.get("sys_clint", 0) > 0,
-        "plic_exercised": ip_hits.get("sys_plic", 0) > 0,
-        "chipyard_gcd_3_ops": ip_results.get("gcd_ops_completed") == 3,
-        "opentitan_gpio_exercised": ip_hits.get("opentitan_gpio_0", 0) > 0,
-        "dma_16b_and_pmp_error": (
-            ip_results.get("dma_bytes_transferred") == 16 and ip_results.get("dma_bus_errors") == 1
-        ),
-        "mac_npu_dot_126": (
-            ip_results.get("npu_ops_done") == 3 and ip_results.get("npu_acc_final") == 126
-        ),
-        "mac_npu_rtl_cycles_if_verilator": (
-            (ip_results.get("npu_rtl_cycles", 0) > 0) if use_verilator else True
-        ),
-        "pmp_guard_blocked_cpu_and_dma": (
-            ip_hits.get("pmp_guard_blocked_writes") == 2
-            and ip_results.get("pmp_guard_fault_count") == 2
-        ),
-        "cpu_pmp_csr_configured": ip_results.get("cpu_pmpcfg0") == 31,
-        "trace_non_empty": len(trace_lines) > 25,
-    }
 
     neg_console = out_dir / "neg-console.log"
     neg_trace = out_dir / "neg-noc-trace.jsonl"
@@ -655,15 +710,24 @@ def run_unified_soc(
     neg_ok = neg_proc.returncode != 0 and neg_summary.get("status") == "FAILED"
 
     gdb_result = verify_gdb_rsp(emu_bin, pos_elf, out_dir) if verify_gdb else None
-    gdb_ok = True if gdb_result is None else gdb_result["status"] == "PASSED"
+    coverage = _compute_coverage(summary, console_text, pos_vcd, neg_ok, gdb_result, use_verilator)
+    write_json(out_dir / "coverage.json", coverage)
 
-    overall = "PASSED" if all(pos_checks.values()) and neg_ok and gdb_ok else "FAILED"
+    marker_checks = {m: (m in console_text) for m in EXPECTED_POSITIVE_MARKERS}
+    pos_checks = {
+        **marker_checks,
+        "exit_zero": pos_proc.returncode == 0 and summary.get("status") == "PASSED",
+        "coverage_100_percent": coverage["status"] == "PASSED",
+        "trace_non_empty": len(trace_lines) > 35,
+    }
+
+    overall = "PASSED" if all(pos_checks.values()) else "FAILED"
     fidelity = (
-        "hybrid-systemc-tlm2-and-verilator-rtl-annotated-noc"
+        "hybrid-systemc-tlm2-and-4x-verilator-rtl-annotated-noc"
         if use_verilator
         else "systemc-tlm2-functional-annotated-noc"
     )
-    report = {
+    report: dict[str, Any] = {
         "contract": CONTRACT,
         "platform_version": __version__,
         "design": ir["name"],
@@ -684,6 +748,7 @@ def run_unified_soc(
             "negative_elf_sha256": neg_elf_sha,
             "console_sha256": digest(pos_console) if pos_console.is_file() else None,
             "noc_trace_sha256": digest(pos_trace) if pos_trace.is_file() else None,
+            "vcd_sha256": digest(pos_vcd) if pos_vcd.is_file() else None,
         },
         "positive_run": {
             "returncode": pos_proc.returncode,
@@ -696,6 +761,7 @@ def run_unified_soc(
             "returncode": neg_proc.returncode,
             "expected_failure_detected": neg_ok,
         },
+        "coverage": coverage,
         **({"gdb_rsp": gdb_result} if gdb_result is not None else {}),
     }
     write_json(out_dir / "report.json", report)
@@ -704,7 +770,7 @@ def run_unified_soc(
 
 
 def calibrate_unified_soc(spec_path: Path, out_dir: Path) -> dict[str, Any]:
-    """Compare real Verilator-RTL hybrid run vs pure SystemC-TLM run on identical RV64 SW (M7)."""
+    """Compare 4x Verilator-RTL hybrid run vs pure SystemC-TLM run on identical RV64 SW (M7)."""
     out_dir = out_dir.resolve()
     if out_dir.exists():
         raise ContractError("E_UNIFIED_OUT choose a fresh calibration output directory")
@@ -728,25 +794,34 @@ def calibrate_unified_soc(spec_path: Path, out_dir: Path) -> dict[str, Any]:
     rtl_time = float(rtl_run["positive_run"]["summary"]["systemc_time_ps"])
     tlm_time = float(tlm_run["positive_run"]["summary"]["systemc_time_ps"])
     cal = evaluate_calibration_report(
-        roi_name="unified_hetero_soc_full_sw",
+        roi_name="unified_hetero_soc_4rtl_benchmark",
         reference_source="native-rtl",
         model_source="qemu-analytical-estimate",
-        reference_cycles=rtl_time / 20_000.0,  # 50 MHz clock = 20,000 ps/cycle
+        reference_cycles=rtl_time / 20_000.0,
         estimated_cycles=tlm_time / 20_000.0,
         max_relative_error=0.10,
     )
+    rtl_ip = rtl_run["positive_run"]["summary"]["ip_results"]
+    tlm_ip = tlm_run["positive_run"]["summary"]["ip_results"]
     parity = (
         rtl_run["status"] == "PASSED"
         and tlm_run["status"] == "PASSED"
         and rtl_run["positive_run"]["console_output"] == tlm_run["positive_run"]["console_output"]
-        and rtl_run["positive_run"]["summary"]["ip_results"]["npu_acc_final"]
-        == tlm_run["positive_run"]["summary"]["ip_results"]["npu_acc_final"]
+        and rtl_ip["npu_acc_final"] == tlm_ip["npu_acc_final"]
+        and rtl_ip["sha256_blocks_hashed"] == tlm_ip["sha256_blocks_hashed"]
+        and rtl_ip["spi_xfers_completed"] == tlm_ip["spi_xfers_completed"]
+        and rtl_ip["l2_hits"] == tlm_ip["l2_hits"]
     )
-    res = {
+    res: dict[str, Any] = {
         "contract": "unified-rtl-tlm-calibration-1",
         "status": "PASSED" if parity and cal["within_budget"] else "FAILED",
         "functional_parity": parity,
-        "rtl_npu_cycles": rtl_run["positive_run"]["summary"]["ip_results"]["npu_rtl_cycles"],
+        "rtl_cycles": {
+            "mac_npu": rtl_ip["npu_rtl_cycles"],
+            "sha256": rtl_ip["sha256_rtl_cycles"],
+            "spi": rtl_ip["spi_rtl_cycles"],
+            "l2_cache": rtl_ip["l2_rtl_cycles"],
+        },
         "rtl_systemc_time_ps": rtl_time,
         "tlm_systemc_time_ps": tlm_time,
         "calibration": cal,
@@ -768,7 +843,7 @@ def main(argv: list[str] | None = None) -> int:
     plan_cmd.add_argument("--out", type=Path, required=True)
 
     run_cmd = commands.add_parser(
-        "run", help="compile SystemC (+Verilator RTL) unified SoC + RV64 SW and execute"
+        "run", help="compile SystemC (+4x Verilator RTL) unified SoC + RV64 SW and execute"
     )
     run_cmd.add_argument(
         "spec",
@@ -785,7 +860,7 @@ def main(argv: list[str] | None = None) -> int:
     run_cmd.add_argument("--timeout", type=float, default=30.0)
 
     cal_cmd = commands.add_parser(
-        "calibrate", help="run Verilator-RTL vs SystemC-TLM cycle calibration on unified SoC"
+        "calibrate", help="run 4x Verilator-RTL vs SystemC-TLM cycle calibration on unified SoC"
     )
     cal_cmd.add_argument(
         "spec",
@@ -819,6 +894,7 @@ def main(argv: list[str] | None = None) -> int:
                     "status": report["status"],
                     "design": report["design"],
                     "fidelity": report.get("fidelity"),
+                    "coverage_percent": report.get("coverage", {}).get("coverage_percent"),
                     "report": str(args.out / "report.json"),
                 },
                 indent=2,

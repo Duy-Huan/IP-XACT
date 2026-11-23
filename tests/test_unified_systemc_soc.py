@@ -28,7 +28,7 @@ SPEC = ROOT / "specs/multiplatform/unified_hetero_soc.yaml"
 def test_unified_spec_validates_and_generates_shared_map_and_linker(tmp_path):
     spec = load_unified_spec(SPEC)
     assert spec["name"] == "Unified_Hetero_MultiPlatform_SoC"
-    assert len(spec["devices"]) == 11
+    assert len(spec["devices"]) == 14
 
     out = tmp_path / "plan"
     ir = generate_unified_artifacts(SPEC, out)
@@ -38,6 +38,9 @@ def test_unified_spec_validates_and_generates_shared_map_and_linker(tmp_path):
     assert "#define USOC_CHIPYARD_GCD_0_BASE 0x13000000ULL" in header
     assert "#define USOC_OPENTITAN_GPIO_0_IRQ 13U" in header
     assert "#define USOC_DMA_ENGINE_0_IRQ 14U" in header
+    assert "#define USOC_SHA256_CRYPTO_0_IRQ 15U" in header
+    assert "#define USOC_SPI_CTRL_0_IRQ 16U" in header
+    assert "#define USOC_L2_CACHE_0_BASE 0x1A000000ULL" in header
     assert "#define USOC_MAC_NPU_0_BASE 0x15000000ULL" in header
     assert "#define USOC_PMP_GUARD_0_IRQ 21U" in header
     assert "PROVIDE(_stack_top = 0x800F0000);" in linker
@@ -62,7 +65,7 @@ def test_unified_spec_rejects_overlap_and_duplicate_irq(tmp_path):
 
 
 def test_unified_systemc_soc_real_sw_execution(tmp_path):
-    """Compile and execute hybrid SystemC + Verilator RTL SoC, DMA, GDB RSP, and calibration."""
+    """Run 4x Verilator RTL + SystemC NoC, VCD, 20-bin coverage, GDB RSP, and calibration."""
     ready, missing = has_unified_toolchain()
     out = tmp_path / "unified-run"
     if not ready:
@@ -81,13 +84,27 @@ def test_unified_systemc_soc_real_sw_execution(tmp_path):
     for marker in EXPECTED_POSITIVE_MARKERS:
         assert marker in pos["console_output"]
     assert all(pos["checks"].values())
-    assert pos["summary"]["ip_results"]["gcd_ops_completed"] == 3
-    assert pos["summary"]["ip_results"]["dma_bytes_transferred"] == 16
-    assert pos["summary"]["ip_results"]["dma_bus_errors"] == 1
-    assert pos["summary"]["ip_results"]["npu_acc_final"] == 126
-    assert pos["summary"]["ip_results"]["pmp_guard_fault_count"] == 2
+    ip_res = pos["summary"]["ip_results"]
+    assert ip_res["gcd_ops_completed"] == 3
+    assert ip_res["dma_bytes_transferred"] == 16
+    assert ip_res["dma_bus_errors"] == 1
+    assert ip_res["npu_acc_final"] == 126
+    assert ip_res["npu_matmul_ops"] == 1
+    assert ip_res["sha256_blocks_hashed"] == 1
+    assert ip_res["spi_xfers_completed"] == 1
+    assert ip_res["l2_hits"] > 0
+    assert ip_res["l2_misses"] > 0
+    assert ip_res["l2_dma_snoops"] >= 8
+    assert ip_res["pmp_guard_fault_count"] == 2
     assert pos["summary"]["noc_dma_master_transactions"] >= 9
     assert all(h > 0 for h in pos["summary"]["router_hits"])
+
+    # IEEE 1364 VCD waveform & 20-bin Functional Coverage
+    assert (out / "unified-soc.vcd").is_file()
+    assert (out / "coverage.json").is_file()
+    assert report["coverage"]["bins_total"] == 20
+    assert report["coverage"]["coverage_percent"] == 100.0
+    assert report["coverage"]["status"] == "PASSED"
 
     # Live GDB RSP check
     assert report["gdb_rsp"]["status"] == "PASSED"
@@ -99,10 +116,13 @@ def test_unified_systemc_soc_real_sw_execution(tmp_path):
     assert neg["status"] == "FAILED"
     assert neg["returncode"] != 0
 
-    # Real Verilator RTL vs TLM-2.0 calibration check when Verilator is installed
+    # Real 4x Verilator RTL vs TLM-2.0 calibration check when Verilator is installed
     if shutil.which("verilator") is not None:
-        assert pos["summary"]["mac_npu_backend"] == "verilator-rtl"
-        assert pos["summary"]["ip_results"]["npu_rtl_cycles"] > 0
+        assert pos["summary"]["rtl_backend"] == "verilator-rtl"
+        assert ip_res["npu_rtl_cycles"] > 0
+        assert ip_res["sha256_rtl_cycles"] >= 64
+        assert ip_res["spi_rtl_cycles"] >= 32
+        assert ip_res["l2_rtl_cycles"] > 0
         cal = calibrate_unified_soc(SPEC, tmp_path / "unified-cal")
         assert cal["status"] == "PASSED", json.dumps(cal, indent=2)
         assert cal["functional_parity"] is True

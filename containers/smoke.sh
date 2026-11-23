@@ -28,7 +28,11 @@ usp registry publish specs/flows/packages/counter/package.yaml \
     --registry "$out/ip-registry" --version 1.0.0 > "$out/reg-pub2.json"
 usp registry verify --registry "$out/ip-registry" > "$out/reg-verify.json"
 usp dse sweep specs/multiplatform/unified_hetero_soc.yaml --out "$out/dse-sweep" \
-    --workers 2 --cache "$out/dse-cache" > "$out/dse-sweep.json"
+    --workers 2 --cluster process --cache "$out/dse-cache" > "$out/dse-sweep.json"
+usp dashboard generate --out "$out/dashboard.html" \
+    --unified "$out/unified-soc/report.json" \
+    --calibration "$out/unified-calibrate/calibration.json" \
+    --dse "$out/dse-sweep/dse-report.json" > "$out/dashboard.json"
 usp mcp tools --root /opt/socsim > "$out/mcp-tools.json"
 usp mcp config --client podman --root /opt/socsim > "$out/mcp-podman-config.json"
 usp upgrade --root /opt/socsim --audit > "$out/upgrade-audit.json"
@@ -37,5 +41,5 @@ SOCSIM_REQUIRE_INTEGRATION=1 USP_REQUIRE_SYSTEMC=1 python -m pytest \
     tests/test_multiplatform_soc.py tests/test_unified_systemc_soc.py \
     tests/test_enterprise_registry_dse.py tests/test_mcp_server.py -q \
     -o cache_dir="$out/pytest-cache" --basetemp="$out/tests" --junitxml="$out/junit.xml"
-printf 'SDK native smoke + QA + hybrid Verilator/SystemC SoC + Registry + DSE + MCP passed; source revision: '
+printf 'SDK native smoke + QA + 4x Verilator RTL/SystemC SoC + VCD + Coverage + Registry + DSE + Dashboard + MCP passed; source revision: '
 cat /usr/local/share/socsim-revision

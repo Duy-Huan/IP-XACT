@@ -1,6 +1,8 @@
 # Single Unified Multi-Platform Heterogeneous SoC mapped over a SystemC/TLM-2.0 2x2 Mesh NoC.
-# Supports hybrid fidelity: real Verilator-compiled SystemVerilog RTL (mac_npu_rtl.sv) co-simulating
-# live alongside SystemC/TLM-2.0 behavioral models and a 2nd-master DMA engine on ONE 2x2 NoC.
+# Hybrid Industrial Co-Simulation Top: FOUR Verilator-compiled synthesizable SystemVerilog RTL
+# modules (mac_npu_rtl.sv, sha256_rtl.sv, spi_ctrl_rtl.sv, l2_cache_rtl.sv) co-simulating live
+# alongside SystemC/TLM-2.0 models (Chipyard GCD, OpenTitan GPIO, 2nd-master DMA, PMP Bus Guard,
+# QEMU-compatible UART/CLINT/PLIC/RAM/ROM/Finisher) and GDB RSP debug stub on ONE 2x2 Mesh NoC.
 schema_version: unified-systemc-soc-1
 name: Unified_Hetero_MultiPlatform_SoC
 noc:
@@ -25,7 +27,8 @@ cpu:
   dma_dst_buf: 0x80120000
   model_disclosure: >-
     SystemC/TLM-2.0 RV64IM_Zicsr functional initiator with real M-mode PMP CSRs, trap controller,
-    and GDB RSP debug stub; co-simulates live with Verilator-compiled SystemVerilog mac_npu_rtl.sv
+    and GDB RSP debug stub; co-simulates live with 4 Verilator-compiled SystemVerilog RTL blocks
+    (MAC/MatMul NPU, FIPS 180-4 SHA-256, 32-bit SPI Controller, 64-line L2 Cache/Snoop Monitor)
     and a 2nd-master NoC DMA engine.
 devices:
 - name: boot_rom
@@ -49,6 +52,14 @@ devices:
   base: 0x80000000
   size: 0x01000000
   router: [0, 0]
+- name: l2_cache_0
+  platform: rtl-cache-ddr
+  model: user.l2_cache
+  backend: verilator-rtl
+  base: 0x1A000000
+  size: 0x00001000
+  router: [0, 0]
+  disclosure: Clean-room Verilator-compiled 64-line L2 cache tag & DMA coherency snoop RTL (l2_cache_rtl.sv).
 - name: sys_clint
   platform: qemu-io
   model: clint
@@ -71,6 +82,15 @@ devices:
   size: 0x00001000
   irq: 10
   router: [1, 0]
+- name: spi_ctrl_0
+  platform: rtl-io
+  model: user.spi_ctrl
+  backend: verilator-rtl
+  base: 0x19000000
+  size: 0x00001000
+  irq: 16
+  router: [1, 0]
+  disclosure: Clean-room Verilator-compiled 32-bit SPI master controller RTL (spi_ctrl_rtl.sv).
 - name: chipyard_gcd_0
   platform: chipyard
   model: chipyard.gcd
@@ -96,15 +116,24 @@ devices:
   irq: 14
   router: [0, 1]
   disclosure: Second TLM-2.0 bus master initiating real memory transfers across the 2x2 NoC.
+- name: sha256_crypto_0
+  platform: rtl-security
+  model: user.sha256_crypto
+  backend: verilator-rtl
+  base: 0x18000000
+  size: 0x00001000
+  irq: 15
+  router: [0, 1]
+  disclosure: Clean-room Verilator-compiled FIPS 180-4 SHA-256 64-round hardware engine RTL (sha256_rtl.sv).
 - name: mac_npu_0
-  platform: systemc-npu
+  platform: rtl-npu
   model: user.mac_npu
   backend: verilator-rtl
   base: 0x15000000
   size: 0x00001000
   irq: 20
   router: [1, 1]
-  disclosure: Verilator-compiled SystemVerilog RTL (mac_npu_rtl.sv), distinct from Chipyard Gemmini.
+  disclosure: Clean-room Verilator-compiled MAC + 2x2 MatMul RTL (mac_npu_rtl.sv), distinct from Chipyard Gemmini.
 - name: pmp_guard_0
   platform: systemc-pmp
   model: user.pmp_guard
