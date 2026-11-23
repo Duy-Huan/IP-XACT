@@ -21,11 +21,13 @@ from typing import Any, BinaryIO
 
 import yaml
 
+from .chia_loop import run_chia_loop
 from .dashboard import generate_dashboard
 from .domain import ContractError
 from .dse_cluster import run_dse_sweep
 from .ip_catalog import IP_CATALOG, catalog_summary
 from .ip_registry import list_registry
+from .ip_scaffold import scaffold_ip_package
 from .native_bsp_gen import synthesize_bsp_bundle
 from .native_domains import derive_domains_from_ir
 from .native_flow import preflight_flow
@@ -175,6 +177,8 @@ class EmulatorMcpServer:
             "emulator_run_unified_soc": self._tool_run_unified_soc,
             "emulator_registry_list": self._tool_registry_list,
             "emulator_run_dse_sweep": self._tool_run_dse_sweep,
+            "emulator_run_chia_loop": self._tool_run_chia_loop,
+            "emulator_scaffold_ip": self._tool_scaffold_ip,
             "emulator_generate_dashboard": self._tool_generate_dashboard,
         }
 
@@ -545,10 +549,59 @@ class EmulatorMcpServer:
                 idempotent=False,
             ),
             McpToolSpec(
+                name="emulator_run_chia_loop",
+                description=(
+                    "Run a CHIA-style cyclic HW/SW optimization loop optimizing IR-generated 2x2 "
+                    "NoC router placement and latencies under an isolated verification oracle."
+                ),
+                input_schema={
+                    "type": "object",
+                    "required": ["out_dir"],
+                    "properties": {
+                        "spec_path": {
+                            "type": "string",
+                            "default": "specs/multiplatform/unified_hetero_soc.yaml",
+                        },
+                        "out_dir": {"type": "string"},
+                        "max_iters": {"type": "integer", "minimum": 1, "maximum": 4, "default": 4},
+                        "target_speedup": {"type": "number", "default": 1.05},
+                        "backend": {
+                            "type": "string",
+                            "enum": ["auto", "verilator-rtl", "systemc-tlm"],
+                            "default": "systemc-tlm",
+                        },
+                        "cache_dir": {"type": "string"},
+                    },
+                    "additionalProperties": False,
+                },
+                read_only=False,
+                idempotent=False,
+            ),
+            McpToolSpec(
+                name="emulator_scaffold_ip",
+                description=(
+                    "Scaffold a hash-pinned IP plugin package (IEEE 1685-2022 IP-XACT XML, "
+                    "SystemVerilog RTL, SystemC TLM-2.0 MMIO32, selftest.c, package.yaml)."
+                ),
+                input_schema={
+                    "type": "object",
+                    "required": ["name", "out_dir"],
+                    "properties": {
+                        "name": {"type": "string"},
+                        "out_dir": {"type": "string"},
+                        "vendor": {"type": "string", "default": "enterprise.soc"},
+                        "version": {"type": "string", "default": "1.0"},
+                    },
+                    "additionalProperties": False,
+                },
+                read_only=False,
+                idempotent=False,
+            ),
+            McpToolSpec(
                 name="emulator_generate_dashboard",
                 description=(
-                    "Generate a self-contained HTML5 Verification, Coverage, Calibration and "
-                    "DSE Dashboard from real run JSON artifacts."
+                    "Generate a self-contained HTML5 Verification, Coverage, Calibration, DSE "
+                    "and CHIA Loop Convergence Dashboard from real run JSON artifacts."
                 ),
                 input_schema={
                     "type": "object",
@@ -558,6 +611,7 @@ class EmulatorMcpServer:
                         "unified_report": {"type": "string"},
                         "calibration_report": {"type": "string"},
                         "dse_report": {"type": "string"},
+                        "loop_report": {"type": "string"},
                     },
                     "additionalProperties": False,
                 },
@@ -783,6 +837,36 @@ class EmulatorMcpServer:
             spec_path, out_dir, workers=workers, cluster=cluster, cache_dir=cache_dir
         )
 
+    def _tool_run_chia_loop(self, args: dict[str, Any]) -> dict[str, Any]:
+        spec_rel = str(args.get("spec_path", "specs/multiplatform/unified_hetero_soc.yaml"))
+        spec_path = self._resolve_path(spec_rel, field="spec_path", must_exist=True)
+        out_dir = self._resolve_path(args["out_dir"], field="out_dir", must_exist=False)
+        max_iters = int(args.get("max_iters", 4))
+        target_speedup = float(args.get("target_speedup", 1.05))
+        backend = str(args.get("backend", "systemc-tlm"))
+        cache_dir = (
+            self._resolve_path(args["cache_dir"], field="cache_dir", must_exist=False)
+            if args.get("cache_dir")
+            else None
+        )
+        return run_chia_loop(
+            spec_path,
+            out_dir,
+            max_iters=max_iters,
+            target_speedup=target_speedup,
+            backend=backend,
+            cache_dir=cache_dir,
+        )
+
+    def _tool_scaffold_ip(self, args: dict[str, Any]) -> dict[str, Any]:
+        out_dir = self._resolve_path(args["out_dir"], field="out_dir", must_exist=False)
+        return scaffold_ip_package(
+            name=str(args["name"]),
+            out_dir=out_dir,
+            vendor=str(args.get("vendor", "enterprise.soc")),
+            version=str(args.get("version", "1.0")),
+        )
+
     def _tool_generate_dashboard(self, args: dict[str, Any]) -> dict[str, Any]:
         out_html = self._resolve_path(args["out_html"], field="out_html", must_exist=False)
         unified = (
@@ -802,11 +886,17 @@ class EmulatorMcpServer:
             if args.get("dse_report")
             else None
         )
+        lp = (
+            self._resolve_path(args["loop_report"], field="loop_report", must_exist=True)
+            if args.get("loop_report")
+            else None
+        )
         return generate_dashboard(
             out_html=out_html,
             unified_report=unified,
             calibration_report=cal,
             dse_report=dse,
+            loop_report=lp,
         )
 
     # --- MCP Resources & Prompts ---

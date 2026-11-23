@@ -1,4 +1,4 @@
-"""Self-contained air-gapped HTML5 Verification, Coverage, Calibration & DSE Dashboard (E7)."""
+"""Air-gapped HTML5 Verification, Coverage, Calibration, DSE & CHIA Loop Dashboard."""
 
 from __future__ import annotations
 
@@ -19,25 +19,76 @@ def _read_optional_json(path: Path | None) -> dict[str, Any] | None:
     return json.loads(path.read_text())
 
 
+def _render_loop_svg(loop_data: dict[str, Any] | None) -> str:
+    if not loop_data or not loop_data.get("history"):
+        return ""
+    history = loop_data["history"]
+    pts = [
+        (h["iteration"], float(h["metrics"]["systemc_time_ps"]))
+        for h in history
+        if h.get("metrics", {}).get("systemc_time_ps")
+    ]
+    rows = "\n".join(
+        f"<tr><td>{h['iteration']}</td><td><code>{html.escape(str(h['label']))}</code></td>"
+        f"<td class='{'ok' if h['oracle']['oracle_passed'] else 'fail'}'>"
+        f"{'PASS' if h['oracle']['oracle_passed'] else 'FAIL'}</td>"
+        f"<td>{h['metrics'].get('systemc_time_ps')}</td>"
+        f"<td>{h['metrics'].get('noc_total_hops')}</td>"
+        f"<td>{h['metrics'].get('speedup_vs_baseline')}×</td></tr>"
+        for h in history
+    )
+    svg = ""
+    if len(pts) >= 2:
+        w, h_px, pad = 520, 140, 24
+        ys = [p[1] for p in pts]
+        y_min, y_max = min(ys) * 0.98, max(ys) * 1.02
+        span = max(y_max - y_min, 1.0)
+        coords = []
+        for idx, (_it, val) in enumerate(pts):
+            cx = pad + (w - 2 * pad) * idx / (len(pts) - 1)
+            cy = h_px - pad - (h_px - 2 * pad) * (val - y_min) / span
+            coords.append((round(cx, 1), round(cy, 1)))
+        poly = " ".join(f"{x},{y}" for x, y in coords)
+        dots = "".join(f"<circle cx='{x}' cy='{y}' r='4' fill='#38bdf8' />" for x, y in coords)
+        svg = (
+            f"<svg width='{w}' height='{h_px}' viewBox='0 0 {w} {h_px}' "
+            f"style='background:#0b1220;border-radius:8px;margin-bottom:12px'>"
+            f"<polyline fill='none' stroke='#22c55e' stroke-width='2.5' points='{poly}' />"
+            f"{dots}</svg>"
+        )
+    return (
+        "<section class='card'>"
+        "<h2>CHIA-Style Cyclic Optimization Convergence (Isolated Oracle)</h2>"
+        f"<p>Converged: <strong>{loop_data.get('converged')}</strong> | "
+        f"Best Speedup: <code>{loop_data.get('best_speedup_vs_baseline')}×</code></p>"
+        f"{svg}"
+        "<table><thead><tr><th>Iter</th><th>Candidate</th><th>Oracle</th>"
+        "<th>Sim Time (ps)</th><th>NoC Hops</th><th>Speedup</th></tr></thead>"
+        f"<tbody>{rows}</tbody></table></section>"
+    )
+
+
 def generate_dashboard(
     *,
     out_html: Path,
     unified_report: Path | None = None,
     calibration_report: Path | None = None,
     dse_report: Path | None = None,
+    loop_report: Path | None = None,
 ) -> dict[str, Any]:
     """Generate a zero-CDN self-contained HTML5 engineering dashboard from real run JSONs."""
     u = _read_optional_json(unified_report)
     c = _read_optional_json(calibration_report)
     d = _read_optional_json(dse_report)
-    if u is None and c is None and d is None:
+    lp = _read_optional_json(loop_report)
+    if u is None and c is None and d is None and lp is None:
         raise ContractError("E_DASHBOARD provide at least one existing JSON evidence report")
 
     out_html = out_html.resolve()
     out_html.parent.mkdir(parents=True, exist_ok=True)
 
     design = (u or {}).get("design", "Unified_Hetero_MultiPlatform_SoC")
-    status = (u or c or d or {}).get("status", "UNKNOWN")
+    status = (u or c or d or lp or {}).get("status", "UNKNOWN")
     cov = (u or {}).get("coverage", {})
     cov_pct = cov.get("coverage_percent", 0)
     summary = (u or {}).get("positive_run", {}).get("summary", {})
@@ -66,7 +117,7 @@ def generate_dashboard(
     if c is not None and c.get("calibration"):
         cal = c["calibration"]
         cal_block = (
-            f"<section class='card'><h2>RTL ↔ TLM-2.0 Timing Calibration</h2>"
+            "<section class='card'><h2>6× Verilator RTL ↔ TLM-2.0 Timing Calibration</h2>"
             f"<p>Status: <strong class='{'ok' if c['status'] == 'PASSED' else 'fail'}'>"
             f"{html.escape(str(c['status']))}</strong> | "
             f"Functional parity: <code>{c.get('functional_parity')}</code> | "
@@ -74,6 +125,7 @@ def generate_dashboard(
             f"(budget ≤ <code>{cal['error_budget']}</code>)</p></section>"
         )
 
+    loop_block = _render_loop_svg(lp)
     status_cls = "ok" if status == "PASSED" else "fail"
     hops_dma = (
         f"{summary.get('noc_total_hops', '—')} / {summary.get('noc_dma_master_transactions', '—')}"
@@ -81,9 +133,12 @@ def generate_dashboard(
     rtl_total = (
         ip_res.get("npu_rtl_cycles", 0)
         + ip_res.get("sha256_rtl_cycles", 0)
+        + ip_res.get("aes_rtl_cycles", 0)
         + ip_res.get("spi_rtl_cycles", 0)
+        + ip_res.get("i2c_rtl_cycles", 0)
         + ip_res.get("l2_rtl_cycles", 0)
     )
+    bins_total = cov.get("bins_total", 24)
 
     doc = f"""<!DOCTYPE html>
 <html lang="en">
@@ -111,27 +166,29 @@ def generate_dashboard(
 </style>
 </head>
 <body>
-  <h1>USP Multi-Platform SoC Verification Dashboard</h1>
+  <h1>USP Multi-Platform SMP SoC Verification Dashboard</h1>
   <p>Design: <code>{html.escape(str(design))}</code> | Platform: <code>v{__version__}</code> |
+     Harts: <code>{summary.get("harts", 2)}</code> |
      Overall: <strong class="{status_cls}">{html.escape(str(status))}</strong></p>
   <div class="grid">
     <div class="card"><div>Functional Coverage</div><div class="metric">{cov_pct}%</div>
       <div class="bar"><div></div></div></div>
-    <div class="card"><div>Instructions Executed</div>
+    <div class="card"><div>SMP Instructions (H0+H1)</div>
       <div class="metric">{summary.get("instructions_executed", "—")}</div></div>
     <div class="card"><div>NoC 2×2 Hops / DMA Tx</div>
       <div class="metric">{hops_dma}</div></div>
-    <div class="card"><div>4× Verilator RTL Cycles</div>
+    <div class="card"><div>6× Verilator RTL Cycles</div>
       <div class="metric">{rtl_total}</div></div>
   </div>
   {cal_block}
+  {loop_block}
   <section class="card">
     <h2>Mapped Multi-Platform IP Transactions</h2>
     <table><thead><tr><th>IP Instance</th><th>Transactions</th></tr></thead>
     <tbody>{ip_rows or "<tr><td colspan='2'>No unified run data</td></tr>"}</tbody></table>
   </section>
   <section class="card">
-    <h2>20-Bin Functional &amp; Assertion Coverage</h2>
+    <h2>{bins_total}-Bin Functional &amp; Assertion Coverage</h2>
     <table><thead><tr><th>Verification Bin</th><th>Status</th></tr></thead>
     <tbody>{cov_rows or "<tr><td colspan='2'>No coverage data</td></tr>"}</tbody></table>
   </section>
@@ -164,6 +221,7 @@ def main(argv: list[str] | None = None) -> int:
     gen.add_argument("--unified", type=Path)
     gen.add_argument("--calibration", type=Path)
     gen.add_argument("--dse", type=Path)
+    gen.add_argument("--loop", type=Path)
     args = parser.parse_args(argv)
     try:
         res = generate_dashboard(
@@ -171,6 +229,7 @@ def main(argv: list[str] | None = None) -> int:
             unified_report=args.unified,
             calibration_report=args.calibration,
             dse_report=args.dse,
+            loop_report=args.loop,
         )
         print(json.dumps(res, indent=2, sort_keys=True))
         return 0

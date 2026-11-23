@@ -18,6 +18,8 @@
 #include <tlm_utils/simple_target_socket.h>
 
 #ifdef USOC_ENABLE_VERILATOR_RTL
+#include "Vaes128_rtl.h"
+#include "Vi2c_ctrl_rtl.h"
 #include "Vl2_cache_rtl.h"
 #include "Vmac_npu_rtl.h"
 #include "Vsha256_rtl.h"
@@ -42,6 +44,7 @@
 #include <vector>
 
 #include "unified_soc_map.h"
+#include "unified_soc_routes.h"
 
 namespace {
 
@@ -217,14 +220,19 @@ struct Uart16550Tlm : sc_core::sc_module {
     }
 };
 
-// --- Target 4: RISC-V CLINT ---
+// --- Target 4: Dual-Hart SMP RISC-V CLINT ---
 struct ClintTlm : sc_core::sc_module {
     tlm_utils::simple_target_socket<ClintTlm> target;
     uint64_t mtimecmp = UINT64_MAX;
-    uint32_t msip = 0;
+    std::array<uint32_t, 2> msip{};
+    uint64_t ipi_fires = 0;
 
     explicit ClintTlm(sc_core::sc_module_name name) : sc_module(name), target("target") {
         target.register_b_transport(this, &ClintTlm::transport);
+    }
+
+    bool has_msip(unsigned hart_id) const {
+        return hart_id < msip.size() && (msip[hart_id] & 1u) != 0u;
     }
 
     void transport(tlm::tlm_generic_payload &tx, sc_core::sc_time &delay) {
@@ -236,9 +244,16 @@ struct ClintTlm : sc_core::sc_module {
         } else if (off == 0x4000u && len == 8u) {
             if (tx.is_write()) std::memcpy(&mtimecmp, tx.get_data_ptr(), 8);
             else std::memcpy(tx.get_data_ptr(), &mtimecmp, 8);
-        } else if (off == 0u && len == 4u) {
-            if (tx.is_write()) std::memcpy(&msip, tx.get_data_ptr(), 4);
-            else std::memcpy(tx.get_data_ptr(), &msip, 4);
+        } else if ((off == 0u || off == 4u) && len == 4u) {
+            const size_t idx = static_cast<size_t>(off / 4u);
+            if (tx.is_write()) {
+                uint32_t val = 0;
+                std::memcpy(&val, tx.get_data_ptr(), 4);
+                if ((val & 1u) && !(msip[idx] & 1u)) ipi_fires++;
+                msip[idx] = val & 1u;
+            } else {
+                std::memcpy(tx.get_data_ptr(), &msip[idx], 4);
+            }
         } else {
             tx.set_response_status(tlm::TLM_ADDRESS_ERROR_RESPONSE);
             return;
@@ -628,6 +643,128 @@ struct L2CacheModule : sc_core::sc_module {
     static const char *backend_name() { return "verilator-rtl"; }
 };
 
+struct Aes128Module : sc_core::sc_module {
+    tlm_utils::simple_target_socket<Aes128Module> target;
+    Vaes128_rtl dut;
+    uint32_t irq = 0, blocks_encrypted = 0;
+    uint64_t rtl_cycles = 0;
+
+    explicit Aes128Module(sc_core::sc_module_name name) : sc_module(name), target("target") {
+        target.register_b_transport(this, &Aes128Module::transport);
+        dut.clk_i = 0; dut.rst_ni = 0; dut.req_valid_i = 0;
+        dut.req_write_i = 0; dut.req_addr_i = 0; dut.req_wdata_i = 0;
+        tick();
+        dut.rst_ni = 1;
+        tick();
+    }
+
+    void tick() {
+        dut.clk_i = 0; dut.eval();
+        dut.clk_i = 1; dut.eval();
+        dut.clk_i = 0; dut.eval();
+        irq = dut.irq_o ? 1u : 0u;
+        rtl_cycles = dut.rtl_cycles_o;
+    }
+
+    void transport(tlm::tlm_generic_payload &tx, sc_core::sc_time &delay) {
+        if (tx.get_data_length() != 4u || tx.get_address() > 0xFFu) {
+            tx.set_response_status(tlm::TLM_ADDRESS_ERROR_RESPONSE);
+            return;
+        }
+        const uint8_t off = static_cast<uint8_t>(tx.get_address());
+        uint32_t data = 0;
+        std::memcpy(&data, tx.get_data_ptr(), 4);
+        dut.req_valid_i = 1; dut.req_write_i = tx.is_write() ? 1 : 0;
+        dut.req_addr_i = off; dut.req_wdata_i = data;
+        dut.eval();
+        if (dut.rsp_err_o) {
+            dut.req_valid_i = 0; dut.eval();
+            tx.set_response_status(tlm::TLM_ADDRESS_ERROR_RESPONSE);
+            return;
+        }
+        if (!tx.is_write()) {
+            uint32_t r = dut.rsp_rdata_o;
+            std::memcpy(tx.get_data_ptr(), &r, 4);
+            tick();
+            dut.req_valid_i = 0; dut.eval();
+            delay += sc_core::sc_time(20, sc_core::SC_NS);
+        } else {
+            tick();
+            dut.req_valid_i = 0; dut.eval();
+            unsigned rounds = 1u;
+            while (dut.busy_o && rounds < 32u) {
+                tick();
+                rounds++;
+            }
+            delay += sc_core::sc_time(static_cast<double>(rounds * 20u), sc_core::SC_NS);
+            if (off == 0x00u && (data & 1u)) blocks_encrypted++;
+        }
+        tx.set_response_status(tlm::TLM_OK_RESPONSE);
+    }
+    static const char *backend_name() { return "verilator-rtl"; }
+};
+
+struct I2cCtrlModule : sc_core::sc_module {
+    tlm_utils::simple_target_socket<I2cCtrlModule> target;
+    Vi2c_ctrl_rtl dut;
+    uint32_t irq = 0, xfers = 0;
+    uint64_t rtl_cycles = 0;
+
+    explicit I2cCtrlModule(sc_core::sc_module_name name) : sc_module(name), target("target") {
+        target.register_b_transport(this, &I2cCtrlModule::transport);
+        dut.clk_i = 0; dut.rst_ni = 0; dut.req_valid_i = 0;
+        dut.req_write_i = 0; dut.req_addr_i = 0; dut.req_wdata_i = 0;
+        tick();
+        dut.rst_ni = 1;
+        tick();
+    }
+
+    void tick() {
+        dut.clk_i = 0; dut.eval();
+        dut.clk_i = 1; dut.eval();
+        dut.clk_i = 0; dut.eval();
+        irq = dut.irq_o ? 1u : 0u;
+        rtl_cycles = dut.rtl_cycles_o;
+    }
+
+    void transport(tlm::tlm_generic_payload &tx, sc_core::sc_time &delay) {
+        if (tx.get_data_length() != 4u || tx.get_address() > 0xFFu) {
+            tx.set_response_status(tlm::TLM_ADDRESS_ERROR_RESPONSE);
+            return;
+        }
+        const uint8_t off = static_cast<uint8_t>(tx.get_address());
+        uint32_t data = 0;
+        std::memcpy(&data, tx.get_data_ptr(), 4);
+        dut.req_valid_i = 1; dut.req_write_i = tx.is_write() ? 1 : 0;
+        dut.req_addr_i = off; dut.req_wdata_i = data;
+        dut.eval();
+        if (dut.rsp_err_o) {
+            dut.req_valid_i = 0; dut.eval();
+            tx.set_response_status(tlm::TLM_ADDRESS_ERROR_RESPONSE);
+            return;
+        }
+        if (!tx.is_write()) {
+            uint32_t r = dut.rsp_rdata_o;
+            std::memcpy(tx.get_data_ptr(), &r, 4);
+            tick();
+            dut.req_valid_i = 0; dut.eval();
+            delay += sc_core::sc_time(20, sc_core::SC_NS);
+        } else {
+            tick();
+            dut.req_valid_i = 0; dut.eval();
+            unsigned steps = 1u;
+            while (dut.busy_o && steps < 64u) {
+                tick();
+                steps++;
+            }
+            delay += sc_core::sc_time(static_cast<double>(steps * 20u), sc_core::SC_NS);
+            if (off == 0x00u && (data & 5u) == 5u) xfers++;
+        }
+        tx.set_response_status(tlm::TLM_OK_RESPONSE);
+    }
+    static const char *backend_name() { return "verilator-rtl"; }
+};
+
 #else  // Pure SystemC TLM-2.0 behavioral models for M7 RTL-vs-TLM Calibration
 
 struct MacNpuModule : sc_core::sc_module {
@@ -852,6 +989,151 @@ struct L2CacheModule : sc_core::sc_module {
     static const char *backend_name() { return "systemc-tlm"; }
 };
 
+struct Aes128Module : sc_core::sc_module {
+    tlm_utils::simple_target_socket<Aes128Module> target;
+    std::array<uint32_t, 4> key{}, pt{}, ct{};
+    uint32_t irq = 0, blocks_encrypted = 0;
+    uint64_t rtl_cycles = 0;
+
+    explicit Aes128Module(sc_core::sc_module_name name) : sc_module(name), target("target") {
+        target.register_b_transport(this, &Aes128Module::transport);
+    }
+
+    static inline uint8_t xtime(uint8_t x) {
+        return static_cast<uint8_t>((x << 1) ^ ((x & 0x80u) ? 0x1bu : 0x00u));
+    }
+
+    static inline uint32_t mix_col(uint32_t col) {
+        uint8_t a0 = static_cast<uint8_t>(col >> 24), a1 = static_cast<uint8_t>(col >> 16);
+        uint8_t a2 = static_cast<uint8_t>(col >> 8), a3 = static_cast<uint8_t>(col);
+        uint8_t r0 = xtime(a0) ^ xtime(a1) ^ a1 ^ a2 ^ a3;
+        uint8_t r1 = a0 ^ xtime(a1) ^ xtime(a2) ^ a2 ^ a3;
+        uint8_t r2 = a0 ^ a1 ^ xtime(a2) ^ xtime(a3) ^ a3;
+        uint8_t r3 = xtime(a0) ^ a0 ^ a1 ^ a2 ^ xtime(a3);
+        return (uint32_t(r0) << 24) | (uint32_t(r1) << 16) | (uint32_t(r2) << 8) | uint32_t(r3);
+    }
+
+    void encrypt_block() {
+        static const uint8_t sb[256] = {
+            0x63,0x7c,0x77,0x7b,0xf2,0x6b,0x6f,0xc5,0x30,0x01,0x67,0x2b,0xfe,0xd7,0xab,0x76,
+            0xca,0x82,0xc9,0x7d,0xfa,0x59,0x47,0xf0,0xad,0xd4,0xa2,0xaf,0x9c,0xa4,0x72,0xc0,
+            0xb7,0xfd,0x93,0x26,0x36,0x3f,0xf7,0xcc,0x34,0xa5,0xe5,0xf1,0x71,0xd8,0x31,0x15,
+            0x04,0xc7,0x23,0xc3,0x18,0x96,0x05,0x9a,0x07,0x12,0x80,0xe2,0xeb,0x27,0xb2,0x75,
+            0x09,0x83,0x2c,0x1a,0x1b,0x6e,0x5a,0xa0,0x52,0x3b,0xd6,0xb3,0x29,0xe3,0x2f,0x84,
+            0x53,0xd1,0x00,0xed,0x20,0xfc,0xb1,0x5b,0x6a,0xcb,0xbe,0x39,0x4a,0x4c,0x58,0xcf,
+            0xd0,0xef,0xaa,0xfb,0x43,0x4d,0x33,0x85,0x45,0xf9,0x02,0x7f,0x50,0x3c,0x9f,0xa8,
+            0x51,0xa3,0x40,0x8f,0x92,0x9d,0x38,0xf5,0xbc,0xb6,0xda,0x21,0x10,0xff,0xf3,0xd2,
+            0xcd,0x0c,0x13,0xec,0x5f,0x97,0x44,0x17,0xc4,0xa7,0x7e,0x3d,0x64,0x5d,0x19,0x73,
+            0x60,0x81,0x4f,0xdc,0x22,0x2a,0x90,0x88,0x46,0xee,0xb8,0x14,0xde,0x5e,0x0b,0xdb,
+            0xe0,0x32,0x3a,0x0a,0x49,0x06,0x24,0x5c,0xc2,0xd3,0xac,0x62,0x91,0x95,0xe4,0x79,
+            0xe7,0xc8,0x37,0x6d,0x8d,0xd5,0x4e,0xa9,0x6c,0x56,0xf4,0xea,0x65,0x7a,0xae,0x08,
+            0xba,0x78,0x25,0x2e,0x1c,0xa6,0xb4,0xc6,0xe8,0xdd,0x74,0x1f,0x4b,0xbd,0x8b,0x8a,
+            0x70,0x3e,0xb5,0x66,0x48,0x03,0xf6,0x0e,0x61,0x35,0x57,0xb9,0x86,0xc1,0x1d,0x9e,
+            0xe1,0xf8,0x98,0x11,0x69,0xd9,0x8e,0x94,0x9b,0x1e,0x87,0xe9,0xce,0x55,0x28,0xdf,
+            0x8c,0xa1,0x89,0x0d,0xbf,0xe6,0x42,0x68,0x41,0x99,0x2d,0x0f,0xb0,0x54,0xbb,0x16
+        };
+        static const uint8_t rcon[11] = {0, 1, 2, 4, 8, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36};
+        std::array<uint32_t, 4> st, rk = key;
+        for (size_t i = 0; i < 4; ++i) st[i] = pt[i] ^ key[i];
+        for (int rnd = 1; rnd <= 10; ++rnd) {
+            uint32_t kt = (uint32_t(sb[(rk[3] >> 16) & 255] ^ rcon[rnd]) << 24) |
+                          (uint32_t(sb[(rk[3] >> 8) & 255]) << 16) |
+                          (uint32_t(sb[rk[3] & 255]) << 8) | uint32_t(sb[(rk[3] >> 24) & 255]);
+            rk[0] ^= kt; rk[1] ^= rk[0]; rk[2] ^= rk[1]; rk[3] ^= rk[2];
+            uint8_t b[16];
+            for (size_t i = 0; i < 4; ++i) {
+                b[i * 4 + 0] = sb[(st[i] >> 24) & 255]; b[i * 4 + 1] = sb[(st[i] >> 16) & 255];
+                b[i * 4 + 2] = sb[(st[i] >> 8) & 255];  b[i * 4 + 3] = sb[st[i] & 255];
+            }
+            uint32_t sr0 = (uint32_t(b[0]) << 24) | (uint32_t(b[5]) << 16) | (uint32_t(b[10]) << 8) | b[15];
+            uint32_t sr1 = (uint32_t(b[4]) << 24) | (uint32_t(b[9]) << 16) | (uint32_t(b[14]) << 8) | b[3];
+            uint32_t sr2 = (uint32_t(b[8]) << 24) | (uint32_t(b[13]) << 16) | (uint32_t(b[2]) << 8) | b[7];
+            uint32_t sr3 = (uint32_t(b[12]) << 24) | (uint32_t(b[1]) << 16) | (uint32_t(b[6]) << 8) | b[11];
+            if (rnd == 10) {
+                st = {sr0 ^ rk[0], sr1 ^ rk[1], sr2 ^ rk[2], sr3 ^ rk[3]};
+            } else {
+                st = {mix_col(sr0) ^ rk[0], mix_col(sr1) ^ rk[1], mix_col(sr2) ^ rk[2], mix_col(sr3) ^ rk[3]};
+            }
+        }
+        ct = st;
+        blocks_encrypted++;
+        irq = 1u;
+    }
+
+    void transport(tlm::tlm_generic_payload &tx, sc_core::sc_time &delay) {
+        const uint64_t off = tx.get_address();
+        uint32_t data = 0;
+        std::memcpy(&data, tx.get_data_ptr(), 4);
+        if (tx.is_write()) {
+            if (off == 0x00u && (data & 1u)) {
+                encrypt_block();
+                delay += sc_core::sc_time(200, sc_core::SC_NS);
+            } else if (off == 0x04u && (data & 1u)) irq = 0u;
+            else if (off >= 0x10u && off <= 0x1Cu) key[(off - 0x10u) / 4u] = data;
+            else if (off >= 0x20u && off <= 0x2Cu) pt[(off - 0x20u) / 4u] = data;
+            else { tx.set_response_status(tlm::TLM_ADDRESS_ERROR_RESPONSE); return; }
+        } else {
+            if (off == 0x00u) data = 2u;
+            else if (off == 0x04u) data = irq;
+            else if (off == 0x08u) data = blocks_encrypted;
+            else if (off >= 0x10u && off <= 0x1Cu) data = key[(off - 0x10u) / 4u];
+            else if (off >= 0x20u && off <= 0x2Cu) data = pt[(off - 0x20u) / 4u];
+            else if (off >= 0x30u && off <= 0x3Cu) data = ct[(off - 0x30u) / 4u];
+            else { tx.set_response_status(tlm::TLM_ADDRESS_ERROR_RESPONSE); return; }
+            std::memcpy(tx.get_data_ptr(), &data, 4);
+        }
+        delay += sc_core::sc_time(20, sc_core::SC_NS);
+        tx.set_response_status(tlm::TLM_OK_RESPONSE);
+    }
+    static const char *backend_name() { return "systemc-tlm"; }
+};
+
+struct I2cCtrlModule : sc_core::sc_module {
+    tlm_utils::simple_target_socket<I2cCtrlModule> target;
+    uint32_t ctrl = 0, target_addr = 0, tx_data = 0, rx_data = 0, irq = 0, xfers = 0;
+    bool ack_ok = false, done = false;
+    uint64_t rtl_cycles = 0;
+
+    explicit I2cCtrlModule(sc_core::sc_module_name name) : sc_module(name), target("target") {
+        target.register_b_transport(this, &I2cCtrlModule::transport);
+    }
+
+    void transport(tlm::tlm_generic_payload &tx, sc_core::sc_time &delay) {
+        const uint64_t off = tx.get_address();
+        uint32_t data = 0;
+        std::memcpy(&data, tx.get_data_ptr(), 4);
+        if (tx.is_write()) {
+            if (off == 0x00u) {
+                ctrl = data & 0xFFFFFFFBu;
+                if ((data & 5u) == 5u) {
+                    ack_ok = ((data & 2u) != 0u) && ((target_addr & 0x7Fu) == 0x50u);
+                    if (ack_ok) rx_data = tx_data & 0xFFu;
+                    done = true;
+                    irq = 1u;
+                    xfers++;
+                    delay += sc_core::sc_time(400, sc_core::SC_NS);
+                }
+            } else if (off == 0x08u) target_addr = data & 0x7Fu;
+            else if (off == 0x0Cu) tx_data = data & 0xFFu;
+            else if (off == 0x14u && (data & 1u)) irq = 0u;
+            else { tx.set_response_status(tlm::TLM_ADDRESS_ERROR_RESPONSE); return; }
+        } else {
+            if (off == 0x00u) data = ctrl;
+            else if (off == 0x04u) data = (done ? 4u : 0u) | (ack_ok ? 2u : 0u);
+            else if (off == 0x08u) data = target_addr;
+            else if (off == 0x0Cu) data = tx_data;
+            else if (off == 0x10u) data = rx_data;
+            else if (off == 0x14u) data = irq;
+            else if (off == 0x18u) data = xfers;
+            else { tx.set_response_status(tlm::TLM_ADDRESS_ERROR_RESPONSE); return; }
+            std::memcpy(tx.get_data_ptr(), &data, 4);
+        }
+        delay += sc_core::sc_time(20, sc_core::SC_NS);
+        tx.set_response_status(tlm::TLM_OK_RESPONSE);
+    }
+    static const char *backend_name() { return "systemc-tlm"; }
+};
+
 #endif
 
 // --- Target 8: SystemC PMP/IOPMP Bus Guard ---
@@ -982,7 +1264,7 @@ struct DmaEngineTlm : sc_core::sc_module {
     }
 };
 
-// --- Target 10: Unified PLIC (aggregating all 7 heterogeneous IRQ lines) ---
+// --- Target 10: Unified PLIC (aggregating all 9 heterogeneous IRQ lines) ---
 struct PlicTlm : sc_core::sc_module {
     tlm_utils::simple_target_socket<PlicTlm> target;
     std::array<uint32_t, 32> priority{};
@@ -993,7 +1275,9 @@ struct PlicTlm : sc_core::sc_module {
     OpenTitanGpioTlm *gpio = nullptr;
     DmaEngineTlm *dma = nullptr;
     Sha256Module *sha = nullptr;
+    Aes128Module *aes = nullptr;
     SpiCtrlModule *spi = nullptr;
+    I2cCtrlModule *i2c = nullptr;
     MacNpuModule *npu = nullptr;
     PmpBusGuardTlm *pmp_guard = nullptr;
 
@@ -1008,7 +1292,9 @@ struct PlicTlm : sc_core::sc_module {
         if (gpio && gpio->irq) m |= (1u << USOC_OPENTITAN_GPIO_0_IRQ);
         if (dma && dma->irq) m |= (1u << USOC_DMA_ENGINE_0_IRQ);
         if (sha && sha->irq) m |= (1u << USOC_SHA256_CRYPTO_0_IRQ);
+        if (aes && aes->irq) m |= (1u << USOC_AES128_CRYPTO_0_IRQ);
         if (spi && spi->irq) m |= (1u << USOC_SPI_CTRL_0_IRQ);
+        if (i2c && i2c->irq) m |= (1u << USOC_I2C_CTRL_0_IRQ);
         if (npu && npu->irq) m |= (1u << USOC_MAC_NPU_0_IRQ);
         if (pmp_guard && pmp_guard->irq) m |= (1u << USOC_PMP_GUARD_0_IRQ);
         return m;
@@ -1057,9 +1343,10 @@ struct PlicTlm : sc_core::sc_module {
     }
 };
 
-// --- Interconnect: SystemC/TLM-2.0 2x2 Mesh NoC Router (2 Masters -> 14 Targets) ---
+// --- Interconnect: IR-Routed SystemC/TLM-2.0 2x2 Mesh NoC (3 Masters -> 16 Targets) ---
 struct NoC2x2Router : sc_core::sc_module {
-    tlm_utils::simple_target_socket<NoC2x2Router> cpu_in;
+    tlm_utils::simple_target_socket<NoC2x2Router> cpu0_in;
+    tlm_utils::simple_target_socket<NoC2x2Router> cpu1_in;
     tlm_utils::simple_target_socket<NoC2x2Router> dma_in;
     tlm_utils::simple_initiator_socket<NoC2x2Router> to_ram;
     tlm_utils::simple_initiator_socket<NoC2x2Router> to_rom;
@@ -1069,10 +1356,12 @@ struct NoC2x2Router : sc_core::sc_module {
     tlm_utils::simple_initiator_socket<NoC2x2Router> to_plic;
     tlm_utils::simple_initiator_socket<NoC2x2Router> to_uart;
     tlm_utils::simple_initiator_socket<NoC2x2Router> to_spi;
+    tlm_utils::simple_initiator_socket<NoC2x2Router> to_i2c;
     tlm_utils::simple_initiator_socket<NoC2x2Router> to_gcd;
     tlm_utils::simple_initiator_socket<NoC2x2Router> to_gpio;
     tlm_utils::simple_initiator_socket<NoC2x2Router> to_dma;
     tlm_utils::simple_initiator_socket<NoC2x2Router> to_sha;
+    tlm_utils::simple_initiator_socket<NoC2x2Router> to_aes;
     tlm_utils::simple_initiator_socket<NoC2x2Router> to_npu;
     tlm_utils::simple_initiator_socket<NoC2x2Router> to_pmp_guard;
 
@@ -1082,20 +1371,23 @@ struct NoC2x2Router : sc_core::sc_module {
     VcdWriter *vcd = nullptr;
     std::ofstream trace;
     uint64_t total_transactions = 0, total_hops = 0, mmio_transactions = 0;
-    uint64_t dma_master_transactions = 0;
+    uint64_t dma_master_transactions = 0, backpressure_stalls = 0;
     std::array<uint64_t, 4> router_hits{};
+    std::array<uint64_t, 4> router_busy_until_ps{};
     uint64_t hit_uart = 0, hit_clint = 0, hit_plic = 0, hit_gcd = 0, hit_gpio = 0;
-    uint64_t hit_dma = 0, hit_sha = 0, hit_spi = 0, hit_l2 = 0, hit_npu = 0;
-    uint64_t hit_pmp_guard = 0, hit_pmp_blocked = 0;
+    uint64_t hit_dma = 0, hit_sha = 0, hit_aes = 0, hit_spi = 0, hit_i2c = 0;
+    uint64_t hit_l2 = 0, hit_npu = 0, hit_pmp_guard = 0, hit_pmp_blocked = 0;
 
     NoC2x2Router(sc_core::sc_module_name name, const std::string &trace_path)
         : sc_module(name),
-          cpu_in("cpu_in"), dma_in("dma_in"), to_ram("to_ram"), to_rom("to_rom"),
-          to_finisher("to_finisher"), to_l2("to_l2"), to_clint("to_clint"), to_plic("to_plic"),
-          to_uart("to_uart"), to_spi("to_spi"), to_gcd("to_gcd"), to_gpio("to_gpio"),
-          to_dma("to_dma"), to_sha("to_sha"), to_npu("to_npu"), to_pmp_guard("to_pmp_guard"),
+          cpu0_in("cpu0_in"), cpu1_in("cpu1_in"), dma_in("dma_in"),
+          to_ram("to_ram"), to_rom("to_rom"), to_finisher("to_finisher"), to_l2("to_l2"),
+          to_clint("to_clint"), to_plic("to_plic"), to_uart("to_uart"), to_spi("to_spi"),
+          to_i2c("to_i2c"), to_gcd("to_gcd"), to_gpio("to_gpio"), to_dma("to_dma"),
+          to_sha("to_sha"), to_aes("to_aes"), to_npu("to_npu"), to_pmp_guard("to_pmp_guard"),
           trace(trace_path) {
-        cpu_in.register_b_transport(this, &NoC2x2Router::cpu_transport);
+        cpu0_in.register_b_transport(this, &NoC2x2Router::cpu0_transport);
+        cpu1_in.register_b_transport(this, &NoC2x2Router::cpu1_transport);
         dma_in.register_b_transport(this, &NoC2x2Router::dma_transport);
     }
 
@@ -1120,6 +1412,28 @@ struct NoC2x2Router : sc_core::sc_module {
         }
     }
 
+    tlm_utils::simple_initiator_socket<NoC2x2Router> *socket_for(UsocTargetId tid) {
+        switch (tid) {
+            case USOC_TGT_RAM: return &to_ram;
+            case USOC_TGT_ROM: return &to_rom;
+            case USOC_TGT_FINISHER: return &to_finisher;
+            case USOC_TGT_L2: hit_l2++; return &to_l2;
+            case USOC_TGT_CLINT: hit_clint++; return &to_clint;
+            case USOC_TGT_PLIC: hit_plic++; return &to_plic;
+            case USOC_TGT_UART: hit_uart++; return &to_uart;
+            case USOC_TGT_SPI: hit_spi++; return &to_spi;
+            case USOC_TGT_I2C: hit_i2c++; return &to_i2c;
+            case USOC_TGT_GCD: hit_gcd++; return &to_gcd;
+            case USOC_TGT_GPIO: hit_gpio++; return &to_gpio;
+            case USOC_TGT_DMA: hit_dma++; return &to_dma;
+            case USOC_TGT_SHA256: hit_sha++; return &to_sha;
+            case USOC_TGT_AES128: hit_aes++; return &to_aes;
+            case USOC_TGT_NPU: hit_npu++; return &to_npu;
+            case USOC_TGT_PMP_GUARD: hit_pmp_guard++; return &to_pmp_guard;
+            default: return nullptr;
+        }
+    }
+
     void dispatch(const char *master, int sx, int sy,
                   tlm_utils::simple_initiator_socket<NoC2x2Router> &sock, const char *target_name,
                   uint64_t base, int rx, int ry, bool log_it, tlm::tlm_generic_payload &tx,
@@ -1130,9 +1444,17 @@ struct NoC2x2Router : sc_core::sc_module {
         const unsigned router_idx = static_cast<unsigned>(ry * 2 + rx);
         total_transactions++;
         total_hops += hops;
-        if (router_idx < 4u) router_hits[router_idx]++;
-        delay += sc_core::sc_time(
-            static_cast<double>(hops * USOC_NOC_HOP_NS + USOC_NOC_LINK_NS), sc_core::SC_NS);
+        const uint64_t now_ps = sc_core::sc_time_stamp().value();
+        const uint64_t hop_link_ns = static_cast<uint64_t>(hops * USOC_NOC_HOP_NS + USOC_NOC_LINK_NS);
+        if (router_idx < 4u) {
+            router_hits[router_idx]++;
+            if (router_busy_until_ps[router_idx] > now_ps) {
+                backpressure_stalls++;
+                delay += sc_core::sc_time(USOC_NOC_LINK_NS, sc_core::SC_NS);
+            }
+            router_busy_until_ps[router_idx] = now_ps + hop_link_ns * 1000ULL;
+        }
+        delay += sc_core::sc_time(static_cast<double>(hop_link_ns), sc_core::SC_NS);
 
         tx.set_address(off);
         sock->b_transport(tx, delay);
@@ -1150,89 +1472,43 @@ struct NoC2x2Router : sc_core::sc_module {
     void route(const char *master, int sx, int sy, tlm::tlm_generic_payload &tx,
                sc_core::sc_time &delay, bool is_dma) {
         const uint64_t addr = tx.get_address();
-        if (addr >= USOC_MAIN_DRAM_BASE && addr < USOC_MAIN_DRAM_BASE + USOC_MAIN_DRAM_SIZE) {
-            if (tx.is_write() && pmp_guard && !pmp_guard->allow_write(addr)) {
-                hit_pmp_blocked++;
-                delay += sc_core::sc_time(USOC_NOC_HOP_NS, sc_core::SC_NS);
-                tx.set_response_status(tlm::TLM_COMMAND_ERROR_RESPONSE);
-                log_tx(master, "pmp_guard_block", USOC_PMP_GUARD_0_RX, USOC_PMP_GUARD_0_RY,
-                       manhattan_hops(sx, sy, USOC_PMP_GUARD_0_RX, USOC_PMP_GUARD_0_RY), addr, 0u,
-                       true, 0u, false, false, true);
-                return;
+        for (unsigned i = 0; i < USOC_ROUTE_COUNT; ++i) {
+            const UsocRouteEntry &e = USOC_ROUTE_TABLE[i];
+            if (addr >= e.base && addr < e.base + e.size) {
+                if (e.target == USOC_TGT_RAM) {
+                    if (tx.is_write() && pmp_guard && !pmp_guard->allow_write(addr)) {
+                        hit_pmp_blocked++;
+                        delay += sc_core::sc_time(USOC_NOC_HOP_NS, sc_core::SC_NS);
+                        tx.set_response_status(tlm::TLM_COMMAND_ERROR_RESPONSE);
+                        log_tx(master, "pmp_guard_block", USOC_PMP_GUARD_0_RX, USOC_PMP_GUARD_0_RY,
+                               manhattan_hops(sx, sy, USOC_PMP_GUARD_0_RX, USOC_PMP_GUARD_0_RY),
+                               addr, 0u, true, 0u, false, false, true);
+                        return;
+                    }
+                    bool l2_hit = l2 ? l2->lookup(addr, is_dma, tx.is_write()) : true;
+                    delay += sc_core::sc_time(l2_hit ? 4 : 40, sc_core::SC_NS);
+                    dispatch(master, sx, sy, to_ram, e.name, e.base, e.rx, e.ry, is_dma, tx, delay,
+                             l2_hit);
+                    return;
+                }
+                auto *sock = socket_for(e.target);
+                if (sock) {
+                    dispatch(master, sx, sy, *sock, e.name, e.base, e.rx, e.ry, e.log_mmio, tx,
+                             delay);
+                    return;
+                }
             }
-            bool l2_hit = l2 ? l2->lookup(addr, is_dma, tx.is_write()) : true;
-            delay += sc_core::sc_time(l2_hit ? 4 : 40, sc_core::SC_NS);
-            dispatch(master, sx, sy, to_ram, "main_dram", USOC_MAIN_DRAM_BASE, USOC_MAIN_DRAM_RX,
-                     USOC_MAIN_DRAM_RY, is_dma, tx, delay, l2_hit);
-        } else if (addr >= USOC_BOOT_ROM_BASE && addr < USOC_BOOT_ROM_BASE + USOC_BOOT_ROM_SIZE) {
-            dispatch(master, sx, sy, to_rom, "boot_rom", USOC_BOOT_ROM_BASE, USOC_BOOT_ROM_RX,
-                     USOC_BOOT_ROM_RY, false, tx, delay);
-        } else if (addr >= USOC_SIM_FINISHER_BASE &&
-                   addr < USOC_SIM_FINISHER_BASE + USOC_SIM_FINISHER_SIZE) {
-            dispatch(master, sx, sy, to_finisher, "sim_finisher", USOC_SIM_FINISHER_BASE,
-                     USOC_SIM_FINISHER_RX, USOC_SIM_FINISHER_RY, true, tx, delay);
-        } else if (addr >= USOC_L2_CACHE_0_BASE &&
-                   addr < USOC_L2_CACHE_0_BASE + USOC_L2_CACHE_0_SIZE) {
-            hit_l2++;
-            dispatch(master, sx, sy, to_l2, "l2_cache_0", USOC_L2_CACHE_0_BASE, USOC_L2_CACHE_0_RX,
-                     USOC_L2_CACHE_0_RY, true, tx, delay);
-        } else if (addr >= USOC_SYS_CLINT_BASE &&
-                   addr < USOC_SYS_CLINT_BASE + USOC_SYS_CLINT_SIZE) {
-            hit_clint++;
-            dispatch(master, sx, sy, to_clint, "sys_clint", USOC_SYS_CLINT_BASE, USOC_SYS_CLINT_RX,
-                     USOC_SYS_CLINT_RY, true, tx, delay);
-        } else if (addr >= USOC_SYS_PLIC_BASE && addr < USOC_SYS_PLIC_BASE + USOC_SYS_PLIC_SIZE) {
-            hit_plic++;
-            dispatch(master, sx, sy, to_plic, "sys_plic", USOC_SYS_PLIC_BASE, USOC_SYS_PLIC_RX,
-                     USOC_SYS_PLIC_RY, true, tx, delay);
-        } else if (addr >= USOC_QEMU_UART_0_BASE &&
-                   addr < USOC_QEMU_UART_0_BASE + USOC_QEMU_UART_0_SIZE) {
-            hit_uart++;
-            dispatch(master, sx, sy, to_uart, "qemu_uart_0", USOC_QEMU_UART_0_BASE,
-                     USOC_QEMU_UART_0_RX, USOC_QEMU_UART_0_RY, true, tx, delay);
-        } else if (addr >= USOC_SPI_CTRL_0_BASE &&
-                   addr < USOC_SPI_CTRL_0_BASE + USOC_SPI_CTRL_0_SIZE) {
-            hit_spi++;
-            dispatch(master, sx, sy, to_spi, "spi_ctrl_0", USOC_SPI_CTRL_0_BASE,
-                     USOC_SPI_CTRL_0_RX, USOC_SPI_CTRL_0_RY, true, tx, delay);
-        } else if (addr >= USOC_CHIPYARD_GCD_0_BASE &&
-                   addr < USOC_CHIPYARD_GCD_0_BASE + USOC_CHIPYARD_GCD_0_SIZE) {
-            hit_gcd++;
-            dispatch(master, sx, sy, to_gcd, "chipyard_gcd_0", USOC_CHIPYARD_GCD_0_BASE,
-                     USOC_CHIPYARD_GCD_0_RX, USOC_CHIPYARD_GCD_0_RY, true, tx, delay);
-        } else if (addr >= USOC_OPENTITAN_GPIO_0_BASE &&
-                   addr < USOC_OPENTITAN_GPIO_0_BASE + USOC_OPENTITAN_GPIO_0_SIZE) {
-            hit_gpio++;
-            dispatch(master, sx, sy, to_gpio, "opentitan_gpio_0", USOC_OPENTITAN_GPIO_0_BASE,
-                     USOC_OPENTITAN_GPIO_0_RX, USOC_OPENTITAN_GPIO_0_RY, true, tx, delay);
-        } else if (addr >= USOC_DMA_ENGINE_0_BASE &&
-                   addr < USOC_DMA_ENGINE_0_BASE + USOC_DMA_ENGINE_0_SIZE) {
-            hit_dma++;
-            dispatch(master, sx, sy, to_dma, "dma_engine_0", USOC_DMA_ENGINE_0_BASE,
-                     USOC_DMA_ENGINE_0_RX, USOC_DMA_ENGINE_0_RY, true, tx, delay);
-        } else if (addr >= USOC_SHA256_CRYPTO_0_BASE &&
-                   addr < USOC_SHA256_CRYPTO_0_BASE + USOC_SHA256_CRYPTO_0_SIZE) {
-            hit_sha++;
-            dispatch(master, sx, sy, to_sha, "sha256_crypto_0", USOC_SHA256_CRYPTO_0_BASE,
-                     USOC_SHA256_CRYPTO_0_RX, USOC_SHA256_CRYPTO_0_RY, true, tx, delay);
-        } else if (addr >= USOC_MAC_NPU_0_BASE &&
-                   addr < USOC_MAC_NPU_0_BASE + USOC_MAC_NPU_0_SIZE) {
-            hit_npu++;
-            dispatch(master, sx, sy, to_npu, "mac_npu_0", USOC_MAC_NPU_0_BASE, USOC_MAC_NPU_0_RX,
-                     USOC_MAC_NPU_0_RY, true, tx, delay);
-        } else if (addr >= USOC_PMP_GUARD_0_BASE &&
-                   addr < USOC_PMP_GUARD_0_BASE + USOC_PMP_GUARD_0_SIZE) {
-            hit_pmp_guard++;
-            dispatch(master, sx, sy, to_pmp_guard, "pmp_guard_0", USOC_PMP_GUARD_0_BASE,
-                     USOC_PMP_GUARD_0_RX, USOC_PMP_GUARD_0_RY, true, tx, delay);
-        } else {
-            tx.set_response_status(tlm::TLM_ADDRESS_ERROR_RESPONSE);
-            log_tx(master, "unmapped", 0, 0, 0, addr, 0, tx.is_write(), 0, false, false, false);
         }
+        tx.set_response_status(tlm::TLM_ADDRESS_ERROR_RESPONSE);
+        log_tx(master, "unmapped", 0, 0, 0, addr, 0, tx.is_write(), 0, false, false, false);
     }
 
-    void cpu_transport(tlm::tlm_generic_payload &tx, sc_core::sc_time &delay) {
-        route("cpu", USOC_CPU_RX, USOC_CPU_RY, tx, delay, false);
+    void cpu0_transport(tlm::tlm_generic_payload &tx, sc_core::sc_time &delay) {
+        route("hart0", USOC_CPU_RX, USOC_CPU_RY, tx, delay, false);
+    }
+
+    void cpu1_transport(tlm::tlm_generic_payload &tx, sc_core::sc_time &delay) {
+        route("hart1", USOC_HART1_RX, USOC_HART1_RY, tx, delay, false);
     }
 
     void dma_transport(tlm::tlm_generic_payload &tx, sc_core::sc_time &delay) {
@@ -1313,29 +1589,56 @@ struct GdbStub {
     }
 };
 
-// --- Initiator: RV64IM_Zicsr SystemC/TLM-2.0 CPU Core ---
+// --- Shared Coherent LR/SC Reservation Tracker across SMP Harts ---
+struct SmpReservationState {
+    bool valid[2] = {false, false};
+    uint64_t addr[2] = {0ULL, 0ULL};
+
+    void reserve(unsigned hid, uint64_t a) {
+        if (hid < 2u) { valid[hid] = true; addr[hid] = a & ~3ULL; }
+    }
+    bool check_and_clear(unsigned hid, uint64_t a) {
+        bool ok = (hid < 2u) && valid[hid] && addr[hid] == (a & ~3ULL);
+        if (hid < 2u) valid[hid] = false;
+        if (ok) invalidate_other(hid, a);
+        return ok;
+    }
+    void invalidate_other(unsigned hid, uint64_t a) {
+        const uint64_t aligned = a & ~3ULL;
+        for (unsigned h = 0u; h < 2u; ++h) {
+            if (h != hid && valid[h] && addr[h] == aligned) valid[h] = false;
+        }
+    }
+};
+
+// --- Initiator: Dual-Hart SMP RV64IMA_Zicsr SystemC/TLM-2.0 CPU Core ---
 struct Rv64CpuInitiator : sc_core::sc_module {
     tlm_utils::simple_initiator_socket<Rv64CpuInitiator> bus;
+    unsigned hart_id = 0u;
     std::array<uint64_t, 32> x{};
     uint64_t pc = USOC_CPU_ENTRY;
     uint64_t mstatus = 0, mie = 0, mtvec = 0, mscratch = 0, mepc = 0, mcause = 0, mtval = 0;
     uint64_t pmpcfg0 = 0;
     std::array<uint64_t, 4> pmpaddr{};
-    uint64_t instructions = 0, traps_taken = 0;
+    uint64_t instructions = 0, traps_taken = 0, atomic_ops = 0;
     bool timed_out = false, illegal_trap = false;
 
     TlmFinisher *finisher = nullptr;
+    ClintTlm *clint = nullptr;
     PlicTlm *plic = nullptr;
+    SmpReservationState *resv = nullptr;
     GdbStub *gdb = nullptr;
     uint64_t max_steps = 500000ULL;
 
     SC_HAS_PROCESS(Rv64CpuInitiator);
 
-    explicit Rv64CpuInitiator(sc_core::sc_module_name name) : sc_module(name), bus("bus") {
+    Rv64CpuInitiator(sc_core::sc_module_name name, unsigned hid = 0u)
+        : sc_module(name), bus("bus"), hart_id(hid) {
         SC_THREAD(run);
     }
 
     bool bus_rw(uint64_t addr, void *ptr, unsigned len, bool is_write) {
+        if (is_write && resv) resv->invalidate_other(hart_id, addr);
         tlm::tlm_generic_payload tx;
         tx.set_command(is_write ? tlm::TLM_WRITE_COMMAND : tlm::TLM_READ_COMMAND);
         tx.set_address(addr);
@@ -1350,21 +1653,26 @@ struct Rv64CpuInitiator : sc_core::sc_module {
     uint64_t read_csr(uint32_t csr) const {
         switch (csr) {
             case 0x300u: return mstatus;
-            case 0x301u: return 0x8000000000001100ULL;
+            case 0x301u: return 0x8000000000001101ULL;  // RV64IMA
             case 0x304u: return mie;
             case 0x305u: return mtvec;
             case 0x340u: return mscratch;
             case 0x341u: return mepc;
             case 0x342u: return mcause;
             case 0x343u: return mtval;
-            case 0x344u: return (plic && plic->has_pending_irq()) ? (1ULL << 11) : 0ULL;
+            case 0x344u: {
+                uint64_t mip = 0ULL;
+                if (hart_id == 0u && plic && plic->has_pending_irq()) mip |= (1ULL << 11);
+                if (clint && clint->has_msip(hart_id)) mip |= (1ULL << 3);
+                return mip;
+            }
             case 0x3A0u: return pmpcfg0;
             case 0x3B0u: return pmpaddr[0];
             case 0x3B1u: return pmpaddr[1];
             case 0x3B2u: return pmpaddr[2];
             case 0x3B3u: return pmpaddr[3];
             case 0xB00u: case 0xB02u: return instructions;
-            case 0xF14u: return 0ULL;
+            case 0xF14u: return static_cast<uint64_t>(hart_id);
             default: return 0ULL;
         }
     }
@@ -1398,7 +1706,10 @@ struct Rv64CpuInitiator : sc_core::sc_module {
 
     bool step_one() {
         if (finisher && finisher->halted) return false;
-        if ((mstatus & 8ULL) && (mie & (1ULL << 11)) && plic && plic->has_pending_irq()) {
+        if ((mstatus & 8ULL) && (mie & (1ULL << 3)) && clint && clint->has_msip(hart_id)) {
+            take_trap(0x8000000000000003ULL, 0ULL, pc);
+        } else if (hart_id == 0u && (mstatus & 8ULL) && (mie & (1ULL << 11)) && plic &&
+                   plic->has_pending_irq()) {
             take_trap(0x800000000000000bULL, 0ULL, pc);
         }
         uint32_t insn = 0;
@@ -1559,6 +1870,51 @@ struct Rv64CpuInitiator : sc_core::sc_module {
                 break;
             }
             case 0x0Fu: break;
+            case 0x2Fu: {
+                // RV64A Atomic Memory Operations (LR/SC/AMO .W and .D)
+                const uint32_t funct5 = (funct7 >> 2) & 0x1Fu;
+                const uint64_t addr = x[rs1];
+                const unsigned len = (funct3 == 3u) ? 8u : 4u;
+                atomic_ops++;
+                if (funct5 == 0x02u) {  // LR.W / LR.D
+                    uint64_t val = 0;
+                    if (!bus_rw(addr, &val, len, false)) { take_trap(5ULL, addr, cur_pc); trapped = true; break; }
+                    if (resv) resv->reserve(hart_id, addr);
+                    x[rd] = (len == 4u) ? static_cast<uint64_t>(sext(val, 32)) : val;
+                } else if (funct5 == 0x03u) {  // SC.W / SC.D
+                    const bool ok = !resv || resv->check_and_clear(hart_id, addr);
+                    if (ok) {
+                        uint64_t val = x[rs2];
+                        if (!bus_rw(addr, &val, len, true)) { take_trap(7ULL, addr, cur_pc); trapped = true; break; }
+                        x[rd] = 0ULL;
+                    } else {
+                        x[rd] = 1ULL;
+                    }
+                } else {
+                    uint64_t cur = 0;
+                    if (!bus_rw(addr, &cur, len, false)) { take_trap(5ULL, addr, cur_pc); trapped = true; break; }
+                    uint64_t orig = (len == 4u) ? static_cast<uint64_t>(sext(cur, 32)) : cur;
+                    uint64_t src = (len == 4u) ? static_cast<uint64_t>(sext(x[rs2], 32)) : x[rs2];
+                    uint64_t res = orig;
+                    switch (funct5) {
+                        case 0x01u: res = src; break;  // AMOSWAP
+                        case 0x00u: res = orig + src; break;  // AMOADD
+                        case 0x04u: res = orig ^ src; break;  // AMOXOR
+                        case 0x0Cu: res = orig & src; break;  // AMOAND
+                        case 0x08u: res = orig | src; break;  // AMOOR
+                        case 0x10u: res = (static_cast<int64_t>(orig) < static_cast<int64_t>(src)) ? orig : src; break;
+                        case 0x14u: res = (static_cast<int64_t>(orig) > static_cast<int64_t>(src)) ? orig : src; break;
+                        case 0x18u: res = (orig < src) ? orig : src; break;
+                        case 0x1Cu: res = (orig > src) ? orig : src; break;
+                        default: illegal_trap = true; take_trap(2ULL, insn, cur_pc); trapped = true; break;
+                    }
+                    if (!trapped) {
+                        if (!bus_rw(addr, &res, len, true)) { take_trap(7ULL, addr, cur_pc); trapped = true; break; }
+                        x[rd] = orig;
+                    }
+                }
+                break;
+            }
             case 0x73u: {
                 const uint32_t csr = (insn >> 20) & 0xFFFu;
                 if (funct3 == 0u) {
@@ -1567,7 +1923,7 @@ struct Rv64CpuInitiator : sc_core::sc_module {
                         mstatus = (mstatus & ~8ULL) | (mpie ? 8ULL : 0ULL) | (1ULL << 7);
                         next_pc = mepc;
                     } else if (insn == 0x10500073u) {
-                        wait(sc_core::sc_time(20, sc_core::SC_NS));
+                        wait(sc_core::sc_time(100, sc_core::SC_NS));
                     } else { take_trap(11ULL, 0ULL, cur_pc); trapped = true; }
                 } else {
                     const uint64_t old = read_csr(csr);
@@ -1635,6 +1991,12 @@ struct Rv64CpuInitiator : sc_core::sc_module {
     }
 
     void run() {
+        if (hart_id != 0u) {
+            while (!(finisher && finisher->halted)) {
+                if (!step_one()) return;
+            }
+            return;
+        }
         if (gdb && gdb->client_fd >= 0) { run_gdb_loop(); return; }
         for (uint64_t step = 0; step < max_steps; ++step) {
             if (!step_one()) { sc_core::sc_stop(); return; }
@@ -1702,8 +2064,10 @@ int sc_main(int argc, char **argv) {
     sc_core::sc_set_time_resolution(1, sc_core::SC_PS);
     VcdWriter vcd;
     vcd.open(vcd_path);
+    SmpReservationState smp_resv;
 
-    Rv64CpuInitiator cpu("unified_rv64_core");
+    Rv64CpuInitiator cpu0("unified_rv64_hart0", 0u);
+    Rv64CpuInitiator cpu1("unified_rv64_hart1", 1u);
     NoC2x2Router noc("systemc_noc_2x2", trace_path);
     TlmMemory dram("main_dram", USOC_MAIN_DRAM_SIZE, false);
     TlmMemory rom("boot_rom", USOC_BOOT_ROM_SIZE, true);
@@ -1713,14 +2077,17 @@ int sc_main(int argc, char **argv) {
     PlicTlm plic("sys_plic");
     Uart16550Tlm uart("qemu_uart_0", console_path);
     SpiCtrlModule spi("spi_ctrl_0");
+    I2cCtrlModule i2c("i2c_ctrl_0");
     ChipyardGcdTlm gcd("chipyard_gcd_0");
     OpenTitanGpioTlm gpio("opentitan_gpio_0");
     DmaEngineTlm dma("dma_engine_0");
     Sha256Module sha("sha256_crypto_0");
+    Aes128Module aes("aes128_crypto_0");
     MacNpuModule npu("mac_npu_0");
     PmpBusGuardTlm pmp_guard("pmp_guard_0");
 
-    cpu.bus.bind(noc.cpu_in);
+    cpu0.bus.bind(noc.cpu0_in);
+    cpu1.bus.bind(noc.cpu1_in);
     dma.dma_master.bind(noc.dma_in);
     noc.to_ram.bind(dram.target);
     noc.to_rom.bind(rom.target);
@@ -1730,49 +2097,63 @@ int sc_main(int argc, char **argv) {
     noc.to_plic.bind(plic.target);
     noc.to_uart.bind(uart.target);
     noc.to_spi.bind(spi.target);
+    noc.to_i2c.bind(i2c.target);
     noc.to_gcd.bind(gcd.target);
     noc.to_gpio.bind(gpio.target);
     noc.to_dma.bind(dma.target);
     noc.to_sha.bind(sha.target);
+    noc.to_aes.bind(aes.target);
     noc.to_npu.bind(npu.target);
     noc.to_pmp_guard.bind(pmp_guard.target);
 
     plic.uart = &uart; plic.gcd = &gcd; plic.gpio = &gpio; plic.dma = &dma;
-    plic.sha = &sha; plic.spi = &spi; plic.npu = &npu; plic.pmp_guard = &pmp_guard;
+    plic.sha = &sha; plic.aes = &aes; plic.spi = &spi; plic.i2c = &i2c;
+    plic.npu = &npu; plic.pmp_guard = &pmp_guard;
     noc.pmp_guard = &pmp_guard; noc.l2 = &l2; noc.plic = &plic; noc.vcd = &vcd;
-    cpu.finisher = &finisher; cpu.plic = &plic; cpu.max_steps = max_steps;
+    cpu0.finisher = &finisher; cpu0.clint = &clint; cpu0.plic = &plic;
+    cpu0.resv = &smp_resv; cpu0.max_steps = max_steps;
+    cpu1.finisher = &finisher; cpu1.clint = &clint; cpu1.plic = &plic;
+    cpu1.resv = &smp_resv; cpu1.max_steps = max_steps;
 
     uint64_t entry = USOC_CPU_ENTRY;
     if (!load_elf64(elf_path, dram, entry)) {
         std::cerr << "Failed to load RV64 ELF: " << elf_path << "\n";
         return 2;
     }
-    cpu.pc = entry;
+    cpu0.pc = entry;
+    cpu1.pc = entry;
 
     GdbStub gdb;
     if (gdb_port >= 0) {
         if (!gdb.listen_on(gdb_port, gdb_port_file)) return 2;
-        cpu.gdb = &gdb;
+        cpu0.gdb = &gdb;
     }
 
     sc_core::sc_start();
     gdb.cleanup();
 
-    const bool passed = finisher.halted && finisher.exit_code == 0 && !cpu.timed_out;
+    const bool passed = finisher.halted && finisher.exit_code == 0 && !cpu0.timed_out;
     std::ofstream summary(summary_path);
     summary << "{\n"
             << "  \"status\": \"" << (passed ? "PASSED" : "FAILED") << "\",\n"
             << "  \"rtl_backend\": \"" << MacNpuModule::backend_name() << "\",\n"
             << "  \"mac_npu_backend\": \"" << MacNpuModule::backend_name() << "\",\n"
+            << "  \"harts\": 2,\n"
+            << "  \"ir_route_entries\": " << USOC_ROUTE_COUNT << ",\n"
             << "  \"halted\": " << (finisher.halted ? "true" : "false") << ",\n"
-            << "  \"timed_out\": " << (cpu.timed_out ? "true" : "false") << ",\n"
-            << "  \"exit_code\": " << (cpu.timed_out ? 124 : finisher.exit_code) << ",\n"
-            << "  \"instructions_executed\": " << cpu.instructions << ",\n"
-            << "  \"traps_taken\": " << cpu.traps_taken << ",\n"
+            << "  \"timed_out\": " << (cpu0.timed_out ? "true" : "false") << ",\n"
+            << "  \"exit_code\": " << (cpu0.timed_out ? 124 : finisher.exit_code) << ",\n"
+            << "  \"instructions_executed\": " << (cpu0.instructions + cpu1.instructions) << ",\n"
+            << "  \"hart0_instructions\": " << cpu0.instructions << ",\n"
+            << "  \"hart1_instructions\": " << cpu1.instructions << ",\n"
+            << "  \"atomic_ops_executed\": " << (cpu0.atomic_ops + cpu1.atomic_ops) << ",\n"
+            << "  \"smp_ipi_delivered\": " << clint.ipi_fires << ",\n"
+            << "  \"traps_taken\": " << (cpu0.traps_taken + cpu1.traps_taken) << ",\n"
             << "  \"systemc_time_ps\": " << sc_core::sc_time_stamp().value() << ",\n"
             << "  \"noc_total_transactions\": " << noc.total_transactions << ",\n"
             << "  \"noc_mmio_transactions\": " << noc.mmio_transactions << ",\n"
             << "  \"noc_dma_master_transactions\": " << noc.dma_master_transactions << ",\n"
+            << "  \"noc_backpressure_stalls\": " << noc.backpressure_stalls << ",\n"
             << "  \"noc_total_hops\": " << noc.total_hops << ",\n"
             << "  \"router_hits\": [" << noc.router_hits[0] << ", " << noc.router_hits[1] << ", "
             << noc.router_hits[2] << ", " << noc.router_hits[3] << "],\n"
@@ -1784,7 +2165,9 @@ int sc_main(int argc, char **argv) {
             << "    \"opentitan_gpio_0\": " << noc.hit_gpio << ",\n"
             << "    \"dma_engine_0\": " << noc.hit_dma << ",\n"
             << "    \"sha256_crypto_0\": " << noc.hit_sha << ",\n"
+            << "    \"aes128_crypto_0\": " << noc.hit_aes << ",\n"
             << "    \"spi_ctrl_0\": " << noc.hit_spi << ",\n"
+            << "    \"i2c_ctrl_0\": " << noc.hit_i2c << ",\n"
             << "    \"l2_cache_0\": " << noc.hit_l2 << ",\n"
             << "    \"mac_npu_0\": " << noc.hit_npu << ",\n"
             << "    \"pmp_guard_0\": " << noc.hit_pmp_guard << ",\n"
@@ -1797,8 +2180,12 @@ int sc_main(int argc, char **argv) {
             << "    \"dma_bus_errors\": " << dma.bus_errors << ",\n"
             << "    \"sha256_blocks_hashed\": " << sha.blocks_hashed << ",\n"
             << "    \"sha256_rtl_cycles\": " << sha.rtl_cycles << ",\n"
+            << "    \"aes_blocks_encrypted\": " << aes.blocks_encrypted << ",\n"
+            << "    \"aes_rtl_cycles\": " << aes.rtl_cycles << ",\n"
             << "    \"spi_xfers_completed\": " << spi.xfers << ",\n"
             << "    \"spi_rtl_cycles\": " << spi.rtl_cycles << ",\n"
+            << "    \"i2c_xfers_completed\": " << i2c.xfers << ",\n"
+            << "    \"i2c_rtl_cycles\": " << i2c.rtl_cycles << ",\n"
             << "    \"l2_hits\": " << l2.hits << ",\n"
             << "    \"l2_misses\": " << l2.misses << ",\n"
             << "    \"l2_dma_snoops\": " << l2.snoops << ",\n"
@@ -1808,9 +2195,9 @@ int sc_main(int argc, char **argv) {
             << "    \"npu_acc_final\": " << npu.acc << ",\n"
             << "    \"npu_rtl_cycles\": " << npu.rtl_cycles << ",\n"
             << "    \"pmp_guard_fault_count\": " << pmp_guard.fault_count << ",\n"
-            << "    \"cpu_pmpcfg0\": " << cpu.pmpcfg0 << "\n"
+            << "    \"cpu_pmpcfg0\": " << cpu0.pmpcfg0 << "\n"
             << "  }\n"
             << "}\n";
     summary.flush();
-    return passed ? 0 : (cpu.timed_out ? 124 : finisher.exit_code);
+    return passed ? 0 : (cpu0.timed_out ? 124 : finisher.exit_code);
 }

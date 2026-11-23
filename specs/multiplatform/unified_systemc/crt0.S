@@ -1,12 +1,16 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-/* RV64 bare-metal startup and M-mode trap trampoline for Unified_Hetero_MultiPlatform_SoC. */
+/* Dual-Hart SMP RV64 bare-metal startup and M-mode trap trampoline for Unified_Hetero_MultiPlatform_SoC. */
 .section .text.init, "ax"
 .globl _start
 .globl trap_entry
+.weak hart1_main
 
 _start:
+    csrr t0, mhartid
+    bnez t0, hart1_boot
+
+    /* Hart 0: stack + zero .bss + trap vector + main */
     la sp, _stack_top
-    /* Zero .bss */
     la t0, _bss_start
     la t1, _bss_end
 1:
@@ -21,6 +25,20 @@ _start:
 3:
     wfi
     j 3b
+
+hart1_boot:
+    /* Hart 1: dedicated stack + trap vector + call weak hart1_main */
+    la sp, _hart1_stack_top
+    la t0, trap_entry
+    csrw mtvec, t0
+    call hart1_main
+4:
+    wfi
+    j 4b
+
+hart1_main:
+    wfi
+    j hart1_main
 
 .balign 4
 trap_entry:
