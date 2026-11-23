@@ -8,7 +8,7 @@ on_err() {
     local f
     echo "SMOKE FAILED (rc=$rc) at line $1" >&2
     ls -la "$out" >&2
-    for f in "$out"/*.json; do
+    for f in "$out"/*.json "$out"/asoc-run/*.log "$out"/asoc-run/report.json; do
         [ -s "$f" ] && echo "=== $f ===" >&2 && tail -n 40 "$f" >&2
     done
     exit "$rc"
@@ -50,14 +50,41 @@ usp dashboard generate --out "$out/dashboard.html" \
     --calibration "$out/unified-calibrate/calibration.json" \
     --dse "$out/dse-sweep/dse-report.json" \
     --loop "$out/chia-loop/loop-report.json" > "$out/dashboard.json"
+usp unified-soc run examples/ASoC/asoc_unified.yaml --out "$out/asoc-run" \
+    > "$out/asoc-run.json"
+echo "=== ASOC LIVE CONSOLE ==="
+cat "$out/asoc-run/console.log"
+echo "=== ASOC LIVE REPORT ==="
+cat "$out/asoc-run/report.md"
+usp unified-soc calibrate examples/ASoC/asoc_unified.yaml --out "$out/asoc-cal" \
+    > "$out/asoc-cal.json"
+echo "=== ASOC CALIBRATION JSON ==="
+cat "$out/asoc-cal/calibration.json"
+usp dse sweep examples/ASoC/asoc_unified.yaml --out "$out/asoc-dse" \
+    --workers 2 --cluster process --cache "$out/asoc-dse-cache" > "$out/asoc-dse.json"
+echo "=== ASOC DSE REPORT ==="
+cat "$out/asoc-dse/dse-report.md"
+usp loop run examples/ASoC/asoc_unified.yaml --out "$out/asoc-loop" \
+    --max-iters 4 --cache "$out/asoc-loop-cache" > "$out/asoc-loop.json"
+echo "=== ASOC CHIA LOOP REPORT ==="
+cat "$out/asoc-loop/loop-report.md"
+usp dashboard generate --out "$out/asoc-dashboard.html" \
+    --unified "$out/asoc-run/report.json" \
+    --calibration "$out/asoc-cal/calibration.json" \
+    --dse "$out/asoc-dse/dse-report.json" \
+    --loop "$out/asoc-loop/loop-report.json" > "$out/asoc-dashboard.json"
+usp soc generate examples/ASoC/asoc_fabric.yaml --input-format fabric --engine both \
+    --out "$out/asoc-fabric" > "$out/asoc-fabric.json"
+usp flow preflight examples/ASoC/asoc_flow.yaml > "$out/asoc-flow.json"
 usp mcp tools --root /opt/socsim > "$out/mcp-tools.json"
 usp mcp config --client podman --root /opt/socsim > "$out/mcp-podman-config.json"
 usp upgrade --root /opt/socsim --audit > "$out/upgrade-audit.json"
 SOCSIM_REQUIRE_INTEGRATION=1 USP_REQUIRE_SYSTEMC=1 python -m pytest \
     tests/test_qemu.py tests/test_sdk_qa.py tests/test_milestone_contracts.py \
     tests/test_multiplatform_soc.py tests/test_unified_systemc_soc.py \
+    tests/test_asoc_example.py \
     tests/test_enterprise_registry_dse.py tests/test_mcp_server.py \
     tests/test_project_standardization.py -q \
     -o cache_dir="$out/pytest-cache" --basetemp="$out/tests" --junitxml="$out/junit.xml"
-printf 'SDK native smoke + QA + Dual-Hart SMP + 6x Verilator RTL + CHIA Loop + IP Scaffold + Dashboard + MCP passed; source revision: '
+printf 'SDK native smoke + QA + ASoC (2-Cluster 20-IP 7x RTL) + Dual-Hart SMP + CHIA Loop + IP Scaffold + Dashboard + MCP passed; source revision: '
 cat /usr/local/share/socsim-revision

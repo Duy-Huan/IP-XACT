@@ -1,0 +1,28 @@
+{
+  "calibration": {
+    "contract": "native-calibration-report-1",
+    "error_budget": 0.1,
+    "estimated_cycles": 19813.0,
+    "model_source": "qemu-analytical-estimate",
+    "reference_cycles": 19818.45,
+    "reference_source": "native-rtl",
+    "relative_error": 0.000275,
+    "roi": "asoc_7rtl_smp_benchmark",
+    "silicon_signoff": false,
+    "within_budget": true
+  },
+  "contract": "unified-rtl-tlm-calibration-1",
+  "functional_parity": true,
+  "rtl_cycles": {
+    "aes128": 26,
+    "i2c": 28,
+    "l2_cache": 25489,
+    "lpu": 33,
+    "mac_npu": 37,
+    "sha256": 95,
+    "spi": 38
+  },
+  "rtl_systemc_time_ps": 396369000.0,
+  "status": "PASSED",
+  "tlm_systemc_time_ps": 396260000.0
+}

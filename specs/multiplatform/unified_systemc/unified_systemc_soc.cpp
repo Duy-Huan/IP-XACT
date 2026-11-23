@@ -21,6 +21,9 @@
 #include "Vaes128_rtl.h"
 #include "Vi2c_ctrl_rtl.h"
 #include "Vl2_cache_rtl.h"
+#ifdef USOC_ENABLE_LPU_RTL
+#include "Vlpu_rtl.h"
+#endif
 #include "Vmac_npu_rtl.h"
 #include "Vsha256_rtl.h"
 #include "Vspi_ctrl_rtl.h"
@@ -220,11 +223,11 @@ struct Uart16550Tlm : sc_core::sc_module {
     }
 };
 
-// --- Target 4: Dual-Hart SMP RISC-V CLINT ---
+// --- Target 4: Multi-Cluster / SMP RISC-V CLINT (up to 4 Harts) ---
 struct ClintTlm : sc_core::sc_module {
     tlm_utils::simple_target_socket<ClintTlm> target;
     uint64_t mtimecmp = UINT64_MAX;
-    std::array<uint32_t, 2> msip{};
+    std::array<uint32_t, 4> msip{};
     uint64_t ipi_fires = 0;
 
     explicit ClintTlm(sc_core::sc_module_name name) : sc_module(name), target("target") {
@@ -244,7 +247,7 @@ struct ClintTlm : sc_core::sc_module {
         } else if (off == 0x4000u && len == 8u) {
             if (tx.is_write()) std::memcpy(&mtimecmp, tx.get_data_ptr(), 8);
             else std::memcpy(tx.get_data_ptr(), &mtimecmp, 8);
-        } else if ((off == 0u || off == 4u) && len == 4u) {
+        } else if (off < 16u && (off % 4u) == 0u && len == 4u) {
             const size_t idx = static_cast<size_t>(off / 4u);
             if (tx.is_write()) {
                 uint32_t val = 0;
@@ -1136,6 +1139,212 @@ struct I2cCtrlModule : sc_core::sc_module {
 
 #endif
 
+// --- Hybrid Verilator RTL / TLM-2.0 Language & Linear Processing Unit (LPU) ---
+#if defined(USOC_ENABLE_VERILATOR_RTL) && defined(USOC_ENABLE_LPU_RTL)
+struct LpuEngineModule : sc_core::sc_module {
+    tlm_utils::simple_target_socket<LpuEngineModule> target;
+    Vlpu_rtl dut;
+    uint32_t ops_done = 0, linear_ops = 0, tokens_decoded = 0;
+    uint32_t argmax_idx = 0, relu_out = 0, irq = 0;
+    int32_t max_logit = 0;
+    uint64_t rtl_cycles = 0;
+
+    explicit LpuEngineModule(sc_core::sc_module_name name) : sc_module(name), target("target") {
+        target.register_b_transport(this, &LpuEngineModule::transport);
+        dut.clk_i = 0; dut.rst_ni = 0; dut.req_valid_i = 0;
+        dut.req_write_i = 0; dut.req_addr_i = 0; dut.req_wdata_i = 0;
+        tick();
+        dut.rst_ni = 1;
+        tick();
+    }
+
+    void tick() {
+        dut.clk_i = 0; dut.eval();
+        dut.clk_i = 1; dut.eval();
+        dut.clk_i = 0; dut.eval();
+        irq = dut.irq_o ? 1u : 0u;
+        rtl_cycles = dut.rtl_cycles_o;
+    }
+
+    uint32_t peek_reg(uint8_t addr) {
+        dut.req_valid_i = 1; dut.req_write_i = 0; dut.req_addr_i = addr; dut.req_wdata_i = 0;
+        dut.eval();
+        uint32_t v = dut.rsp_rdata_o;
+        dut.req_valid_i = 0; dut.eval();
+        return v;
+    }
+
+    void transport(tlm::tlm_generic_payload &tx, sc_core::sc_time &delay) {
+        if (tx.get_data_length() != 4u || tx.get_address() > 0xFFu) {
+            tx.set_response_status(tlm::TLM_ADDRESS_ERROR_RESPONSE);
+            return;
+        }
+        const uint8_t off = static_cast<uint8_t>(tx.get_address());
+        uint32_t data = 0;
+        std::memcpy(&data, tx.get_data_ptr(), 4);
+        dut.req_valid_i = 1; dut.req_write_i = tx.is_write() ? 1 : 0;
+        dut.req_addr_i = off; dut.req_wdata_i = data;
+        dut.eval();
+        if (dut.rsp_err_o) {
+            dut.req_valid_i = 0; dut.eval();
+            tx.set_response_status(tx.is_write() ? tlm::TLM_COMMAND_ERROR_RESPONSE
+                                                 : tlm::TLM_ADDRESS_ERROR_RESPONSE);
+            return;
+        }
+        if (!tx.is_write()) {
+            uint32_t r = dut.rsp_rdata_o;
+            std::memcpy(tx.get_data_ptr(), &r, 4);
+            tick();
+            dut.req_valid_i = 0; dut.eval();
+            delay += sc_core::sc_time(20, sc_core::SC_NS);
+        } else {
+            tick();
+            dut.req_valid_i = 0; dut.eval();
+            if (off == 0x00u && (data == 1u || data == 3u)) {
+                tick();
+                if (data == 3u) tick();
+                delay += sc_core::sc_time(data == 3u ? 60 : 40, sc_core::SC_NS);
+            } else {
+                delay += sc_core::sc_time(20, sc_core::SC_NS);
+            }
+        }
+        ops_done = peek_reg(0x00u);
+        relu_out = peek_reg(0x0Cu);
+        linear_ops = peek_reg(0x14u);
+        tokens_decoded = peek_reg(0x18u);
+        argmax_idx = peek_reg(0x1Cu);
+        max_logit = static_cast<int32_t>(peek_reg(0x50u));
+        tx.set_response_status(tlm::TLM_OK_RESPONSE);
+    }
+    static const char *backend_name() { return "verilator-rtl"; }
+};
+#else
+struct LpuEngineModule : sc_core::sc_module {
+    tlm_utils::simple_target_socket<LpuEngineModule> target;
+    std::array<int32_t, 4> x_lanes{}, w_lanes{}, logits{};
+    int32_t bias = 0, raw_out = 0, max_logit = 0;
+    uint32_t relu_out = 0, argmax_idx = 0, ops_done = 0, linear_ops = 0, tokens_decoded = 0;
+    uint32_t irq = 0;
+    uint64_t rtl_cycles = 0;
+
+    explicit LpuEngineModule(sc_core::sc_module_name name) : sc_module(name), target("target") {
+        target.register_b_transport(this, &LpuEngineModule::transport);
+    }
+
+    void transport(tlm::tlm_generic_payload &tx, sc_core::sc_time &delay) {
+        if (tx.get_data_length() != 4u) {
+            tx.set_response_status(tlm::TLM_BURST_ERROR_RESPONSE);
+            return;
+        }
+        const uint64_t off = tx.get_address();
+        uint32_t data = 0;
+        std::memcpy(&data, tx.get_data_ptr(), 4);
+        if (tx.is_write()) {
+            if (off == 0x00u) {
+                if (data == 1u) {
+                    int64_t acc = static_cast<int64_t>(bias);
+                    for (size_t i = 0; i < 4; ++i) {
+                        acc += static_cast<int64_t>(x_lanes[i]) * static_cast<int64_t>(w_lanes[i]);
+                    }
+                    raw_out = static_cast<int32_t>(acc);
+                    relu_out = raw_out < 0 ? 0u : static_cast<uint32_t>(raw_out);
+                    linear_ops++;
+                    ops_done++;
+                    irq = 1u;
+                    delay += sc_core::sc_time(40, sc_core::SC_NS);
+                } else if (data == 2u) {
+                    raw_out = 0; relu_out = 0; max_logit = 0; argmax_idx = 0;
+                    ops_done = 0; linear_ops = 0; tokens_decoded = 0; irq = 0;
+                    delay += sc_core::sc_time(20, sc_core::SC_NS);
+                } else if (data == 3u) {
+                    int32_t best_v = logits[0];
+                    uint32_t best_i = 0;
+                    for (uint32_t i = 1; i < 4; ++i) {
+                        if (logits[i] > best_v) { best_v = logits[i]; best_i = i; }
+                    }
+                    max_logit = best_v;
+                    argmax_idx = best_i;
+                    tokens_decoded++;
+                    ops_done++;
+                    irq = 1u;
+                    delay += sc_core::sc_time(60, sc_core::SC_NS);
+                } else {
+                    tx.set_response_status(tlm::TLM_COMMAND_ERROR_RESPONSE);
+                    return;
+                }
+            } else if (off == 0x04u) { bias = static_cast<int32_t>(data); delay += sc_core::sc_time(20, sc_core::SC_NS); }
+            else if (off == 0x10u) { if (data & 1u) irq = 0u; delay += sc_core::sc_time(20, sc_core::SC_NS); }
+            else if (off >= 0x20u && off <= 0x2Cu) { x_lanes[(off - 0x20u) / 4u] = static_cast<int32_t>(data); delay += sc_core::sc_time(20, sc_core::SC_NS); }
+            else if (off >= 0x30u && off <= 0x3Cu) { w_lanes[(off - 0x30u) / 4u] = static_cast<int32_t>(data); delay += sc_core::sc_time(20, sc_core::SC_NS); }
+            else if (off >= 0x40u && off <= 0x4Cu) { logits[(off - 0x40u) / 4u] = static_cast<int32_t>(data); delay += sc_core::sc_time(20, sc_core::SC_NS); }
+            else { tx.set_response_status(tlm::TLM_COMMAND_ERROR_RESPONSE); return; }
+        } else {
+            if (off == 0x00u) data = ops_done;
+            else if (off == 0x04u) data = static_cast<uint32_t>(bias);
+            else if (off == 0x08u) data = static_cast<uint32_t>(raw_out);
+            else if (off == 0x0Cu) data = relu_out;
+            else if (off == 0x10u) data = irq;
+            else if (off == 0x14u) data = linear_ops;
+            else if (off == 0x18u) data = tokens_decoded;
+            else if (off == 0x1Cu) data = argmax_idx;
+            else if (off >= 0x20u && off <= 0x2Cu) data = static_cast<uint32_t>(x_lanes[(off - 0x20u) / 4u]);
+            else if (off >= 0x30u && off <= 0x3Cu) data = static_cast<uint32_t>(w_lanes[(off - 0x30u) / 4u]);
+            else if (off >= 0x40u && off <= 0x4Cu) data = static_cast<uint32_t>(logits[(off - 0x40u) / 4u]);
+            else if (off == 0x50u) data = static_cast<uint32_t>(max_logit);
+            else { tx.set_response_status(tlm::TLM_ADDRESS_ERROR_RESPONSE); return; }
+            std::memcpy(tx.get_data_ptr(), &data, 4);
+            delay += sc_core::sc_time(20, sc_core::SC_NS);
+        }
+        tx.set_response_status(tlm::TLM_OK_RESPONSE);
+    }
+    static const char *backend_name() { return "systemc-tlm"; }
+};
+#endif
+
+// --- Cross-Cluster Hardware IPC Mailbox & Doorbell ---
+struct ClusterMailboxTlm : sc_core::sc_module {
+    tlm_utils::simple_target_socket<ClusterMailboxTlm> target;
+    uint32_t c0_to_c1_data = 0, c1_to_c0_data = 0;
+    uint32_t c0_to_c1_valid = 0, c1_to_c0_valid = 0;
+    uint32_t irq = 0, messages_exchanged = 0;
+
+    explicit ClusterMailboxTlm(sc_core::sc_module_name name) : sc_module(name), target("target") {
+        target.register_b_transport(this, &ClusterMailboxTlm::transport);
+    }
+
+    void transport(tlm::tlm_generic_payload &tx, sc_core::sc_time &delay) {
+        if (tx.get_data_length() != 4u) {
+            tx.set_response_status(tlm::TLM_BURST_ERROR_RESPONSE);
+            return;
+        }
+        const uint64_t off = tx.get_address();
+        uint32_t data = 0;
+        std::memcpy(&data, tx.get_data_ptr(), 4);
+        if (tx.is_write()) {
+            switch (off) {
+                case 0x00u: c0_to_c1_data = data; c0_to_c1_valid = 1u; break;
+                case 0x04u: if (data & 1u) c0_to_c1_valid = 0u; break;
+                case 0x08u: c1_to_c0_data = data; c1_to_c0_valid = 1u; irq = 1u; messages_exchanged++; break;
+                case 0x10u: if (data & 1u) irq = 0u; break;
+                default: tx.set_response_status(tlm::TLM_COMMAND_ERROR_RESPONSE); return;
+            }
+        } else {
+            switch (off) {
+                case 0x00u: data = c0_to_c1_data; break;
+                case 0x04u: data = c0_to_c1_valid; break;
+                case 0x08u: data = c1_to_c0_data; c1_to_c0_valid = 0u; break;
+                case 0x0Cu: data = c1_to_c0_valid | (irq << 1); break;
+                case 0x10u: data = irq; break;
+                case 0x14u: data = messages_exchanged; break;
+                default: tx.set_response_status(tlm::TLM_ADDRESS_ERROR_RESPONSE); return;
+            }
+            std::memcpy(tx.get_data_ptr(), &data, 4);
+        }
+        delay += sc_core::sc_time(10, sc_core::SC_NS);
+        tx.set_response_status(tlm::TLM_OK_RESPONSE);
+    }
+};
+
 // --- Target 8: SystemC PMP/IOPMP Bus Guard ---
 struct PmpBusGuardTlm : sc_core::sc_module {
     tlm_utils::simple_target_socket<PmpBusGuardTlm> target;
@@ -1264,13 +1473,16 @@ struct DmaEngineTlm : sc_core::sc_module {
     }
 };
 
-// --- Target 10: Unified PLIC (aggregating all 9 heterogeneous IRQ lines) ---
+// --- Target 10: Unified PLIC (aggregating all heterogeneous IRQ lines) ---
 struct PlicTlm : sc_core::sc_module {
     tlm_utils::simple_target_socket<PlicTlm> target;
     std::array<uint32_t, 32> priority{};
     uint32_t enable_mask = 0, threshold = 0, claimed_mask = 0;
 
     Uart16550Tlm *uart = nullptr;
+#ifdef USOC_HAS_UART_AUX
+    Uart16550Tlm *uart_aux = nullptr;
+#endif
     ChipyardGcdTlm *gcd = nullptr;
     OpenTitanGpioTlm *gpio = nullptr;
     DmaEngineTlm *dma = nullptr;
@@ -1280,6 +1492,12 @@ struct PlicTlm : sc_core::sc_module {
     I2cCtrlModule *i2c = nullptr;
     MacNpuModule *npu = nullptr;
     PmpBusGuardTlm *pmp_guard = nullptr;
+#ifdef USOC_HAS_LPU
+    LpuEngineModule *lpu = nullptr;
+#endif
+#ifdef USOC_HAS_MAILBOX
+    ClusterMailboxTlm *mailbox = nullptr;
+#endif
 
     explicit PlicTlm(sc_core::sc_module_name name) : sc_module(name), target("target") {
         target.register_b_transport(this, &PlicTlm::transport);
@@ -1287,7 +1505,10 @@ struct PlicTlm : sc_core::sc_module {
 
     uint32_t active_source_mask() const {
         uint32_t m = 0;
-        if (uart && uart->irq) m |= (1u << USOC_QEMU_UART_0_IRQ);
+        if (uart && uart->irq) m |= (1u << USOC_PRIMARY_UART_IRQ);
+#ifdef USOC_HAS_UART_AUX
+        if (uart_aux && uart_aux->irq) m |= (1u << USOC_UART_AUX_IRQ);
+#endif
         if (gcd && gcd->irq) m |= (1u << USOC_CHIPYARD_GCD_0_IRQ);
         if (gpio && gpio->irq) m |= (1u << USOC_OPENTITAN_GPIO_0_IRQ);
         if (dma && dma->irq) m |= (1u << USOC_DMA_ENGINE_0_IRQ);
@@ -1297,6 +1518,12 @@ struct PlicTlm : sc_core::sc_module {
         if (i2c && i2c->irq) m |= (1u << USOC_I2C_CTRL_0_IRQ);
         if (npu && npu->irq) m |= (1u << USOC_MAC_NPU_0_IRQ);
         if (pmp_guard && pmp_guard->irq) m |= (1u << USOC_PMP_GUARD_0_IRQ);
+#ifdef USOC_HAS_LPU
+        if (lpu && lpu->irq) m |= (1u << USOC_LPU_IRQ);
+#endif
+#ifdef USOC_HAS_MAILBOX
+        if (mailbox && mailbox->irq) m |= (1u << USOC_MAILBOX_IRQ);
+#endif
         return m;
     }
 
@@ -1343,10 +1570,14 @@ struct PlicTlm : sc_core::sc_module {
     }
 };
 
-// --- Interconnect: IR-Routed SystemC/TLM-2.0 2x2 Mesh NoC (3 Masters -> 16 Targets) ---
+// --- Interconnect: IR-Routed 2x2 Mesh NoC + Hierarchical AXI/APB Bridges ---
 struct NoC2x2Router : sc_core::sc_module {
     tlm_utils::simple_target_socket<NoC2x2Router> cpu0_in;
     tlm_utils::simple_target_socket<NoC2x2Router> cpu1_in;
+#if USOC_HART_COUNT >= 4
+    tlm_utils::simple_target_socket<NoC2x2Router> cpu2_in;
+    tlm_utils::simple_target_socket<NoC2x2Router> cpu3_in;
+#endif
     tlm_utils::simple_target_socket<NoC2x2Router> dma_in;
     tlm_utils::simple_initiator_socket<NoC2x2Router> to_ram;
     tlm_utils::simple_initiator_socket<NoC2x2Router> to_rom;
@@ -1355,6 +1586,9 @@ struct NoC2x2Router : sc_core::sc_module {
     tlm_utils::simple_initiator_socket<NoC2x2Router> to_clint;
     tlm_utils::simple_initiator_socket<NoC2x2Router> to_plic;
     tlm_utils::simple_initiator_socket<NoC2x2Router> to_uart;
+#ifdef USOC_HAS_UART_AUX
+    tlm_utils::simple_initiator_socket<NoC2x2Router> to_uart_aux;
+#endif
     tlm_utils::simple_initiator_socket<NoC2x2Router> to_spi;
     tlm_utils::simple_initiator_socket<NoC2x2Router> to_i2c;
     tlm_utils::simple_initiator_socket<NoC2x2Router> to_gcd;
@@ -1364,6 +1598,15 @@ struct NoC2x2Router : sc_core::sc_module {
     tlm_utils::simple_initiator_socket<NoC2x2Router> to_aes;
     tlm_utils::simple_initiator_socket<NoC2x2Router> to_npu;
     tlm_utils::simple_initiator_socket<NoC2x2Router> to_pmp_guard;
+#ifdef USOC_HAS_LPU
+    tlm_utils::simple_initiator_socket<NoC2x2Router> to_lpu;
+#endif
+#ifdef USOC_HAS_MAILBOX
+    tlm_utils::simple_initiator_socket<NoC2x2Router> to_mailbox;
+#endif
+#ifdef USOC_HAS_AI_SRAM
+    tlm_utils::simple_initiator_socket<NoC2x2Router> to_ai_sram;
+#endif
 
     PmpBusGuardTlm *pmp_guard = nullptr;
     L2CacheModule *l2 = nullptr;
@@ -1374,20 +1617,43 @@ struct NoC2x2Router : sc_core::sc_module {
     uint64_t dma_master_transactions = 0, backpressure_stalls = 0;
     std::array<uint64_t, 4> router_hits{};
     std::array<uint64_t, 4> router_busy_until_ps{};
-    uint64_t hit_uart = 0, hit_clint = 0, hit_plic = 0, hit_gcd = 0, hit_gpio = 0;
-    uint64_t hit_dma = 0, hit_sha = 0, hit_aes = 0, hit_spi = 0, hit_i2c = 0;
-    uint64_t hit_l2 = 0, hit_npu = 0, hit_pmp_guard = 0, hit_pmp_blocked = 0;
+    std::array<uint64_t, 4> bridge_hits{};
+    uint64_t hit_uart = 0, hit_uart_aux = 0, hit_clint = 0, hit_plic = 0, hit_gcd = 0;
+    uint64_t hit_gpio = 0, hit_dma = 0, hit_sha = 0, hit_aes = 0, hit_spi = 0, hit_i2c = 0;
+    uint64_t hit_l2 = 0, hit_npu = 0, hit_lpu = 0, hit_mailbox = 0, hit_ai_sram = 0;
+    uint64_t hit_pmp_guard = 0, hit_pmp_blocked = 0;
 
     NoC2x2Router(sc_core::sc_module_name name, const std::string &trace_path)
         : sc_module(name),
-          cpu0_in("cpu0_in"), cpu1_in("cpu1_in"), dma_in("dma_in"),
+          cpu0_in("cpu0_in"), cpu1_in("cpu1_in"),
+#if USOC_HART_COUNT >= 4
+          cpu2_in("cpu2_in"), cpu3_in("cpu3_in"),
+#endif
+          dma_in("dma_in"),
           to_ram("to_ram"), to_rom("to_rom"), to_finisher("to_finisher"), to_l2("to_l2"),
-          to_clint("to_clint"), to_plic("to_plic"), to_uart("to_uart"), to_spi("to_spi"),
-          to_i2c("to_i2c"), to_gcd("to_gcd"), to_gpio("to_gpio"), to_dma("to_dma"),
-          to_sha("to_sha"), to_aes("to_aes"), to_npu("to_npu"), to_pmp_guard("to_pmp_guard"),
+          to_clint("to_clint"), to_plic("to_plic"), to_uart("to_uart"),
+#ifdef USOC_HAS_UART_AUX
+          to_uart_aux("to_uart_aux"),
+#endif
+          to_spi("to_spi"), to_i2c("to_i2c"), to_gcd("to_gcd"), to_gpio("to_gpio"),
+          to_dma("to_dma"), to_sha("to_sha"), to_aes("to_aes"), to_npu("to_npu"),
+          to_pmp_guard("to_pmp_guard"),
+#ifdef USOC_HAS_LPU
+          to_lpu("to_lpu"),
+#endif
+#ifdef USOC_HAS_MAILBOX
+          to_mailbox("to_mailbox"),
+#endif
+#ifdef USOC_HAS_AI_SRAM
+          to_ai_sram("to_ai_sram"),
+#endif
           trace(trace_path) {
         cpu0_in.register_b_transport(this, &NoC2x2Router::cpu0_transport);
         cpu1_in.register_b_transport(this, &NoC2x2Router::cpu1_transport);
+#if USOC_HART_COUNT >= 4
+        cpu2_in.register_b_transport(this, &NoC2x2Router::cpu2_transport);
+        cpu3_in.register_b_transport(this, &NoC2x2Router::cpu3_transport);
+#endif
         dma_in.register_b_transport(this, &NoC2x2Router::dma_transport);
     }
 
@@ -1395,12 +1661,22 @@ struct NoC2x2Router : sc_core::sc_module {
         return static_cast<unsigned>(std::abs(dx - sx) + std::abs(dy - sy));
     }
 
-    void log_tx(const char *master, const char *target, int rx, int ry, unsigned hops,
-                uint64_t phys_addr, uint64_t off, bool is_write, uint32_t value, bool ok,
-                bool l2_hit, bool pmp_fault) {
+    static const char *bridge_name(UsocBridgeId bid) {
+        switch (bid) {
+            case USOC_BRIDGE_AXI_AI: return "axi_ai_bridge";
+            case USOC_BRIDGE_AXI_SEC: return "axi_sec_bridge";
+            case USOC_BRIDGE_APB_PERIPH: return "apb_periph_bridge";
+            default: return "noc_backbone";
+        }
+    }
+
+    void log_tx(const char *master, const char *target, const char *bridge, int rx, int ry,
+                unsigned hops, uint64_t phys_addr, uint64_t off, bool is_write, uint32_t value,
+                bool ok, bool l2_hit, bool pmp_fault) {
         mmio_transactions++;
         const uint64_t now_ps = sc_core::sc_time_stamp().value();
-        trace << "{\"master\":\"" << master << "\",\"target\":\"" << target << "\",\"router\":["
+        trace << "{\"master\":\"" << master << "\",\"target\":\"" << target
+              << "\",\"bridge\":\"" << bridge << "\",\"router\":["
               << rx << "," << ry << "],\"hops\":" << hops << ",\"addr\":" << phys_addr
               << ",\"offset\":" << off << ",\"op\":\"" << (is_write ? "W" : "R")
               << "\",\"value\":" << value << ",\"status\":\"" << (ok ? "OK" : "ERROR")
@@ -1421,6 +1697,9 @@ struct NoC2x2Router : sc_core::sc_module {
             case USOC_TGT_CLINT: hit_clint++; return &to_clint;
             case USOC_TGT_PLIC: hit_plic++; return &to_plic;
             case USOC_TGT_UART: hit_uart++; return &to_uart;
+#ifdef USOC_HAS_UART_AUX
+            case USOC_TGT_UART_AUX: hit_uart_aux++; return &to_uart_aux;
+#endif
             case USOC_TGT_SPI: hit_spi++; return &to_spi;
             case USOC_TGT_I2C: hit_i2c++; return &to_i2c;
             case USOC_TGT_GCD: hit_gcd++; return &to_gcd;
@@ -1430,22 +1709,37 @@ struct NoC2x2Router : sc_core::sc_module {
             case USOC_TGT_AES128: hit_aes++; return &to_aes;
             case USOC_TGT_NPU: hit_npu++; return &to_npu;
             case USOC_TGT_PMP_GUARD: hit_pmp_guard++; return &to_pmp_guard;
+#ifdef USOC_HAS_LPU
+            case USOC_TGT_LPU: hit_lpu++; return &to_lpu;
+#endif
+#ifdef USOC_HAS_MAILBOX
+            case USOC_TGT_MAILBOX: hit_mailbox++; return &to_mailbox;
+#endif
+#ifdef USOC_HAS_AI_SRAM
+            case USOC_TGT_AI_SRAM: hit_ai_sram++; return &to_ai_sram;
+#endif
             default: return nullptr;
         }
     }
 
     void dispatch(const char *master, int sx, int sy,
                   tlm_utils::simple_initiator_socket<NoC2x2Router> &sock, const char *target_name,
-                  uint64_t base, int rx, int ry, bool log_it, tlm::tlm_generic_payload &tx,
-                  sc_core::sc_time &delay, bool l2_hit = false) {
+                  uint64_t base, int rx, int ry, UsocBridgeId bridge_id, uint32_t bridge_lat_ns,
+                  bool log_it, tlm::tlm_generic_payload &tx, sc_core::sc_time &delay,
+                  bool l2_hit = false) {
         const uint64_t phys_addr = tx.get_address();
         const uint64_t off = phys_addr - base;
         const unsigned hops = manhattan_hops(sx, sy, rx, ry);
         const unsigned router_idx = static_cast<unsigned>(ry * 2 + rx);
+        const unsigned bidx = static_cast<unsigned>(bridge_id);
         total_transactions++;
         total_hops += hops;
+        if (bidx < bridge_hits.size()) {
+            bridge_hits[bidx]++;
+        }
         const uint64_t now_ps = sc_core::sc_time_stamp().value();
-        const uint64_t hop_link_ns = static_cast<uint64_t>(hops * USOC_NOC_HOP_NS + USOC_NOC_LINK_NS);
+        const uint64_t hop_link_ns =
+            static_cast<uint64_t>(hops * USOC_NOC_HOP_NS + USOC_NOC_LINK_NS + bridge_lat_ns);
         if (router_idx < 4u) {
             router_hits[router_idx]++;
             if (router_busy_until_ps[router_idx] > now_ps) {
@@ -1464,8 +1758,8 @@ struct NoC2x2Router : sc_core::sc_module {
             uint32_t sample = 0;
             const unsigned copy_len = tx.get_data_length() < 4u ? tx.get_data_length() : 4u;
             std::memcpy(&sample, tx.get_data_ptr(), copy_len);
-            log_tx(master, target_name, rx, ry, hops, phys_addr, off, tx.is_write(), sample,
-                   tx.is_response_ok(), l2_hit, false);
+            log_tx(master, target_name, bridge_name(bridge_id), rx, ry, hops, phys_addr, off,
+                   tx.is_write(), sample, tx.is_response_ok(), l2_hit, false);
         }
     }
 
@@ -1480,27 +1774,29 @@ struct NoC2x2Router : sc_core::sc_module {
                         hit_pmp_blocked++;
                         delay += sc_core::sc_time(USOC_NOC_HOP_NS, sc_core::SC_NS);
                         tx.set_response_status(tlm::TLM_COMMAND_ERROR_RESPONSE);
-                        log_tx(master, "pmp_guard_block", USOC_PMP_GUARD_0_RX, USOC_PMP_GUARD_0_RY,
+                        log_tx(master, "pmp_guard_block", "axi_sec_bridge",
+                               USOC_PMP_GUARD_0_RX, USOC_PMP_GUARD_0_RY,
                                manhattan_hops(sx, sy, USOC_PMP_GUARD_0_RX, USOC_PMP_GUARD_0_RY),
                                addr, 0u, true, 0u, false, false, true);
                         return;
                     }
                     bool l2_hit = l2 ? l2->lookup(addr, is_dma, tx.is_write()) : true;
                     delay += sc_core::sc_time(l2_hit ? 4 : 40, sc_core::SC_NS);
-                    dispatch(master, sx, sy, to_ram, e.name, e.base, e.rx, e.ry, is_dma, tx, delay,
-                             l2_hit);
+                    dispatch(master, sx, sy, to_ram, e.name, e.base, e.rx, e.ry, e.bridge,
+                             e.bridge_latency_ns, is_dma, tx, delay, l2_hit);
                     return;
                 }
                 auto *sock = socket_for(e.target);
                 if (sock) {
-                    dispatch(master, sx, sy, *sock, e.name, e.base, e.rx, e.ry, e.log_mmio, tx,
-                             delay);
+                    dispatch(master, sx, sy, *sock, e.name, e.base, e.rx, e.ry, e.bridge,
+                             e.bridge_latency_ns, e.log_mmio || is_dma, tx, delay);
                     return;
                 }
             }
         }
         tx.set_response_status(tlm::TLM_ADDRESS_ERROR_RESPONSE);
-        log_tx(master, "unmapped", 0, 0, 0, addr, 0, tx.is_write(), 0, false, false, false);
+        log_tx(master, "unmapped", "noc_backbone", 0, 0, 0, addr, 0, tx.is_write(), 0, false,
+               false, false);
     }
 
     void cpu0_transport(tlm::tlm_generic_payload &tx, sc_core::sc_time &delay) {
@@ -1510,6 +1806,16 @@ struct NoC2x2Router : sc_core::sc_module {
     void cpu1_transport(tlm::tlm_generic_payload &tx, sc_core::sc_time &delay) {
         route("hart1", USOC_HART1_RX, USOC_HART1_RY, tx, delay, false);
     }
+
+#if USOC_HART_COUNT >= 4
+    void cpu2_transport(tlm::tlm_generic_payload &tx, sc_core::sc_time &delay) {
+        route("hart2", USOC_HART2_RX, USOC_HART2_RY, tx, delay, false);
+    }
+
+    void cpu3_transport(tlm::tlm_generic_payload &tx, sc_core::sc_time &delay) {
+        route("hart3", USOC_HART3_RX, USOC_HART3_RY, tx, delay, false);
+    }
+#endif
 
     void dma_transport(tlm::tlm_generic_payload &tx, sc_core::sc_time &delay) {
         dma_master_transactions++;
@@ -1589,23 +1895,23 @@ struct GdbStub {
     }
 };
 
-// --- Shared Coherent LR/SC Reservation Tracker across SMP Harts ---
+// --- Shared Coherent LR/SC Reservation Tracker across Multi-Cluster SMP Harts ---
 struct SmpReservationState {
-    bool valid[2] = {false, false};
-    uint64_t addr[2] = {0ULL, 0ULL};
+    bool valid[4] = {false, false, false, false};
+    uint64_t addr[4] = {0ULL, 0ULL, 0ULL, 0ULL};
 
     void reserve(unsigned hid, uint64_t a) {
-        if (hid < 2u) { valid[hid] = true; addr[hid] = a & ~3ULL; }
+        if (hid < 4u) { valid[hid] = true; addr[hid] = a & ~3ULL; }
     }
     bool check_and_clear(unsigned hid, uint64_t a) {
-        bool ok = (hid < 2u) && valid[hid] && addr[hid] == (a & ~3ULL);
-        if (hid < 2u) valid[hid] = false;
+        bool ok = (hid < 4u) && valid[hid] && addr[hid] == (a & ~3ULL);
+        if (hid < 4u) valid[hid] = false;
         if (ok) invalidate_other(hid, a);
         return ok;
     }
     void invalidate_other(unsigned hid, uint64_t a) {
         const uint64_t aligned = a & ~3ULL;
-        for (unsigned h = 0u; h < 2u; ++h) {
+        for (unsigned h = 0u; h < 4u; ++h) {
             if (h != hid && valid[h] && addr[h] == aligned) valid[h] = false;
         }
     }
@@ -2068,6 +2374,10 @@ int sc_main(int argc, char **argv) {
 
     Rv64CpuInitiator cpu0("unified_rv64_hart0", 0u);
     Rv64CpuInitiator cpu1("unified_rv64_hart1", 1u);
+#if USOC_HART_COUNT >= 4
+    Rv64CpuInitiator cpu2("cluster1_rv64_hart2", 2u);
+    Rv64CpuInitiator cpu3("cluster1_rv64_hart3", 3u);
+#endif
     NoC2x2Router noc("systemc_noc_2x2", trace_path);
     TlmMemory dram("main_dram", USOC_MAIN_DRAM_SIZE, false);
     TlmMemory rom("boot_rom", USOC_BOOT_ROM_SIZE, true);
@@ -2075,7 +2385,10 @@ int sc_main(int argc, char **argv) {
     L2CacheModule l2("l2_cache_0");
     ClintTlm clint("sys_clint");
     PlicTlm plic("sys_plic");
-    Uart16550Tlm uart("qemu_uart_0", console_path);
+    Uart16550Tlm uart("primary_uart", console_path);
+#ifdef USOC_HAS_UART_AUX
+    Uart16550Tlm uart_aux("debug_uart_1", console_path + ".aux");
+#endif
     SpiCtrlModule spi("spi_ctrl_0");
     I2cCtrlModule i2c("i2c_ctrl_0");
     ChipyardGcdTlm gcd("chipyard_gcd_0");
@@ -2085,9 +2398,22 @@ int sc_main(int argc, char **argv) {
     Aes128Module aes("aes128_crypto_0");
     MacNpuModule npu("mac_npu_0");
     PmpBusGuardTlm pmp_guard("pmp_guard_0");
+#ifdef USOC_HAS_LPU
+    LpuEngineModule lpu("lpu_engine_0");
+#endif
+#ifdef USOC_HAS_MAILBOX
+    ClusterMailboxTlm mailbox("cluster_mailbox_0");
+#endif
+#ifdef USOC_HAS_AI_SRAM
+    TlmMemory ai_sram("ai_scratch_sram", USOC_AI_SRAM_SIZE, false);
+#endif
 
     cpu0.bus.bind(noc.cpu0_in);
     cpu1.bus.bind(noc.cpu1_in);
+#if USOC_HART_COUNT >= 4
+    cpu2.bus.bind(noc.cpu2_in);
+    cpu3.bus.bind(noc.cpu3_in);
+#endif
     dma.dma_master.bind(noc.dma_in);
     noc.to_ram.bind(dram.target);
     noc.to_rom.bind(rom.target);
@@ -2096,6 +2422,9 @@ int sc_main(int argc, char **argv) {
     noc.to_clint.bind(clint.target);
     noc.to_plic.bind(plic.target);
     noc.to_uart.bind(uart.target);
+#ifdef USOC_HAS_UART_AUX
+    noc.to_uart_aux.bind(uart_aux.target);
+#endif
     noc.to_spi.bind(spi.target);
     noc.to_i2c.bind(i2c.target);
     noc.to_gcd.bind(gcd.target);
@@ -2105,15 +2434,39 @@ int sc_main(int argc, char **argv) {
     noc.to_aes.bind(aes.target);
     noc.to_npu.bind(npu.target);
     noc.to_pmp_guard.bind(pmp_guard.target);
+#ifdef USOC_HAS_LPU
+    noc.to_lpu.bind(lpu.target);
+#endif
+#ifdef USOC_HAS_MAILBOX
+    noc.to_mailbox.bind(mailbox.target);
+#endif
+#ifdef USOC_HAS_AI_SRAM
+    noc.to_ai_sram.bind(ai_sram.target);
+#endif
 
     plic.uart = &uart; plic.gcd = &gcd; plic.gpio = &gpio; plic.dma = &dma;
     plic.sha = &sha; plic.aes = &aes; plic.spi = &spi; plic.i2c = &i2c;
     plic.npu = &npu; plic.pmp_guard = &pmp_guard;
+#ifdef USOC_HAS_UART_AUX
+    plic.uart_aux = &uart_aux;
+#endif
+#ifdef USOC_HAS_LPU
+    plic.lpu = &lpu;
+#endif
+#ifdef USOC_HAS_MAILBOX
+    plic.mailbox = &mailbox;
+#endif
     noc.pmp_guard = &pmp_guard; noc.l2 = &l2; noc.plic = &plic; noc.vcd = &vcd;
     cpu0.finisher = &finisher; cpu0.clint = &clint; cpu0.plic = &plic;
     cpu0.resv = &smp_resv; cpu0.max_steps = max_steps;
     cpu1.finisher = &finisher; cpu1.clint = &clint; cpu1.plic = &plic;
     cpu1.resv = &smp_resv; cpu1.max_steps = max_steps;
+#if USOC_HART_COUNT >= 4
+    cpu2.finisher = &finisher; cpu2.clint = &clint; cpu2.plic = &plic;
+    cpu2.resv = &smp_resv; cpu2.max_steps = max_steps;
+    cpu3.finisher = &finisher; cpu3.clint = &clint; cpu3.plic = &plic;
+    cpu3.resv = &smp_resv; cpu3.max_steps = max_steps;
+#endif
 
     uint64_t entry = USOC_CPU_ENTRY;
     if (!load_elf64(elf_path, dram, entry)) {
@@ -2122,6 +2475,10 @@ int sc_main(int argc, char **argv) {
     }
     cpu0.pc = entry;
     cpu1.pc = entry;
+#if USOC_HART_COUNT >= 4
+    cpu2.pc = entry;
+    cpu3.pc = entry;
+#endif
 
     GdbStub gdb;
     if (gdb_port >= 0) {
@@ -2132,23 +2489,50 @@ int sc_main(int argc, char **argv) {
     sc_core::sc_start();
     gdb.cleanup();
 
+    const uint64_t h2_insns =
+#if USOC_HART_COUNT >= 4
+        cpu2.instructions;
+#else
+        0ULL;
+#endif
+    const uint64_t h3_insns =
+#if USOC_HART_COUNT >= 4
+        cpu3.instructions;
+#else
+        0ULL;
+#endif
+    const uint64_t total_insns = cpu0.instructions + cpu1.instructions + h2_insns + h3_insns;
+    const uint64_t total_atomics = cpu0.atomic_ops + cpu1.atomic_ops
+#if USOC_HART_COUNT >= 4
+        + cpu2.atomic_ops + cpu3.atomic_ops
+#endif
+        ;
+    const uint64_t total_traps = cpu0.traps_taken + cpu1.traps_taken
+#if USOC_HART_COUNT >= 4
+        + cpu2.traps_taken + cpu3.traps_taken
+#endif
+        ;
+
     const bool passed = finisher.halted && finisher.exit_code == 0 && !cpu0.timed_out;
     std::ofstream summary(summary_path);
     summary << "{\n"
             << "  \"status\": \"" << (passed ? "PASSED" : "FAILED") << "\",\n"
             << "  \"rtl_backend\": \"" << MacNpuModule::backend_name() << "\",\n"
             << "  \"mac_npu_backend\": \"" << MacNpuModule::backend_name() << "\",\n"
-            << "  \"harts\": 2,\n"
+            << "  \"harts\": " << USOC_HART_COUNT << ",\n"
+            << "  \"clusters\": " << USOC_CLUSTER_COUNT << ",\n"
             << "  \"ir_route_entries\": " << USOC_ROUTE_COUNT << ",\n"
             << "  \"halted\": " << (finisher.halted ? "true" : "false") << ",\n"
             << "  \"timed_out\": " << (cpu0.timed_out ? "true" : "false") << ",\n"
             << "  \"exit_code\": " << (cpu0.timed_out ? 124 : finisher.exit_code) << ",\n"
-            << "  \"instructions_executed\": " << (cpu0.instructions + cpu1.instructions) << ",\n"
+            << "  \"instructions_executed\": " << total_insns << ",\n"
             << "  \"hart0_instructions\": " << cpu0.instructions << ",\n"
             << "  \"hart1_instructions\": " << cpu1.instructions << ",\n"
-            << "  \"atomic_ops_executed\": " << (cpu0.atomic_ops + cpu1.atomic_ops) << ",\n"
+            << "  \"hart2_instructions\": " << h2_insns << ",\n"
+            << "  \"hart3_instructions\": " << h3_insns << ",\n"
+            << "  \"atomic_ops_executed\": " << total_atomics << ",\n"
             << "  \"smp_ipi_delivered\": " << clint.ipi_fires << ",\n"
-            << "  \"traps_taken\": " << (cpu0.traps_taken + cpu1.traps_taken) << ",\n"
+            << "  \"traps_taken\": " << total_traps << ",\n"
             << "  \"systemc_time_ps\": " << sc_core::sc_time_stamp().value() << ",\n"
             << "  \"noc_total_transactions\": " << noc.total_transactions << ",\n"
             << "  \"noc_mmio_transactions\": " << noc.mmio_transactions << ",\n"
@@ -2157,8 +2541,15 @@ int sc_main(int argc, char **argv) {
             << "  \"noc_total_hops\": " << noc.total_hops << ",\n"
             << "  \"router_hits\": [" << noc.router_hits[0] << ", " << noc.router_hits[1] << ", "
             << noc.router_hits[2] << ", " << noc.router_hits[3] << "],\n"
+            << "  \"bus_bridge_hits\": {\n"
+            << "    \"noc_backbone\": " << noc.bridge_hits[0] << ",\n"
+            << "    \"axi_ai_bridge\": " << noc.bridge_hits[1] << ",\n"
+            << "    \"axi_sec_bridge\": " << noc.bridge_hits[2] << ",\n"
+            << "    \"apb_periph_bridge\": " << noc.bridge_hits[3] << "\n"
+            << "  },\n"
             << "  \"ip_hits\": {\n"
             << "    \"qemu_uart_0\": " << noc.hit_uart << ",\n"
+            << "    \"uart_debug_1\": " << noc.hit_uart_aux << ",\n"
             << "    \"sys_clint\": " << noc.hit_clint << ",\n"
             << "    \"sys_plic\": " << noc.hit_plic << ",\n"
             << "    \"chipyard_gcd_0\": " << noc.hit_gcd << ",\n"
@@ -2170,11 +2561,19 @@ int sc_main(int argc, char **argv) {
             << "    \"i2c_ctrl_0\": " << noc.hit_i2c << ",\n"
             << "    \"l2_cache_0\": " << noc.hit_l2 << ",\n"
             << "    \"mac_npu_0\": " << noc.hit_npu << ",\n"
+            << "    \"lpu_engine_0\": " << noc.hit_lpu << ",\n"
+            << "    \"cluster_mailbox_0\": " << noc.hit_mailbox << ",\n"
+            << "    \"ai_scratch_sram\": " << noc.hit_ai_sram << ",\n"
             << "    \"pmp_guard_0\": " << noc.hit_pmp_guard << ",\n"
             << "    \"pmp_guard_blocked_writes\": " << noc.hit_pmp_blocked << "\n"
             << "  },\n"
             << "  \"ip_results\": {\n"
             << "    \"uart_tx_bytes\": " << uart.tx_bytes << ",\n"
+#ifdef USOC_HAS_UART_AUX
+            << "    \"uart_aux_tx_bytes\": " << uart_aux.tx_bytes << ",\n"
+#else
+            << "    \"uart_aux_tx_bytes\": 0,\n"
+#endif
             << "    \"gcd_ops_completed\": " << gcd.ops_completed << ",\n"
             << "    \"dma_bytes_transferred\": " << dma.bytes_transferred << ",\n"
             << "    \"dma_bus_errors\": " << dma.bus_errors << ",\n"
@@ -2194,6 +2593,26 @@ int sc_main(int argc, char **argv) {
             << "    \"npu_matmul_ops\": " << npu.matmul_ops << ",\n"
             << "    \"npu_acc_final\": " << npu.acc << ",\n"
             << "    \"npu_rtl_cycles\": " << npu.rtl_cycles << ",\n"
+#ifdef USOC_HAS_LPU
+            << "    \"lpu_ops_done\": " << lpu.ops_done << ",\n"
+            << "    \"lpu_linear_ops\": " << lpu.linear_ops << ",\n"
+            << "    \"lpu_tokens_decoded\": " << lpu.tokens_decoded << ",\n"
+            << "    \"lpu_argmax_idx\": " << lpu.argmax_idx << ",\n"
+            << "    \"lpu_max_logit\": " << lpu.max_logit << ",\n"
+            << "    \"lpu_rtl_cycles\": " << lpu.rtl_cycles << ",\n"
+#else
+            << "    \"lpu_ops_done\": 0,\n"
+            << "    \"lpu_linear_ops\": 0,\n"
+            << "    \"lpu_tokens_decoded\": 0,\n"
+            << "    \"lpu_argmax_idx\": 0,\n"
+            << "    \"lpu_max_logit\": 0,\n"
+            << "    \"lpu_rtl_cycles\": 0,\n"
+#endif
+#ifdef USOC_HAS_MAILBOX
+            << "    \"mailbox_messages\": " << mailbox.messages_exchanged << ",\n"
+#else
+            << "    \"mailbox_messages\": 0,\n"
+#endif
             << "    \"pmp_guard_fault_count\": " << pmp_guard.fault_count << ",\n"
             << "    \"cpu_pmpcfg0\": " << cpu0.pmpcfg0 << "\n"
             << "  }\n"

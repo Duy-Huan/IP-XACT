@@ -15,7 +15,7 @@ uint64_t trap_dispatch(uint64_t mcause, uint64_t mepc, uint64_t mtval) {
 int main(void) {
     const char *msg = "UNIFIED_SOC_EXPECTED_FAIL\n";
     while (*msg) {
-        R8(USOC_QEMU_UART_0_BASE) = (uint8_t)*msg++;
+        R8(USOC_PRIMARY_UART_BASE) = (uint8_t)*msg++;
     }
     R32(USOC_SIM_FINISHER_BASE) = 0x13333U;
     for (;;) {

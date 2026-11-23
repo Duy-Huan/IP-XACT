@@ -31,6 +31,7 @@ from .unified_systemc_soc import (
     generate_unified_artifacts,
     has_unified_toolchain,
     load_unified_spec,
+    resolve_unified_src_dir,
     run_unified_soc,
 )
 from .v04_contracts import evaluate_calibration_report
@@ -68,7 +69,7 @@ def _materialize_variant_spec(base_spec_path: Path, point: DsePoint, work_dir: P
     variant_path.write_text(yaml.safe_dump(data, sort_keys=False))
     src_link = work_dir / "unified_systemc"
     if not src_link.exists():
-        src_link.symlink_to((base_spec_path.parent / "unified_systemc").resolve())
+        src_link.symlink_to(resolve_unified_src_dir(base_spec_path))
     return variant_path
 
 

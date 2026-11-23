@@ -1,0 +1,267 @@
+# ASoC: Official Multi-Cluster AI & Language SoC Reference Example (20 Mapped IPs)
+#
+# Architecture Highlights:
+#   - 2 CPU Clusters / 4 RV64IMA_Zicsr Harts:
+#       * Cluster 0 (`app_cluster`):   hart0 @ [0,0] (Supervisor/Security), hart1 @ [1,0] (App Worker)
+#       * Cluster 1 (`ai_rt_cluster`): hart2 @ [0,1] (AI/LPU Control),      hart3 @ [1,1] (RT Telemetry)
+#   - Complex 4-Tier Hierarchical Interconnect:
+#       * Tier 0: 2x2 Coherent Mesh NoC Backbone (`noc_backbone`) with 5 Bus Masters (4 Harts + DMA)
+#       * Tier 1: High-Speed AXI4 AI Compute Bridge (`axi_ai_bridge`, +4 ns) -> NPU, LPU, AI SRAM, GCD
+#       * Tier 2: Isolated AXI4-Lite Security Bridge (`axi_sec_bridge`, +6 ns) -> IOPMP, SHA-256, AES-128, GPIO
+#       * Tier 3: Low-Speed APB4 Peripheral Bridge (`apb_periph_bridge`, +8 ns) -> CLINT, PLIC, 2x UART, SPI, I2C, Mailbox
+#   - 7 Verilator 5.032 Synthesizable SystemVerilog RTL Accelerators & Controllers:
+#       * NPU (`mac_npu_rtl.sv`), LPU (`lpu_rtl.sv`), SHA-256 (`sha256_rtl.sv`),
+#         AES-128 (`aes128_rtl.sv`), SPI (`spi_ctrl_rtl.sv`), I2C (`i2c_ctrl_rtl.sv`), L2 Cache (`l2_cache_rtl.sv`)
+#   - Dual-Layer Memory Protection:
+#       * CPU-internal RISC-V M-mode PMP CSRs (`pmpcfg0`/`pmpaddr0..3`) + NoC-level IOPMP Bus Firewall (`pmp_guard_0`)
+
+schema_version: unified-systemc-soc-1
+name: ASoC
+noc:
+  topology: mesh-2x2
+  rows: 2
+  cols: 2
+  hop_latency_ns: 10
+  link_latency_ns: 5
+  cpu_router: [0, 0]
+  hart1_router: [1, 0]
+  hart2_router: [0, 1]
+  hart3_router: [1, 1]
+  bridges:
+    - name: axi_ai_bridge
+      protocol: axi4-256b-ai-fabric
+      latency_ns: 4
+      router: [1, 1]
+    - name: axi_sec_bridge
+      protocol: axi4-lite-rot-isolated
+      latency_ns: 6
+      router: [0, 1]
+    - name: apb_periph_bridge
+      protocol: apb4-tlul-peripheral
+      latency_ns: 8
+      router: [1, 0]
+cpu:
+  name: asoc_dual_cluster_rv64
+  harts: 4
+  clusters:
+    - name: app_cluster
+      role: application-supervisor-and-compute
+      harts: [0, 1]
+    - name: ai_rt_cluster
+      role: ai-lpu-dispatch-and-realtime-telemetry
+      harts: [2, 3]
+  isa: rv64ima_zicsr
+  privilege: M
+  pmp_regions: 4
+  clock_hz: 800000000
+  timebase_hz: 10000000
+  entry: 0x80000000
+  stack_top: 0x800F0000
+  hart1_stack_top: 0x800E0000
+  hart2_stack_top: 0x800D0000
+  hart3_stack_top: 0x800C0000
+  protected_scratch: 0x80100000
+  protected_size: 0x1000
+  dma_src_buf: 0x80110000
+  dma_dst_buf: 0x80120000
+  smp_shared_mem: 0x80130000
+  model_disclosure: >-
+    Two-cluster (4-hart) RV64IMA_Zicsr SystemC/TLM-2.0 SMP initiators (Cluster 0: hart0/hart1;
+    Cluster 1: hart2/hart3) with M-mode PMP CSRs, RV64A atomics, cross-cluster CLINT IPIs,
+    hardware mailbox IPC, GDB RSP stub, and 5th-master NoC DMA; co-simulates live with 7
+    Verilator 5.032 clean-room SystemVerilog RTL blocks (MAC/MatMul NPU, Linear/Attention LPU,
+    FIPS 180-4 SHA-256, FIPS 197 AES-128, 32-bit SPI Master, I2C Master/Slave FSM, 64-line L2
+    Cache/Snoop Monitor) across a 4-tier hierarchical NoC + AXI/APB bridge interconnect.
+devices:
+  # --- Tier 0: Coherent Mesh NoC Backbone (5 IPs) ---
+  - name: boot_rom
+    platform: qemu-io
+    model: rom
+    backend: systemc-tlm
+    bridge: noc_backbone
+    base: 0x00001000
+    size: 0x00001000
+    router: [0, 0]
+  - name: sim_finisher
+    platform: qemu-io
+    model: finisher
+    backend: systemc-tlm
+    bridge: noc_backbone
+    base: 0x00100000
+    size: 0x00001000
+    router: [0, 0]
+  - name: main_dram
+    platform: qemu-io
+    model: ram
+    backend: systemc-tlm
+    bridge: noc_backbone
+    base: 0x80000000
+    size: 0x01000000
+    router: [0, 0]
+  - name: l2_cache_0
+    platform: rtl-cache-ddr
+    model: user.l2_cache
+    backend: verilator-rtl
+    bridge: noc_backbone
+    base: 0x1A000000
+    size: 0x00001000
+    router: [0, 0]
+    disclosure: Clean-room Verilator-compiled 64-line shared L2 cache & multi-cluster/DMA coherency snoop RTL (l2_cache_rtl.sv).
+  - name: dma_engine_0
+    platform: systemc-dma
+    model: user.dma_engine
+    backend: systemc-tlm
+    bridge: noc_backbone
+    base: 0x17000000
+    size: 0x00001000
+    irq: 14
+    router: [0, 1]
+    disclosure: Fifth NoC TLM-2.0 bus master initiating cross-bridge DRAM <-> AI Scratchpad SRAM transfers subject to IOPMP enforcement.
+
+  # --- Tier 1: High-Bandwidth AXI4 AI Compute Bus (`axi_ai_bridge`, 4 IPs) ---
+  - name: mac_npu_0
+    platform: rtl-npu
+    model: user.mac_npu
+    backend: verilator-rtl
+    bridge: axi_ai_bridge
+    base: 0x15000000
+    size: 0x00001000
+    irq: 20
+    router: [1, 1]
+    disclosure: Clean-room Verilator-compiled MAC + 2x2 MatMul NPU RTL (mac_npu_rtl.sv), distinct from upstream Chipyard Gemmini.
+  - name: lpu_engine_0
+    platform: rtl-lpu
+    model: user.lpu_engine
+    backend: verilator-rtl
+    bridge: axi_ai_bridge
+    base: 0x1D000000
+    size: 0x00001000
+    irq: 22
+    router: [1, 1]
+    disclosure: Clean-room Verilator-compiled 4-lane Linear+Bias+ReLU & 4-token Attention Argmax LPU RTL (lpu_rtl.sv).
+  - name: ai_scratch_sram
+    platform: systemc-mem
+    model: sram
+    backend: systemc-tlm
+    bridge: axi_ai_bridge
+    base: 0x81000000
+    size: 0x00040000
+    router: [1, 1]
+    disclosure: Dedicated 256 KiB on-chip AI/LPU tensor & KV-cache scratchpad SRAM behind axi_ai_bridge.
+  - name: chipyard_gcd_0
+    platform: chipyard
+    model: chipyard.gcd
+    backend: systemc-tlm
+    bridge: axi_ai_bridge
+    base: 0x13000000
+    size: 0x00001000
+    irq: 12
+    router: [1, 1]
+
+  # --- Tier 2: Isolated AXI4-Lite Security & Root-of-Trust Bus (`axi_sec_bridge`, 4 IPs) ---
+  - name: pmp_guard_0
+    platform: systemc-pmp
+    model: user.pmp_guard
+    backend: systemc-tlm
+    bridge: axi_sec_bridge
+    base: 0x16000000
+    size: 0x00001000
+    irq: 21
+    router: [0, 1]
+    disclosure: Original SystemC/TLM-2.0 NoC IOPMP bus firewall enforcing write protection for both CPU clusters and DMA master.
+  - name: sha256_crypto_0
+    platform: rtl-security
+    model: user.sha256_crypto
+    backend: verilator-rtl
+    bridge: axi_sec_bridge
+    base: 0x18000000
+    size: 0x00001000
+    irq: 15
+    router: [0, 1]
+    disclosure: Clean-room Verilator-compiled FIPS 180-4 SHA-256 64-round hardware engine RTL (sha256_rtl.sv).
+  - name: aes128_crypto_0
+    platform: rtl-security
+    model: user.aes128_crypto
+    backend: verilator-rtl
+    bridge: axi_sec_bridge
+    base: 0x1B000000
+    size: 0x00001000
+    irq: 17
+    router: [0, 1]
+    disclosure: Clean-room Verilator-compiled FIPS 197 AES-128 10-round hardware engine RTL (aes128_rtl.sv).
+  - name: opentitan_gpio_0
+    platform: opentitan
+    model: opentitan.gpio
+    backend: systemc-tlm
+    bridge: axi_sec_bridge
+    base: 0x14000000
+    size: 0x00001000
+    irq: 13
+    router: [0, 1]
+
+  # --- Tier 3: Low-Speed APB4 / TL-UL Peripheral Bus (`apb_periph_bridge`, 7 IPs) ---
+  - name: sys_clint
+    platform: qemu-io
+    model: clint
+    backend: systemc-tlm
+    bridge: apb_periph_bridge
+    base: 0x02000000
+    size: 0x00010000
+    router: [1, 0]
+  - name: sys_plic
+    platform: qemu-io
+    model: plic
+    backend: systemc-tlm
+    bridge: apb_periph_bridge
+    base: 0x0C000000
+    size: 0x04000000
+    router: [1, 0]
+  - name: uart_console_0
+    platform: qemu-io
+    model: uart
+    backend: systemc-tlm
+    bridge: apb_periph_bridge
+    base: 0x11000000
+    size: 0x00001000
+    irq: 10
+    router: [1, 0]
+  - name: uart_debug_1
+    platform: qemu-io
+    model: uart_aux
+    backend: systemc-tlm
+    bridge: apb_periph_bridge
+    base: 0x11001000
+    size: 0x00001000
+    irq: 11
+    router: [1, 0]
+    disclosure: Secondary NS16550 debug/telemetry UART behind apb_periph_bridge.
+  - name: spi_ctrl_0
+    platform: rtl-io
+    model: user.spi_ctrl
+    backend: verilator-rtl
+    bridge: apb_periph_bridge
+    base: 0x19000000
+    size: 0x00001000
+    irq: 16
+    router: [1, 0]
+    disclosure: Clean-room Verilator-compiled 32-bit SPI master controller RTL (spi_ctrl_rtl.sv).
+  - name: i2c_ctrl_0
+    platform: rtl-io
+    model: user.i2c_ctrl
+    backend: verilator-rtl
+    bridge: apb_periph_bridge
+    base: 0x1C000000
+    size: 0x00001000
+    irq: 18
+    router: [1, 0]
+    disclosure: Clean-room Verilator-compiled I2C master + loopback slave FSM RTL (i2c_ctrl_rtl.sv).
+  - name: cluster_mailbox_0
+    platform: systemc-ipc
+    model: user.cluster_mailbox
+    backend: systemc-tlm
+    bridge: apb_periph_bridge
+    base: 0x1E000000
+    size: 0x00001000
+    irq: 23
+    router: [1, 0]
+    disclosure: Hardware cross-cluster IPC mailbox & doorbell IRQ connecting Cluster 0 (app_cluster) and Cluster 1 (ai_rt_cluster).

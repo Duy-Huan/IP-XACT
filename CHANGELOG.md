@@ -2,6 +2,16 @@
 
 ## 0.3.0a5 — development candidate (v0.3.0-alpha.5)
 
+- Add the official flagship **ASoC** example (`examples/ASoC/`, `docs/examples/ASoC.md`,
+  `tests/test_asoc_example.py`): a 20-IP, 2-CPU-cluster (4-hart RV64IMA_Zicsr),
+  4-tier hierarchical interconnect (`noc_backbone` + `axi_ai_bridge` +
+  `axi_sec_bridge` + `apb_periph_bridge`) platform featuring 7 clean-room
+  Verilator 5.032 SystemVerilog RTL blocks including a new Language/Linear
+  Processing Unit (`lpu_rtl.sv`), MAC/MatMul NPU, Dual-Layer PMP/IOPMP firewall,
+  Cross-Cluster Hardware Mailbox IPC, AI Scratchpad SRAM, 5th-master DMA,
+  30-bin functional coverage, 7× RTL-vs-TLM calibration, IEEE 1685-2022
+  multi-bridge fabric (`asoc_fabric.yaml`), CHIA DSE/optimization loop, and
+  air-gapped HTML5 dashboard.
 - Standardize project layout, Python environment packaging, platform setup scripts,
   container composition, and industrial documentation: add pinned `requirements.txt`,
   `requirements-dev.txt`, `requirements-models.txt`, `requirements-bringup.txt`, and

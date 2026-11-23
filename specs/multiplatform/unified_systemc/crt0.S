@@ -1,15 +1,25 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-/* Dual-Hart SMP RV64 bare-metal startup and M-mode trap trampoline for Unified_Hetero_MultiPlatform_SoC. */
+/* Multi-Cluster / SMP RV64 bare-metal startup and M-mode trap trampoline.
+ * Supports both 2-hart SMP (Unified_Hetero_MultiPlatform_SoC) and 4-hart 2-cluster
+ * SMP (ASoC: Cluster 0 = hart0..1, Cluster 1 = hart2..3).
+ */
 .section .text.init, "ax"
 .globl _start
 .globl trap_entry
 .weak hart1_main
+.weak hart2_main
+.weak hart3_main
 
 _start:
     csrr t0, mhartid
-    bnez t0, hart1_boot
+    li t1, 1
+    beq t0, t1, hart1_boot
+    li t1, 2
+    beq t0, t1, hart2_boot
+    li t1, 3
+    beq t0, t1, hart3_boot
 
-    /* Hart 0: stack + zero .bss + trap vector + main */
+    /* Hart 0 (Cluster 0 Supervisor): stack + zero .bss + trap vector + main */
     la sp, _stack_top
     la t0, _bss_start
     la t1, _bss_end
@@ -27,7 +37,7 @@ _start:
     j 3b
 
 hart1_boot:
-    /* Hart 1: dedicated stack + trap vector + call weak hart1_main */
+    /* Hart 1 (Cluster 0 Worker): dedicated stack + trap vector + weak hart1_main */
     la sp, _hart1_stack_top
     la t0, trap_entry
     csrw mtvec, t0
@@ -36,9 +46,37 @@ hart1_boot:
     wfi
     j 4b
 
+hart2_boot:
+    /* Hart 2 (Cluster 1 AI/RT Control Worker): dedicated stack + trap vector + weak hart2_main */
+    la sp, _hart2_stack_top
+    la t0, trap_entry
+    csrw mtvec, t0
+    call hart2_main
+5:
+    wfi
+    j 5b
+
+hart3_boot:
+    /* Hart 3 (Cluster 1 Telemetry/Verification Worker): dedicated stack + weak hart3_main */
+    la sp, _hart3_stack_top
+    la t0, trap_entry
+    csrw mtvec, t0
+    call hart3_main
+6:
+    wfi
+    j 6b
+
 hart1_main:
     wfi
     j hart1_main
+
+hart2_main:
+    wfi
+    j hart2_main
+
+hart3_main:
+    wfi
+    j hart3_main
 
 .balign 4
 trap_entry:

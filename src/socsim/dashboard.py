@@ -116,8 +116,10 @@ def generate_dashboard(
     cal_block = ""
     if c is not None and c.get("calibration"):
         cal = c["calibration"]
+        rtl_blocks = len(c.get("rtl_cycles", {})) or 6
         cal_block = (
-            "<section class='card'><h2>6× Verilator RTL ↔ TLM-2.0 Timing Calibration</h2>"
+            f"<section class='card'><h2>{rtl_blocks}× Verilator RTL ↔ TLM-2.0 Timing Calibration"
+            f"</h2>"
             f"<p>Status: <strong class='{'ok' if c['status'] == 'PASSED' else 'fail'}'>"
             f"{html.escape(str(c['status']))}</strong> | "
             f"Functional parity: <code>{c.get('functional_parity')}</code> | "
@@ -132,6 +134,7 @@ def generate_dashboard(
     )
     rtl_total = (
         ip_res.get("npu_rtl_cycles", 0)
+        + ip_res.get("lpu_rtl_cycles", 0)
         + ip_res.get("sha256_rtl_cycles", 0)
         + ip_res.get("aes_rtl_cycles", 0)
         + ip_res.get("spi_rtl_cycles", 0)

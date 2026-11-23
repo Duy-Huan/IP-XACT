@@ -33,6 +33,7 @@ from .unified_systemc_soc import (
     generate_unified_artifacts,
     has_unified_toolchain,
     load_unified_spec,
+    resolve_unified_src_dir,
     run_unified_soc,
 )
 from .version import __version__
@@ -64,6 +65,7 @@ DEFAULT_TRAJECTORY: tuple[LoopCandidate, ...] = (
         link_latency_ns=5,
         router_overrides={
             "mac_npu_0": [0, 1],
+            "lpu_engine_0": [0, 1],
             "aes128_crypto_0": [0, 1],
             "dma_engine_0": [0, 0],
         },
@@ -75,6 +77,7 @@ DEFAULT_TRAJECTORY: tuple[LoopCandidate, ...] = (
         link_latency_ns=4,
         router_overrides={
             "mac_npu_0": [0, 0],
+            "lpu_engine_0": [0, 0],
             "sha256_crypto_0": [0, 0],
             "aes128_crypto_0": [0, 1],
             "dma_engine_0": [0, 0],
@@ -87,6 +90,7 @@ DEFAULT_TRAJECTORY: tuple[LoopCandidate, ...] = (
         link_latency_ns=3,
         router_overrides={
             "mac_npu_0": [0, 0],
+            "lpu_engine_0": [0, 0],
             "sha256_crypto_0": [0, 0],
             "aes128_crypto_0": [0, 0],
             "dma_engine_0": [0, 0],
@@ -108,7 +112,7 @@ def _materialize_candidate(base_spec: Path, cand: LoopCandidate, work_dir: Path)
     variant.write_text(yaml.safe_dump(data, sort_keys=False))
     src_link = work_dir / "unified_systemc"
     if not src_link.exists():
-        src_link.symlink_to((base_spec.parent / "unified_systemc").resolve())
+        src_link.symlink_to(resolve_unified_src_dir(base_spec))
     return variant
 
 
@@ -122,7 +126,8 @@ def _isolated_verification_oracle(
     pos = run_res.get("positive_run", {})
     console = pos.get("console_output", "")
     cov = run_res.get("coverage", {})
-    markers_ok = all(m in console for m in EXPECTED_POSITIVE_MARKERS)
+    checks = pos.get("checks", {})
+    markers_ok = all(m in console for m in EXPECTED_POSITIVE_MARKERS) and all(checks.values())
     cov_ok = cov.get("status") == "PASSED" and cov.get("coverage_percent") == 100.0
     neg_ok = bool(run_res.get("negative_run", {}).get("expected_failure_detected"))
     passed = sw_intact and run_res.get("status") == "PASSED" and markers_ok and cov_ok and neg_ok
@@ -217,7 +222,7 @@ def run_chia_loop(
         raise ContractError("E_LOOP_OUT choose a fresh output directory")
     out_dir.mkdir(parents=True)
 
-    sw_path = spec_path.parent / "unified_systemc" / "unified_sw.c"
+    sw_path = resolve_unified_src_dir(spec_path) / "unified_sw.c"
     if not sw_path.is_file():
         raise ContractError(f"E_LOOP_ORACLE missing verification firmware: {sw_path}")
     oracle_sw_sha = digest(sw_path)

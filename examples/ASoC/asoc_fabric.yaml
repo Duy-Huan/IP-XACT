@@ -1,0 +1,168 @@
+# ASoC Multi-Tier Address-Decoder & IEEE 1685-2022 IP-XACT Fabric Specification
+# Demonstrates 5 hierarchical address spaces, 4 static address-decoder bridges
+# (3-level nested APB leaf hierarchy), 4-hart SMP cluster, and 16 native IP instances
+# lowering into validated IEEE 1685-2022 XML, Canonical Native IR v5, DTS, and QEMU/gem5 targets.
+schema_version: native-fabric-1
+name: ASoC_fabric
+cpu:
+  name: asoc_quad_cluster
+  model: qemu.rv64
+  gem5_model: gem5.RiscvTimingSimpleCPU
+  timebase_hz: 10000000
+  harts: 4
+  clock_hz: 800000000
+  memory_latency_ns: 20
+boot:
+  ram: main_dram
+  rom: boot_rom
+  console: uart_console_0
+  entry: 0x80000000
+devices:
+  - name: main_dram
+    model: ram
+    size: 0x01000000
+  - name: ai_scratch_sram
+    model: ram
+    size: 0x00040000
+  - name: lpu_kv_sram
+    model: ram
+    size: 0x00020000
+  - name: boot_rom
+    model: rom
+    size: 0x00001000
+  - name: sys_clint
+    model: clint
+    size: 0x00010000
+  - name: sys_plic
+    model: plic
+    size: 0x04000000
+  - name: sim_finisher
+    model: finisher
+    size: 0x00001000
+  - name: uart_console_0
+    model: uart
+    size: 0x00000100
+    irq: 10
+  - name: uart_debug_1
+    model: uart
+    size: 0x00000100
+    irq: 11
+  - name: npu_ctrl_gcd
+    model: chipyard.gcd
+    size: 0x00001000
+    irq: 12
+  - name: lpu_ctrl_gcd
+    model: chipyard.gcd
+    size: 0x00001000
+    irq: 13
+  - name: math_accel_gcd
+    model: chipyard.gcd
+    size: 0x00001000
+    irq: 14
+  - name: pmp_sec_gpio
+    model: opentitan.gpio
+    size: 0x00001000
+    irq: 15
+  - name: crypto_ctrl_gpio
+    model: opentitan.gpio
+    size: 0x00001000
+    irq: 16
+  - name: cluster_ipc_gpio
+    model: opentitan.gpio
+    size: 0x00001000
+    irq: 17
+  - name: sensor_io_gpio
+    model: opentitan.gpio
+    size: 0x00001000
+    irq: 18
+routing:
+  root: physical_noc
+  spaces:
+    - name: physical_noc
+      address_bits: 48
+    - name: axi_ai_bus
+      address_bits: 32
+    - name: axi_sec_bus
+      address_bits: 32
+    - name: apb_periph_bus
+      address_bits: 32
+    - name: apb_io_leaf
+      address_bits: 20
+  bridges:
+    - name: axi_ai_bridge
+      source: physical_noc
+      target: axi_ai_bus
+      source_base: 0x100000000
+      target_base: 0x00000000
+      size: 0x01000000
+      protocol: static-address-decoder-v1
+    - name: axi_sec_bridge
+      source: physical_noc
+      target: axi_sec_bus
+      source_base: 0x110000000
+      target_base: 0x00000000
+      size: 0x00100000
+      protocol: static-address-decoder-v1
+    - name: apb_periph_bridge
+      source: physical_noc
+      target: apb_periph_bus
+      source_base: 0x120000000
+      target_base: 0x00000000
+      size: 0x00200000
+      protocol: static-address-decoder-v1
+    - name: apb_io_leaf_bridge
+      source: apb_periph_bus
+      target: apb_io_leaf
+      source_base: 0x00100000
+      target_base: 0x00010000
+      size: 0x00040000
+      protocol: static-address-decoder-v1
+  placements:
+    - instance: main_dram
+      space: physical_noc
+      address: 0x80000000
+    - instance: boot_rom
+      space: physical_noc
+      address: 0x00001000
+    - instance: sim_finisher
+      space: physical_noc
+      address: 0x00100000
+    - instance: sys_clint
+      space: physical_noc
+      address: 0x02000000
+    - instance: sys_plic
+      space: physical_noc
+      address: 0x0C000000
+    - instance: uart_console_0
+      space: physical_noc
+      address: 0x11000000
+    - instance: uart_debug_1
+      space: physical_noc
+      address: 0x11001000
+    - instance: ai_scratch_sram
+      space: axi_ai_bus
+      address: 0x00100000
+    - instance: lpu_kv_sram
+      space: axi_ai_bus
+      address: 0x00200000
+    - instance: npu_ctrl_gcd
+      space: axi_ai_bus
+      address: 0x00010000
+    - instance: lpu_ctrl_gcd
+      space: axi_ai_bus
+      address: 0x00020000
+    - instance: math_accel_gcd
+      space: axi_ai_bus
+      address: 0x00030000
+    - instance: pmp_sec_gpio
+      space: axi_sec_bus
+      address: 0x00010000
+    - instance: crypto_ctrl_gpio
+      space: axi_sec_bus
+      address: 0x00020000
+    - instance: cluster_ipc_gpio
+      space: apb_io_leaf
+      address: 0x00010000
+    - instance: sensor_io_gpio
+      space: apb_io_leaf
+      address: 0x00020000
