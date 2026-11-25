@@ -57,16 +57,19 @@ The official **UspNextGen** showcase lives in [`examples/UspNextGen/`](../../exa
 
 ## 3. Verified Live Execution Reports
 
-Verbatim measured outputs and exported simulation artifacts are archived in [`examples/UspNextGen/reports/`](../../examples/UspNextGen/reports/) (reproduced inside the pinned Podman/OCI SDK image `socsim-sdk:0.3.0a5-r1` with `qemu-system-riscv64 10.0.13` TCG `-icount shift=3,sleep=off`, `SystemC 3.0.1`, `Verilator 5.032`, and `riscv64-unknown-elf-gcc 14.2.0`):
+Verbatim measured outputs and exported simulation artifacts are archived in [`examples/UspNextGen/reports/`](../../examples/UspNextGen/reports/), captured directly from hosted GitHub Actions CI on commit `2d47bbff8be5bdf696f011dcc7635cdcde2627cb` inside the pinned rootless Podman OCI image `socsim-sdk:0.3.0a5-r1` (`qemu-system-riscv64 10.0.13` TCG `-icount shift=3,sleep=off`, `SystemC 3.0.1`, `Verilator 5.032`, `riscv64-unknown-elf-gcc 14.2.0`):
 
-### 3.1 Measured Verification Scorecard
+- **Hosted `Podman SDK and OCI release` CI:** Run [`45547546572`](https://github.com/Duy-Huan/IP-XACT/actions/runs/45547546572) — **PASSED** (`27m51s`, both pre-export and post-`podman load` offline smoke runs green; `87 passed in 331.10s`, `0 failed`, `0 skipped`).
+- **Hosted `SoC regression` CI:** Run [`45547546604`](https://github.com/Duy-Huan/IP-XACT/actions/runs/45547546604) — **PASSED** (`workflow-lint`, `branch-policy`, `regression`, `custom-zephyr` in `14m1s`, `hosted-receipt`).
+
+### 3.1 Measured Verification Scorecard (Hosted Podman SDK Run `45547546572`)
 
 | Verification Suite / Benchmark | Status | Functional Coverage | Guest Insns Retired | Wall Time (ms) | Wall-Time Throughput (MIPS)* | Sim Time (ps) | Quantum Syncs (`100 µs`) | Bus Tx / CDC | Key Upgrade Metrics |
 |---|---|---|---:|---:|---:|---:|---:|---|---|
-| **`UspNextGen`** (`--cpu-master qemu --qemu-accel tcg`) | **PASSED** | **100.0%** (`21/21`) | `3,493,318` | `1,552.04` | `2.251` | `27,932,201,000` | `272` (max drift `462.75 µs`) | `1,570` / `1,257` | `16×` 64-bit bursts (`960 B`), `256 B` plugin reverse DMA, `L2$`: `300H/4M/32S`, `SLVERR` neg-test `PASSED` |
-| **`BSoC`** unmodified (`--cpu-master qemu --qemu-accel tcg`) | **PASSED** | **100.0%** (`19/19`) | `492,990` | `2,277.73` | `0.216` | `3,913,501,000` | `8` (max drift `1,368.52 µs`) | `17,127` / `4,003` | All 22 devices, 5× Verilator RTL, `2,432` AXI4-Stream pkts, `6` PLIC IRQs, live `polyphase_12t` v1 plugin |
+| **`UspNextGen`** (`--cpu-master qemu --qemu-accel tcg`) | **PASSED** | **100.0%** (`21/21`) | `3,493,318` | `442.3` | `7.898` | `27,933,801,000` | `272` (max drift `461.75 µs`) | `1,570` / `1,257` | `16×` 64-bit bursts (`960 B`), `256 B` plugin reverse DMA, `L2$`: `300H/4M/32S`, `SLVERR` neg-test `PASSED` |
+| **`BSoC`** unmodified (`--cpu-master qemu --qemu-accel tcg`) | **PASSED** | **100.0%** (`19/19`) | `492,990` | `372.32` | `1.324` | `3,909,501,000` | `8` (max drift `1,362.12 µs`) | `17,127` / `4,003` | All 22 devices, 5× Verilator RTL, `2,432` AXI4-Stream pkts, `6` PLIC IRQs, live `polyphase_12t` v1 plugin |
 | **`usp.dma_burst_v2`** (`usp package build` standalone qual) | **PASSED** | 13/13 vectors + v1 compat | — | — | — | — | `1` (`100 ms` barrier) | — | `v1_backward_compat_reset: true`, `4×64b` burst R/W, live reverse DMA `64 B` (`1R/1W`) |
-| **`tests/test_usp_v2_upgrades.py`** (`USP_REQUIRE_SYSTEMC=1`) | **PASSED** | **11/11 tests** | — | `106,930` | — | — | — | — | SV port parser, negative incomplete AXI4-Lite, v2 schema/qual, KVM honest error, `UspNextGen` + `BSoC` live |
+| **Podman SDK full live pytest** (`USP_REQUIRE_SYSTEMC=1`) | **PASSED** | **87/87 tests** (incl. 11 USP v2) | — | `331,100` | — | — | — | — | QEMU, QA, Unified SoC, ASoC, BSoC, USP v2, Registry/DSE, MCP, Standardization all green |
 
 > \* **Honest Measurement Disclosure:** Wall-time MIPS reflects host wall-clock co-simulation throughput (including SystemC/Verilator RTL evaluation and Unix-socket RPC) under deterministic QEMU TCG `-icount shift=3,sleep=off` (`8 ns`/guest instruction = `125 MHz` virtual clock), with M-mode VirtIO bridge spin overhead excluded from `minstret` and virtual-clock accounting. It is **not** cycle-accurate CPU pipeline IPC.
 
@@ -83,11 +86,11 @@ Verbatim measured outputs and exported simulation artifacts are archived in [`ex
 
 | Artifact File | Contents |
 |---|---|
-| [`usp-nextgen-simulation-report.md`](../../examples/UspNextGen/reports/usp-nextgen-simulation-report.md) | Complete Markdown report (`multiplatform-soc-1`) for `UspNextGen` |
+| [`usp-nextgen-simulation-report.md`](../../examples/UspNextGen/reports/usp-nextgen-simulation-report.md) | Complete verbatim Markdown report (`multiplatform-soc-1`) for `UspNextGen` from CI run `45547546572` |
 | [`usp-nextgen-report.json`](../../examples/UspNextGen/reports/usp-nextgen-report.json) | Machine-readable JSON report with SHA-256 provenance, coverage bins, and bus/RTL counters |
 | [`usp-nextgen-console.log`](../../examples/UspNextGen/reports/usp-nextgen-console.log) | Verbatim RV64 UART console log (`USP_NEXTGEN_PASS`) |
-| [`usp-nextgen-backend-traces.log`](../../examples/UspNextGen/reports/usp-nextgen-backend-traces.log) | Verilator 5.032 build summaries, SystemC interconnect/CDC traces, `usp-bus-v2` reverse-DMA/quantum frames, and `usp-mmio32-v1` compat frames |
+| [`usp-nextgen-backend-traces.log`](../../examples/UspNextGen/reports/usp-nextgen-backend-traces.log) | Verilator 5.032 build summaries, `usp-bus-v2` reverse-DMA/quantum frames, and `usp-mmio32-v1` compat frames |
 | [`usp-bus-v2-qualification.json`](../../examples/UspNextGen/reports/usp-bus-v2-qualification.json) | Standalone `usp package build` qualification evidence for `usp.dma_burst_v2` |
-| [`bsoc-qemu-master-report.md`](../../examples/UspNextGen/reports/bsoc-qemu-master-report.md) | Full Markdown report proving unmodified 22-device `BSoC` achieves `100.0%` coverage under `--cpu-master qemu` |
+| [`bsoc-qemu-master-report.md`](../../examples/UspNextGen/reports/bsoc-qemu-master-report.md) | Full verbatim Markdown report proving unmodified 22-device `BSoC` achieves `100.0%` coverage under `--cpu-master qemu` |
 | [`bsoc-qemu-master-console.log`](../../examples/UspNextGen/reports/bsoc-qemu-master-console.log) | Verbatim UART console output for `BSoC` under QEMU CPU Master |
 

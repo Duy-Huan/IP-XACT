@@ -1,5 +1,5 @@
 USP NextGen Boot: QEMU CPU Master + usp-bus-v2 + AXI4/AXI4-Lite/TL-UL RTL
-Workload acc=23304 sync_ps=26802817000
+Workload acc=23304 sync_ps=26802617000
 NEXTGEN_QEMU_WORKLOAD_OK
 Chipyard AXI4 Full GCD(1071,462)=21 8x64b INCR burst verified
 NEXTGEN_AXI4_FULL_GCD_BURST_OK

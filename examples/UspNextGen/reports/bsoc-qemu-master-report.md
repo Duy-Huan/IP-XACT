@@ -5,13 +5,13 @@
 - **Execution Mode:** `qemu-tcg-cpu-master-systemc-verilator-and-usp-bus-v2`
 - **CPU Master Engine:** `qemu` (`accel=tcg`)
 - **Functional Coverage:** **100.0%** (`19/19` bins)
-- **Timestamp (UTC):** `2026-11-25T04:00:27.151383+00:00`
+- **Timestamp (UTC):** `2026-11-25T04:42:27.511777+00:00`
 
 ## System-Level Multi-Clock, Quantum Sync & Interconnect Metrics
 
 - Instructions retired/executed: `492990` | Traps/IRQs: `7`
-- Wall-clock run time (ms): `2277.73` | Wall-time emulation throughput (MIPS, host wall clock): `0.216`
-- SystemC simulated time (ps): `3913501000` | Quantum (`ns`): `100000` | Quantum sync barriers: `8` | Max time drift (ps): `1368517000`
+- Wall-clock run time (ms): `372.32` | Wall-time emulation throughput (MIPS, host wall clock): `1.324`
+- SystemC simulated time (ps): `3909501000` | Quantum (`ns`): `100000` | Quantum sync barriers: `8` | Max time drift (ps): `1362117000`
 - Total bus transactions: `17127` | Async CDC crossings: `4003`
 - 64-bit Burst transactions: `2` (`16` bytes) | Plugin Reverse Bus-Master DMA bytes: `0`
 - SoC DMA transferred bytes: `512` | JTAG-to-AXI4 host transactions: `2`

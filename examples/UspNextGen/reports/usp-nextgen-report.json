@@ -31,7 +31,7 @@
     "status": "PASSED"
   },
   "cpu_master_engine": "qemu",
-  "created_utc": "2026-11-25T03:59:32.163232+00:00",
+  "created_utc": "2026-11-25T04:42:03.792951+00:00",
   "design": "UspNextGen",
   "execution_mode": "qemu-tcg-cpu-master-systemc-verilator-and-usp-bus-v2",
   "exports": {
@@ -49,7 +49,7 @@
   "live_plugins": {
     "dma_burst_v2_0": {
       "status": "PASSED",
-      "trace_sha256": "cbc387ddc47797458d7950c3ba05269c112efd6e4f1d94e148c712383dd620e6",
+      "trace_sha256": "e207de2a91c3a15e04dcfa152f64dba8fd64bda3ad0324fafcce7661ca8cebae",
       "tx_count": 285
     },
     "polyphase_v1_0": {
@@ -78,7 +78,7 @@
       "exit_zero": true,
       "negative_failure_detected": true
     },
-    "console_output": "USP NextGen Boot: QEMU CPU Master + usp-bus-v2 + AXI4/AXI4-Lite/TL-UL RTL\nWorkload acc=23304 sync_ps=26802817000\nNEXTGEN_QEMU_WORKLOAD_OK\nChipyard AXI4 Full GCD(1071,462)=21 8x64b INCR burst verified\nNEXTGEN_AXI4_FULL_GCD_BURST_OK\nAXI4-Lite CRC32('123456789')=0xCBF43926\nNEXTGEN_AXI4_LITE_CRC32_OK\nOpenTitan TL-UL GPIO DATA_IN=0x00A50055 irq_cnt=1\nNEXTGEN_OPENTITAN_TLUL_GPIO_OK\nusp-bus-v2 Reverse DMA bytes=256 quantum_syncs=271\nNEXTGEN_USP_BUS_V2_DMA_BURST_SYNC_OK\nusp-mmio32-v1 Polyphase tap_ck=1024 out=1\nNEXTGEN_USP_MMIO32_V1_COMPAT_OK\nL2$ RTL hits=300 misses=4 dma_snoops=32\nNEXTGEN_L2_SNOOP_OK\nUSP_NEXTGEN_PASS\n",
+    "console_output": "USP NextGen Boot: QEMU CPU Master + usp-bus-v2 + AXI4/AXI4-Lite/TL-UL RTL\nWorkload acc=23304 sync_ps=26802617000\nNEXTGEN_QEMU_WORKLOAD_OK\nChipyard AXI4 Full GCD(1071,462)=21 8x64b INCR burst verified\nNEXTGEN_AXI4_FULL_GCD_BURST_OK\nAXI4-Lite CRC32('123456789')=0xCBF43926\nNEXTGEN_AXI4_LITE_CRC32_OK\nOpenTitan TL-UL GPIO DATA_IN=0x00A50055 irq_cnt=1\nNEXTGEN_OPENTITAN_TLUL_GPIO_OK\nusp-bus-v2 Reverse DMA bytes=256 quantum_syncs=271\nNEXTGEN_USP_BUS_V2_DMA_BURST_SYNC_OK\nusp-mmio32-v1 Polyphase tap_ck=1024 out=1\nNEXTGEN_USP_MMIO32_V1_COMPAT_OK\nL2$ RTL hits=300 misses=4 dma_snoops=32\nNEXTGEN_L2_SNOOP_OK\nUSP_NEXTGEN_PASS\n",
     "returncode": 0,
     "summary": {
       "burst64_bytes": 960,
@@ -185,10 +185,10 @@
         "dma_burst_v2_0_dma": 2,
         "qemu_rv64_cpu_0": 1568
       },
-      "max_time_drift_ps": 462752000,
+      "max_time_drift_ps": 461752000,
       "mmio_transactions": 1296,
       "mode": "hybrid-rtl-plugin",
-      "qemu_time_ps": 27932201000,
+      "qemu_time_ps": 27933801000,
       "quantum_ns": 100000,
       "quantum_sync_barriers": 272,
       "reverse_dma_bytes": 256,
@@ -207,23 +207,23 @@
         "uart_console_0": 0
       },
       "status": "PASSED",
-      "systemc_time_ps": 27932201000,
+      "systemc_time_ps": 27933801000,
       "timed_out": false,
       "total_transactions": 1570,
       "traps_taken": 4,
       "uart_tx_bytes": 618
     },
-    "wall_time_mips": 2.251,
-    "wall_time_ms": 1552.04
+    "wall_time_mips": 7.898,
+    "wall_time_ms": 442.3
   },
   "provenance": {
-    "console_sha256": "0c40e3eb06f176d0a81a75b32767f6726e67ed2c0734b9d764c65df1371fbea3",
-    "emulator_binary_sha256": "ea75a6ae9176a85109b05156ccfb9f1814a0c0893fef330be2aeaf13b7893655",
+    "console_sha256": "f05ffa307a18ec0c3ceefdf22713abb21e41d16eac2c4eea8b04b0d7f956e79a",
+    "emulator_binary_sha256": "02b87bc27d5f12cbf33fa9b4ae6d39113051eeae7682c29b1d9c4835567fa4f8",
     "generated_cpp_sha256": "7eb6ef3d02b8d14fce0a6aeb6a2e44e1b3ed25816e6b1e7d4fde56c03d07fd0c",
-    "negative_elf_sha256": "dcf74d281e3cd3cb89b3a08a10156c6d66d3c174f3fccf1245362b459e42a302",
-    "positive_elf_sha256": "a4b514b199195748e166fea7fc0a104be7ba0c51a96fb6dfed1df32499904910",
+    "negative_elf_sha256": "9e360a5db1be6e69b744937191b640a067f5a72af34caf59c38c505f7abbddb1",
+    "positive_elf_sha256": "afc22435623c259f9b399452e2c0642c87c7928c37b84989211f15692e400e12",
     "spec_sha256": "ceaad84d1d3d0e10b074ab0cf4371fb14f23b8922e08c294d3e80ca55df85258",
-    "vcd_sha256": "1644985da07d7dd5030dcde3af83d71ff9e351a744736920d559df6389df9082"
+    "vcd_sha256": "96cbbfb6cf807aabc730f03837cf13067f6ff6371b309a9cb69886a9a28da418"
   },
   "qemu_accel": "tcg",
   "quantum_ns": 100000,
