@@ -1,26 +1,45 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-/* Each selected RTL instance has independent SystemC state and a socket. */
+/* Each selected RTL/plugin instance has independent SystemC state and an AF_UNIX socket.
+ * Supports both legacy `usp-mmio32-v1` (20B) and `usp-bus-v2` (48B + 64-bit bursts + reverse DMA
+ * via cpu_physical_memory_rw + QEMU_CLOCK_VIRTUAL quantum time synchronization). */
 #include "hw/irq.h"
+#include "exec/address-spaces.h"
+#include "exec/memory.h"
+#include "qemu/timer.h"
 #include <sys/socket.h>
 #include <sys/un.h>
+
+typedef struct UspBridgeV2Frame {
+    uint32_t magic, seq;
+    uint16_t op, status;
+    uint32_t length, irq_mask, flags;
+    uint64_t addr, data, time_ps;
+} UspBridgeV2Frame;
+
 typedef struct NativeIP {
     int fd;
     uint32_t seq, model_offset, irq_bit, irq_level;
+    bool use_v2;
     qemu_irq irq;
 } NativeIP;
+
+static void native_io_exact(int fd, void *buf, size_t len, bool writing)
+{
+    for (size_t pos = 0; pos < len;) {
+        ssize_t n = writing ? send(fd, (char *)buf + pos, len - pos, MSG_NOSIGNAL)
+                            : recv(fd, (char *)buf + pos, len - pos, 0);
+        if (n < 0 && errno == EINTR) { continue; }
+        if (n <= 0) { error_report("native RTL/plugin transport failed"); exit(1); }
+        pos += (size_t)n;
+    }
+}
+
 static uint32_t native_call(NativeIP *ip, uint32_t op, uint32_t offset, uint32_t value)
 {
     uint32_t req[5] = { cpu_to_le32(0x31505355), cpu_to_le32(++ip->seq),
-                       cpu_to_le32(op), cpu_to_le32(offset), cpu_to_le32(value) }, res[5];
-    for (unsigned direction = 0; direction < 2; ++direction) {
-        for (size_t pos = 0; pos < sizeof(req);) {
-            ssize_t n = direction ? recv(ip->fd, (char *)res + pos, sizeof(res) - pos, 0)
-                : send(ip->fd, (char *)req + pos, sizeof(req) - pos, MSG_NOSIGNAL);
-            if (n < 0 && errno == EINTR) { continue; }
-            if (n <= 0) { error_report("native RTL transport failed"); exit(1); }
-            pos += n;
-        }
-    }
+                        cpu_to_le32(op), cpu_to_le32(offset), cpu_to_le32(value) }, res[5];
+    native_io_exact(ip->fd, req, sizeof(req), true);
+    native_io_exact(ip->fd, res, sizeof(res), false);
     if (le32_to_cpu(res[0]) != 0x31505355 || res[1] != req[1] || res[2] ||
         le32_to_cpu(res[4]) > 3) {
         error_report("native RTL response rejected"); exit(1);
@@ -32,14 +51,86 @@ static uint32_t native_call(NativeIP *ip, uint32_t op, uint32_t offset, uint32_t
     }
     return le32_to_cpu(res[3]);
 }
+
+static uint64_t native_call_v2(NativeIP *ip, uint16_t op, uint64_t offset,
+                               uint64_t value, uint32_t size)
+{
+    UspBridgeV2Frame req = {
+        .magic = 0x32425355u,
+        .seq = ++ip->seq,
+        .op = op,
+        .status = 0,
+        .length = size,
+        .irq_mask = 0,
+        .flags = (size == 8u) ? 2u : 0u,
+        .addr = offset,
+        .data = value,
+        .time_ps = (uint64_t)qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) * 1000ULL,
+    };
+    native_io_exact(ip->fd, &req, sizeof(req), true);
+    for (;;) {
+        UspBridgeV2Frame msg = {0};
+        native_io_exact(ip->fd, &msg, sizeof(msg), false);
+        if (msg.magic != 0x32425355u) {
+            error_report("native usp-bus-v2 magic mismatch"); exit(1);
+        }
+        if (msg.op == 0x0010u || msg.op == 0x0011u) {
+            /* Service reverse bus-master DMA read/write directly against QEMU guest RAM */
+            bool is_wr = (msg.op == 0x0011u);
+            uint8_t dma_buf[4096];
+            if (msg.length == 0 || msg.length > sizeof(dma_buf)) {
+                error_report("invalid usp-bus-v2 reverse DMA length"); exit(1);
+            }
+            if (is_wr) {
+                native_io_exact(ip->fd, dma_buf, msg.length, false);
+            }
+            address_space_rw(&address_space_memory, msg.addr, MEMTXATTRS_UNSPECIFIED,
+                             dma_buf, msg.length, is_wr);
+            UspBridgeV2Frame dres = {
+                .magic = 0x32425355u,
+                .seq = msg.seq,
+                .op = (uint16_t)(msg.op | 0x8000u),
+                .status = 0,
+                .length = is_wr ? 0u : msg.length,
+                .irq_mask = 0,
+                .flags = is_wr ? 0u : 3u,
+                .addr = msg.addr,
+                .data = 0,
+                .time_ps = (uint64_t)qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) * 1000ULL,
+            };
+            native_io_exact(ip->fd, &dres, sizeof(dres), true);
+            if (!is_wr) {
+                native_io_exact(ip->fd, dma_buf, msg.length, true);
+            }
+            continue;
+        }
+        if (msg.op != (uint16_t)(op | 0x8000u) || msg.seq != req.seq || msg.status != 0) {
+            error_report("native usp-bus-v2 response rejected"); exit(1);
+        }
+        uint32_t level = !!msg.irq_mask;
+        if (level != ip->irq_level) {
+            qemu_set_irq(ip->irq, level);
+            ip->irq_level = level;
+        }
+        return msg.data;
+    }
+}
+
 static uint64_t native_read(void *opaque, hwaddr addr, unsigned size)
 {
     NativeIP *ip = opaque;
+    if (ip->use_v2) {
+        return native_call_v2(ip, 0x0000u, addr, 0, size);
+    }
     return native_call(ip, 0, ip->model_offset + addr, 0);
 }
 static void native_write(void *opaque, hwaddr addr, uint64_t value, unsigned size)
 {
     NativeIP *ip = opaque;
+    if (ip->use_v2) {
+        native_call_v2(ip, 0x0001u, addr, value, size);
+        return;
+    }
     native_call(ip, 1, ip->model_offset + addr, value);
 }
 static const MemoryRegionOps native_ops = {
@@ -47,14 +138,21 @@ static const MemoryRegionOps native_ops = {
     .valid = { .min_access_size = 4, .max_access_size = 4, .unaligned = false },
     .impl = { .min_access_size = 4, .max_access_size = 4 },
 };
+static const MemoryRegionOps native_ops_v2 = {
+    .read = native_read, .write = native_write, .endianness = DEVICE_LITTLE_ENDIAN,
+    .valid = { .min_access_size = 1, .max_access_size = 8, .unaligned = false },
+    .impl = { .min_access_size = 1, .max_access_size = 8 },
+};
 static void native_attach(MemoryRegion *memory, DeviceState *plic, unsigned slot,
                           hwaddr base, unsigned irq, unsigned kind, const char *name)
 {
-    char variable[64];
+    char variable[64], proto_var[64];
     snprintf(variable, sizeof(variable), "USP_NATIVE_SOCKET_%u", slot);
+    snprintf(proto_var, sizeof(proto_var), "USP_NATIVE_PROTOCOL_%u", slot);
     const char *path = getenv(variable);
+    const char *proto = getenv(proto_var);
     struct sockaddr_un addr = { .sun_family = AF_UNIX };
-    struct timeval timeout = { .tv_sec = 2 };
+    struct timeval timeout = { .tv_sec = 5 };
     NativeIP *ip = g_new0(NativeIP, 1);
     MemoryRegion *region = g_new0(MemoryRegion, 1);
     if (!path || strlen(path) >= sizeof(addr.sun_path)) {
@@ -70,7 +168,12 @@ static void native_attach(MemoryRegion *memory, DeviceState *plic, unsigned slot
     ip->irq = qdev_get_gpio_in(plic, irq);
     ip->model_offset = kind * 0x1000;
     ip->irq_bit = 1U << kind;
-    memory_region_init_io(region, NULL, &native_ops, ip, name, 0x1000);
+    ip->use_v2 = (proto && strcmp(proto, "usp-bus-v2") == 0);
+    memory_region_init_io(region, NULL, ip->use_v2 ? &native_ops_v2 : &native_ops, ip, name, 0x1000);
     memory_region_add_subregion(memory, base, region);
-    native_call(ip, 2, 0, 0);
+    if (ip->use_v2) {
+        native_call_v2(ip, 0x0002u, 0, 0x3FULL, 0);
+    } else {
+        native_call(ip, 2, 0, 0);
+    }
 }

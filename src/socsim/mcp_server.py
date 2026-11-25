@@ -657,8 +657,9 @@ class EmulatorMcpServer:
             McpToolSpec(
                 name="emulator_compose_run",
                 description=(
-                    "Compile and execute a generic multiplatform-soc-1 SoC with Verilator RTL, "
-                    "live out-of-process usp-mmio32-v1 socket plugins, AXI4-Stream & QEMU check."
+                    "Compile and execute a generic multiplatform-soc-1 SoC with QEMU/SystemC CPU "
+                    "master, Verilator pin-level AXI4/AXI4-Lite/TL-UL RTL, and live usp-bus-v2 / "
+                    "usp-mmio32-v1 socket plugins."
                 ),
                 input_schema={
                     "type": "object",
@@ -671,6 +672,17 @@ class EmulatorMcpServer:
                             "enum": ["auto", "hybrid", "tlm"],
                             "default": "auto",
                         },
+                        "cpu_master": {
+                            "type": "string",
+                            "enum": ["auto", "systemc-rv64", "qemu"],
+                            "default": "auto",
+                        },
+                        "qemu_accel": {
+                            "type": "string",
+                            "enum": ["auto", "tcg", "kvm"],
+                            "default": "auto",
+                        },
+                        "quantum_ns": {"type": "integer", "minimum": 1},
                         "verify_qemu_crosscheck": {"type": "boolean", "default": True},
                     },
                     "additionalProperties": False,
@@ -971,10 +983,14 @@ class EmulatorMcpServer:
     def _tool_compose_run(self, args: dict[str, Any]) -> dict[str, Any]:
         spec_path = self._resolve_path(args["spec_path"], field="spec_path", must_exist=True)
         out_dir = self._resolve_path(args["out_dir"], field="out_dir", must_exist=False)
+        qns = args.get("quantum_ns")
         return run_composed_soc(
             spec_path,
             out_dir,
             mode=str(args.get("mode", "auto")),
+            cpu_master=str(args.get("cpu_master", "auto")),
+            qemu_accel=str(args.get("qemu_accel", "auto")),
+            quantum_ns=int(qns) if qns is not None else None,
             verify_qemu_crosscheck=bool(args.get("verify_qemu_crosscheck", True)),
         )
 

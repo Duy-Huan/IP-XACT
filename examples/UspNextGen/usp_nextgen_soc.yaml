@@ -1,0 +1,226 @@
+# UspNextGen: Next-Generation USP Multi-Platform SoC Showcase
+# Demonstrates all 3 core USP v2 upgrades running live together:
+#   1. Stock QEMU (`qemu-system-riscv64` TCG/KVM) acting directly as SystemC CPU Master
+#      over zero-copy mmap RAM and VirtIO-MMIO `usp-bus-v2` quantum time synchronization.
+#   2. `usp-bus-v2` live out-of-process plugin (`dma_burst_v2_0`) with reverse bus-master DMA,
+#      64-bit multi-beat bursts, and quantum sync — running side-by-side with an unmodified
+#      legacy `usp-mmio32-v1` plugin (`polyphase_v1_0`) proving 100% backward compatibility.
+#   3. Automatic pin-level Verilator 5.x RTL adapters (zero manual MMIO32 shims) for:
+#        - Chipyard/firtool-style AXI4 Full 64-bit (`chipyard_gcd_axi4_rtl.sv`)
+#        - Standard AMBA AXI4-Lite 32-bit (`axi4_lite_crc32_rtl.sv`)
+#        - OpenTitan TL-UL 32-bit with D-channel backpressure check (`opentitan_gpio_tlul_rtl.sv`)
+
+schema_version: multiplatform-soc-1
+name: UspNextGen
+description: >-
+  Next-generation heterogeneous multi-platform SoC driven directly by stock qemu-system-riscv64
+  (TCG/KVM) as CPU Master over VirtIO-MMIO usp-bus-v2 quantum time sync, combining auto-adapted
+  pin-level Verilator RTL (Chipyard AXI4 Full 64-bit, AMBA AXI4-Lite, OpenTitan TL-UL, L2$ snoop
+  monitor), a live usp-bus-v2 reverse bus-master DMA + 64-bit burst plugin, and a backward-compatible
+  usp-mmio32-v1 live plugin across 2 clock domains and 3 crossbars.
+
+clock_domains:
+  - name: core_clk
+    freq_hz: 800000000
+    description: QEMU RV64 CPU Master, TileLink Coherent XBar, AXI4 Full 64-bit XBar, L2$ RTL, Chipyard AXI4 GCD RTL, usp-bus-v2 DMA Plugin
+  - name: periph_clk
+    freq_hz: 250000000
+    description: OpenTitan TL-UL Peripheral XBar, UART, AMBA AXI4-Lite CRC-32 RTL, OpenTitan TL-UL GPIO RTL, legacy usp-mmio32-v1 Plugin
+
+fabrics:
+  - name: tilelink_xbar
+    protocol: tilelink-uh-coherent
+    clock_domain: core_clk
+    latency_ns: 4
+    provider: chipyard
+    masters: [qemu_rv64_cpu_0]
+  - name: axi4_full_xbar
+    protocol: axi4-64b-burst
+    clock_domain: core_clk
+    latency_ns: 4
+    provider: chipyard
+    masters: [qemu_rv64_cpu_0, dma_burst_v2_0]
+  - name: tlul_periph_xbar
+    protocol: tl-ul-periph
+    clock_domain: periph_clk
+    latency_ns: 6
+    provider: opentitan
+    masters: [periph_cdc_bridge_0]
+
+cdc_bridges:
+  - name: periph_cdc_bridge_0
+    provider: chipyard
+    protocol: tilelink-to-tlul-async-cdc
+    from_fabric: tilelink_xbar
+    to_fabrics: [axi4_full_xbar, tlul_periph_xbar]
+    from_clock: core_clk
+    to_clock: periph_clk
+    cdc_latency_ns: 12
+    description: Async CDC bridge connecting 800 MHz core_clk TileLink/AXI4 fabrics to 250 MHz periph_clk TL-UL/AXI4-Lite peripherals.
+
+cpu:
+  name: qemu_rv64_cpu_0
+  provider: qemu
+  master_engine: qemu
+  qemu_accel: auto
+  quantum_ns: 100000
+  harts: 1
+  isa: rv64imafd_zicsr
+  fpu: true
+  icache_kb: 32
+  dcache_kb: 32
+  fabric: tilelink_xbar
+  clock_domain: core_clk
+  entry: 0x80000000
+  stack_top: 0x800F0000
+  dma_buf_base: 0x80100000
+  gem5_model: gem5.RiscvTimingSimpleCPU
+  qemu_model: qemu.rv64
+  chipyard_config: UspNextGenChipyardConfig
+  model_disclosure: >-
+    Stock qemu-system-riscv64 (TCG on x86_64/arm64 hosts; KVM on riscv64 hosts with /dev/kvm)
+    executing unmodified RV64 guest binaries at native host speed over zero-copy mmap RAM while
+    trapping SoC MMIO and periodic quantum sync barriers over VirtIO-MMIO usp-bus-v2 directly into
+    SystemC MultiFabricInterconnect.
+
+devices:
+  # =====================================================================
+  # CORE CLOCK DOMAIN (`core_clk` @ 800 MHz)
+  # =====================================================================
+  - name: boot_rom
+    kind: rom
+    provider: qemu
+    binding: systemc-tlm
+    fabric: tilelink_xbar
+    clock_domain: core_clk
+    base: 0x00001000
+    size: 0x00001000
+  - name: sim_finisher
+    kind: finisher
+    provider: qemu
+    binding: systemc-tlm
+    fabric: tilelink_xbar
+    clock_domain: core_clk
+    base: 0x00100000
+    size: 0x00001000
+  - name: sys_clint
+    kind: clint
+    provider: qemu
+    binding: systemc-tlm
+    fabric: tilelink_xbar
+    clock_domain: core_clk
+    base: 0x02000000
+    size: 0x00010000
+  - name: sys_plic
+    kind: plic
+    provider: qemu
+    binding: systemc-tlm
+    fabric: tilelink_xbar
+    clock_domain: core_clk
+    base: 0x0C000000
+    size: 0x04000000
+  - name: main_sram_8m
+    kind: ram
+    provider: gem5
+    binding: systemc-tlm
+    fabric: tilelink_xbar
+    clock_domain: core_clk
+    base: 0x80000000
+    size: 0x00800000
+  - name: l2_cache_512k
+    kind: l2_cache
+    provider: verilator-rtl
+    binding: verilator-rtl
+    rtl_module: l2_cache_rtl
+    rtl_source: specs/multiplatform/unified_systemc/rtl/l2_cache_rtl.sv
+    fabric: tilelink_xbar
+    clock_domain: core_clk
+    base: 0x20000000
+    size: 0x00001000
+    disclosure: 512KB L2$ modeled by Verilator 5.032 cache/snoop monitor RTL (l2_cache_rtl.sv) snooping reverse DMA traffic.
+  - name: chipyard_gcd_0
+    kind: axi4_rtl
+    provider: chipyard
+    binding: verilator-rtl
+    rtl_protocol: auto
+    rtl_module: chipyard_gcd_axi4_rtl
+    rtl_source: rtl/chipyard_gcd_axi4_rtl.sv
+    fabric: axi4_full_xbar
+    clock_domain: core_clk
+    base: 0x30000000
+    size: 0x00001000
+    irq: 2
+    disclosure: Chipyard/firtool-style flattened AXI4 Full 64-bit Euclidean GCD + 32x64b INCR burst SRAM auto-adapted via VerilatorAxi4FullAdapter.
+  - name: dma_burst_v2_0
+    kind: dma_burst_v2
+    provider: usp-plugin
+    binding: usp-plugin
+    package_yaml: packages/dma_burst_v2/package.yaml
+    fabric: axi4_full_xbar
+    clock_domain: core_clk
+    base: 0x30010000
+    size: 0x00001000
+    irq: 3
+    disclosure: Live out-of-process usp-bus-v2 SystemC/TLM-2.0 plugin with autonomous reverse bus-master DMA, 64-bit bursts, and quantum time sync.
+
+  # =====================================================================
+  # PERIPHERAL CLOCK DOMAIN (`periph_clk` @ 250 MHz, Async CDC)
+  # =====================================================================
+  - name: uart_console_0
+    kind: uart
+    provider: qemu
+    binding: systemc-tlm
+    fabric: tlul_periph_xbar
+    clock_domain: periph_clk
+    base: 0x10000000
+    size: 0x00001000
+    irq: 1
+  - name: axi4_lite_crc32_0
+    kind: axi4_lite_rtl
+    provider: verilator-rtl
+    binding: verilator-rtl
+    rtl_protocol: auto
+    rtl_module: axi4_lite_crc32_rtl
+    rtl_source: rtl/axi4_lite_crc32_rtl.sv
+    fabric: tlul_periph_xbar
+    clock_domain: periph_clk
+    base: 0x40000000
+    size: 0x00001000
+    irq: 4
+    disclosure: Standard AMBA AXI4-Lite 32-bit IEEE 802.3 CRC-32 RTL auto-adapted via VerilatorAxi4LiteAdapter (zero manual MMIO32 shim).
+  - name: opentitan_gpio_0
+    kind: tlul_rtl
+    provider: opentitan
+    binding: verilator-rtl
+    rtl_protocol: auto
+    rtl_module: opentitan_gpio_tlul_rtl
+    rtl_source: rtl/opentitan_gpio_tlul_rtl.sv
+    fabric: tlul_periph_xbar
+    clock_domain: periph_clk
+    base: 0x40010000
+    size: 0x00001000
+    irq: 5
+    disclosure: OpenTitan TL-UL 32-bit GPIO & edge-IRQ RTL auto-adapted via VerilatorTlulAdapter with D-channel backpressure verification.
+  - name: polyphase_v1_0
+    kind: polyphase_12t
+    provider: usp-plugin
+    binding: usp-plugin
+    package_yaml: ../BSoC/packages/polyphase_12t/package.yaml
+    fabric: tlul_periph_xbar
+    clock_domain: periph_clk
+    base: 0x40020000
+    size: 0x00001000
+    disclosure: Unmodified legacy BSoC usp-mmio32-v1 out-of-process plugin executing concurrently alongside usp-bus-v2 to prove 100% backward compatibility.
+
+firmware:
+  positive_src: sw/usp_nextgen_sw.c
+  negative_src: sw/usp_nextgen_fail_sw.c
+  expected_markers:
+    - NEXTGEN_QEMU_WORKLOAD_OK
+    - NEXTGEN_AXI4_FULL_GCD_BURST_OK
+    - NEXTGEN_AXI4_LITE_CRC32_OK
+    - NEXTGEN_OPENTITAN_TLUL_GPIO_OK
+    - NEXTGEN_USP_BUS_V2_DMA_BURST_SYNC_OK
+    - NEXTGEN_USP_MMIO32_V1_COMPAT_OK
+    - NEXTGEN_L2_SNOOP_OK
+    - USP_NEXTGEN_PASS

@@ -10,6 +10,8 @@ from .domain import ContractError
 from .ipxact import digest
 from .project import inside, keys
 
+SUPPORTED_PROTOCOLS = frozenset({"usp-mmio32-v1", "usp-bus-v2"})
+
 
 def validate(models, builtin_ids, builtin_vlnvs):
     if not isinstance(models, dict) or len(models) > 16:
@@ -31,7 +33,7 @@ def validate(models, builtin_ids, builtin_vlnvs):
             "external model",
         )
         if (
-            descriptor["protocol"] != "usp-mmio32-v1"
+            descriptor["protocol"] not in SUPPORTED_PROTOCOLS
             or not isinstance(descriptor["sha256"], str)
             or not re.fullmatch("[a-f0-9]{64}", descriptor["sha256"])
             or not isinstance(descriptor["vlnv"], str)
@@ -87,7 +89,7 @@ def preflight(spec, source_root):
 def descriptor(model):
     return {
         "vlnv": model["vlnv"],
-        "id": "external.usp-mmio32-v1",
+        "id": f"external.{model['protocol']}",
         "source": {
             "sha256": model["sha256"],
             "license": model["license"],

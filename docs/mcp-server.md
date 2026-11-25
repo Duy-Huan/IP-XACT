@@ -47,7 +47,7 @@ The USP/SocSim emulator ships a zero-dependency **Model Context Protocol (MCP)**
 | 9 | `emulator_synthesize_bsp` | Software | Synthesize deterministic `soc.h`, `soc.ld`, and BSP manifest from `native-ir.json` |
 | 10 | `emulator_derive_noc_topology` | NoC | Derive IR-bound gem5 Ruby/Garnet mesh topology with PIO bypass disclosure & ROI calibration |
 | 11 | `emulator_package_inspect` | IP Model | Verify SHA-256 hashes, inspect MMIO/IRQ/reset/error contracts, and synthesize C register header |
-| 12 | `emulator_package_build` | IP Model | Compile SystemC/C++17 `native-model-package-1` and execute `usp-mmio32-v1` conformance vectors |
+| 12 | `emulator_package_build` | IP Model | Compile SystemC/C++17 `native-model-package-1` and execute `usp-bus-v2` / `usp-mmio32-v1` conformance vectors |
 | 13 | `emulator_run_qa` | QA/QC | Run `quick`, `unseen`, `multiplatform`, `wheel`, or `full` QA suite & verify SHA-256 scorecard |
 | 14 | `emulator_run_qemu` | Simulation | Boot an RV64 ELF firmware on QEMU for a validated IP-XACT project and return console + hashes |
 | 15 | `emulator_run_unified_soc` | Unified SoC | Compile & run the Dual-Hart SMP + 6× Verilator RTL + IR 2×2 NoC unified SystemC SoC with RV64 SW |
@@ -58,7 +58,7 @@ The USP/SocSim emulator ships a zero-dependency **Model Context Protocol (MCP)**
 | 20 | `emulator_generate_dashboard` | Reporting | Render zero-CDN HTML5 Verification, Coverage, Calibration, DSE & CHIA Convergence Dashboard |
 | 21 | `emulator_compose_audit` | Composer | Audit a `multiplatform-soc-1` YAML for clock domains, crossbars, CDC bridges, AXI4-Stream DAG, RTL & live plugins |
 | 22 | `emulator_compose_plan` | Composer | Emit canonical IR, `binding-lock.json`, C++ SystemC top-level, IP-XACT, QEMU DTS, gem5 Python & Chipyard Scala |
-| 23 | `emulator_compose_run` | Composer | Build & run a `multiplatform-soc-1` SoC with Verilator RTL, live `usp-mmio32-v1` socket plugins & QEMU crosscheck |
+| 23 | `emulator_compose_run` | Composer | Build & run a `multiplatform-soc-1` SoC with QEMU (`tcg`/`kvm`) or SystemC CPU master, pin-level AXI4/AXI4-Lite/TL-UL Verilator RTL & live `usp-bus-v2`/`usp-mmio32-v1` plugins |
 
 ### 2.2 Resources (5) & Prompts (3)
 
