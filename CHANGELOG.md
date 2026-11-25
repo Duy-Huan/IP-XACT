@@ -2,6 +2,20 @@
 
 ## 0.3.0a5 — development candidate (v0.3.0-alpha.5)
 
+- Implement **3 core USP v2 multi-platform upgrades** (`upgrade/usp-v2-core-upgrades.md`,
+  `examples/UspNextGen/`, `docs/examples/UspNextGen.md`, `tests/test_usp_v2_upgrades.py`):
+  (1) **Stock QEMU (`qemu-system-riscv64` TCG/KVM) Direct CPU Master** (`QemuCpuMaster`,
+  `qemu_usp_bridge.S/.c`, `--cpu-master qemu`, `--qemu-accel auto|tcg|kvm`, `--quantum-ns`)
+  driving SystemC `MultiFabricInterconnect` + Verilator RTL over zero-copy `mmap` RAM and
+  VirtIO-MMIO v2 `usp-bus-v2`; (2) **`usp-bus-v2` plugin protocol** (`usp_bus_protocol.hpp`,
+  `UspBusV2ProxyTlm`, gem5 `NativeSocDevice`, custom QEMU `bridge.c.in`, `usp.dma_burst_v2`)
+  adding autonomous reverse bus-master DMA (`USP_OP_DMA_READ`/`WRITE`), 64-bit multi-beat
+  bursts, and quantum time synchronization (`USP_OP_TIME_SYNC`) across QEMU ↔ SystemC ↔ gem5
+  while preserving 100% wire-level & runtime backward compatibility with `usp-mmio32-v1`;
+  (3) **Automatic pin-level Verilator RTL adapters** (`src/socsim/rtl_pin_adapter.py`,
+  `VerilatorAxi4FullAdapter`, `VerilatorAxi4LiteAdapter`, `VerilatorTlulAdapter`) loading
+  Chipyard/`firtool` AXI4 64-bit, AMBA AXI4-Lite, and OpenTitan TL-UL (with D-channel
+  backpressure verification) SystemVerilog directly with zero manual MMIO32 shims.
 - Add the generic data-driven **Multi-Platform SoC Composer & Cross-Binding Engine**
   (`multiplatform-soc-1`, `src/socsim/multiplatform_composer.py`,
   `src/socsim/resources/composer/composer_runtime.hpp`, `usp compose`, 3 MCP tools)

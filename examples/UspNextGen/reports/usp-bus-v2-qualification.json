@@ -1,0 +1,167 @@
+{
+  "actual": [
+    {
+      "data": 0,
+      "irq": 0,
+      "offset": 0,
+      "op": 2,
+      "status": 0,
+      "value": 0
+    },
+    {
+      "data": 0,
+      "irq": 0,
+      "length": 4,
+      "offset": 32,
+      "op": 0,
+      "status": 0,
+      "value": 1515870810
+    },
+    {
+      "burst_words": [
+        1234605616436508552,
+        11072869122414935808,
+        81985529216486895,
+        18364758544493064720
+      ],
+      "data": 0,
+      "irq": 0,
+      "offset": 256,
+      "op": 4,
+      "status": 0,
+      "value": 0
+    },
+    {
+      "data": 0,
+      "expect_burst_words": [
+        1234605616436508552,
+        11072869122414935808,
+        81985529216486895,
+        18364758544493064720
+      ],
+      "irq": 0,
+      "length": 32,
+      "offset": 256,
+      "op": 3,
+      "status": 0,
+      "value": 0
+    },
+    {
+      "data": 100000000,
+      "irq": 0,
+      "offset": 0,
+      "op": 5,
+      "status": 0,
+      "value": 1
+    },
+    {
+      "data": 0,
+      "irq": 0,
+      "length": 4,
+      "offset": 48,
+      "op": 0,
+      "status": 0,
+      "value": 1
+    },
+    {
+      "data": 2148532224,
+      "irq": 0,
+      "length": 8,
+      "offset": 8,
+      "op": 1,
+      "status": 0,
+      "value": 2148532224
+    },
+    {
+      "data": 2148532736,
+      "irq": 0,
+      "length": 8,
+      "offset": 16,
+      "op": 1,
+      "status": 0,
+      "value": 2148532736
+    },
+    {
+      "data": 32,
+      "irq": 0,
+      "length": 4,
+      "offset": 24,
+      "op": 1,
+      "status": 0,
+      "value": 32
+    },
+    {
+      "data": 1,
+      "dma_expect_words": {
+        "addr": 2148532736,
+        "words": [
+          5357694050820053595,
+          5357694050820049740,
+          5357694050820061305,
+          5357694050820057450
+        ]
+      },
+      "irq": 1,
+      "length": 4,
+      "offset": 0,
+      "op": 1,
+      "status": 0,
+      "value": 1
+    },
+    {
+      "data": 0,
+      "irq": 1,
+      "length": 4,
+      "offset": 28,
+      "op": 0,
+      "status": 0,
+      "value": 64
+    },
+    {
+      "data": 1,
+      "irq": 0,
+      "length": 4,
+      "offset": 4,
+      "op": 1,
+      "status": 0,
+      "value": 1
+    },
+    {
+      "data": 99,
+      "irq": 0,
+      "length": 4,
+      "offset": 28,
+      "op": 1,
+      "status": 1,
+      "value": 0
+    }
+  ],
+  "binary_sha256": "06e0d2f89a81c1a5f4fdeceea10e294b97bbacef5dfc38d619dc4f3672a7d742",
+  "checks": {
+    "0": true,
+    "1": true,
+    "10": true,
+    "11": true,
+    "12": true,
+    "2": true,
+    "3": true,
+    "4": true,
+    "5": true,
+    "6": true,
+    "7": true,
+    "8": true,
+    "9": true,
+    "actual_model_trace": true,
+    "process_exit": true,
+    "v1_backward_compat_reset": true
+  },
+  "dma_qualification": {
+    "bytes": 64,
+    "reads": 1,
+    "writes": 1
+  },
+  "protocol": "usp-bus-v2",
+  "scope": "actual source-model protocol/reset/MMIO/IRQ/error vectors; SoC IRQ delivery is separate",
+  "status": "PASSED",
+  "trace_sha256": "9e23e0a462801fbc3b41d2f72b424daa7f9f315c176eeacd647a7fd7005ce8f8"
+}

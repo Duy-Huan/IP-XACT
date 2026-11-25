@@ -1,0 +1,55 @@
+=== HOSTED PODMAN SDK CI RUN 45547546572 (commit 2d47bbff8be5bdf696f011dcc7635cdcde2627cb) ===
+=== USP NEXTGEN VERILATOR PIN-LEVEL RTL BUILD LOGS ===
+--- verilator-axi4_lite_crc32_rtl.log ---
+- Verilator: Built from 0.027 MB sources in 2 modules, into 0.066 MB in 7 C++ files needing 0.000 MB
+- Verilator: Walltime 2.764 s (elab=0.001, cvt=0.005, bld=2.754); cpu 0.011 s on 2 threads; alloced 14.055 MB
+--- verilator-chipyard_gcd_axi4_rtl.log ---
+- Verilator: Built from 0.033 MB sources in 2 modules, into 0.098 MB in 7 C++ files needing 0.000 MB
+- Verilator: Walltime 2.760 s (elab=0.001, cvt=0.006, bld=2.749); cpu 0.013 s on 2 threads; alloced 14.348 MB
+--- verilator-l2_cache_rtl.log ---
+- Verilator: Built from 0.023 MB sources in 2 modules, into 0.041 MB in 7 C++ files needing 0.000 MB
+- Verilator: Walltime 2.709 s (elab=0.000, cvt=0.004, bld=2.701); cpu 0.009 s on 2 threads; alloced 13.688 MB
+--- verilator-opentitan_gpio_tlul_rtl.log ---
+- Verilator: Built from 0.026 MB sources in 2 modules, into 0.067 MB in 7 C++ files needing 0.000 MB
+- Verilator: Walltime 2.701 s (elab=0.000, cvt=0.005, bld=2.692); cpu 0.010 s on 2 threads; alloced 13.879 MB
+=== USP NEXTGEN USP-BUS-V2 REVERSE-DMA & QUANTUM SYNC TRACE ===
+{"proto":"v2","op":2,"offset":0,"length":0,"value":0,"status":0,"irq":0,"systemc_time_ps":1000}
+{"proto":"v2","op":5,"offset":253601000,"length":0,"value":1,"status":0,"irq":0,"systemc_time_ps":253601000}
+{"proto":"v2","op":5,"offset":353901000,"length":0,"value":2,"status":0,"irq":0,"systemc_time_ps":353901000}
+{"proto":"v2","op":5,"offset":454201000,"length":0,"value":3,"status":0,"irq":0,"systemc_time_ps":454201000}
+{"proto":"v2","op":5,"offset":554601000,"length":0,"value":4,"status":0,"irq":0,"systemc_time_ps":554601000}
+{"proto":"v2","op":5,"offset":655001000,"length":0,"value":5,"status":0,"irq":0,"systemc_time_ps":655001000}
+{"proto":"v2","op":5,"offset":755401000,"length":0,"value":6,"status":0,"irq":0,"systemc_time_ps":755401000}
+{"proto":"v2","op":5,"offset":855801000,"length":0,"value":7,"status":0,"irq":0,"systemc_time_ps":855801000}
+{"proto":"v2","op":5,"offset":956201000,"length":0,"value":8,"status":0,"irq":0,"systemc_time_ps":956201000}
+{"proto":"v2","op":5,"offset":1056501000,"length":0,"value":9,"status":0,"irq":0,"systemc_time_ps":1056501000}
+{"proto":"v2","op":5,"offset":1156801000,"length":0,"value":10,"status":0,"irq":0,"systemc_time_ps":1156801000}
+{"proto":"v2","op":5,"offset":1257001000,"length":0,"value":11,"status":0,"irq":0,"systemc_time_ps":1257001000}
+{"proto":"v2","op":5,"offset":1357301000,"length":0,"value":12,"status":0,"irq":0,"systemc_time_ps":1357301000}
+{"proto":"v2","op":5,"offset":1457501000,"length":0,"value":13,"status":0,"irq":0,"systemc_time_ps":1457501000}
+{"proto":"v2","op":5,"offset":1557801000,"length":0,"value":14,"status":0,"irq":0,"systemc_time_ps":1557801000}
+{"proto":"v2","op":5,"offset":1658201000,"length":0,"value":15,"status":0,"irq":0,"systemc_time_ps":1658201000}
+{"proto":"v2","op":5,"offset":1758601000,"length":0,"value":16,"status":0,"irq":0,"systemc_time_ps":1758601000}
+{"proto":"v2","op":5,"offset":1858901000,"length":0,"value":17,"status":0,"irq":0,"systemc_time_ps":1858901000}
+{"proto":"v2","op":5,"offset":1959201000,"length":0,"value":18,"status":0,"irq":0,"systemc_time_ps":1959201000}
+{"proto":"v2","op":5,"offset":2059401000,"length":0,"value":19,"status":0,"irq":0,"systemc_time_ps":2059401000}
+... [tail 12 usp-bus-v2 frames] ...
+{"proto":"v2","op":1,"offset":8,"length":8,"value":2148532224,"status":0,"irq":0,"systemc_time_ps":27280193000}
+{"proto":"v2","op":1,"offset":16,"length":8,"value":2148533248,"status":0,"irq":0,"systemc_time_ps":27280205000}
+{"proto":"v2","op":1,"offset":24,"length":4,"value":128,"status":0,"irq":0,"systemc_time_ps":27280217000}
+{"proto":"v2","op":1,"offset":32,"length":8,"value":14627333965257922168,"status":0,"irq":0,"systemc_time_ps":27280229000}
+{"op":17,"offset":2148533248,"length":128,"status":0,"irq":1,"systemc_time_ps":27280357000}
+{"proto":"v2","op":1,"offset":0,"length":4,"value":1,"status":0,"irq":1,"systemc_time_ps":27280369000}
+{"proto":"v2","op":1,"offset":4,"length":4,"value":1,"status":0,"irq":0,"systemc_time_ps":27280381000}
+{"proto":"v2","op":5,"offset":27458301000,"length":0,"value":271,"status":0,"irq":0,"systemc_time_ps":27458301000}
+{"proto":"v2","op":0,"offset":40,"length":8,"value":277472830351353376,"status":0,"irq":0,"systemc_time_ps":27458313000}
+{"proto":"v2","op":0,"offset":28,"length":4,"value":256,"status":0,"irq":0,"systemc_time_ps":27458325000}
+{"proto":"v2","op":0,"offset":48,"length":4,"value":271,"status":0,"irq":0,"systemc_time_ps":27458337000}
+{"proto":"v2","op":5,"offset":27933801000,"length":0,"value":272,"status":0,"irq":0,"systemc_time_ps":27933801000}
+=== USP NEXTGEN USP-MMIO32-V1 BACKWARD-COMPAT PLUGIN TRACE ===
+{"op":2,"offset":0,"data":0,"value":0,"status":0,"irq":0,"systemc_time_ps":1000}
+{"op":0,"offset":20,"data":0,"value":1024,"status":0,"irq":0,"systemc_time_ps":11000}
+{"op":1,"offset":8,"data":64,"value":64,"status":0,"irq":0,"systemc_time_ps":21000}
+{"op":1,"offset":0,"data":1,"value":1,"status":0,"irq":1,"systemc_time_ps":51000}
+{"op":0,"offset":12,"data":0,"value":1,"status":0,"irq":1,"systemc_time_ps":61000}
+{"op":1,"offset":16,"data":1,"value":1,"status":0,"irq":0,"systemc_time_ps":71000}

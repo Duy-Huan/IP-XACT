@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-// Generic Multi-Platform SystemC/TLM-2.0 + Verilator RTL + Live usp-mmio32-v1 Plugin Runtime.
-// Supports arbitrary multi-clock-domain, multi-crossbar, multi-master (RV64 CPU, DMA,
-// JTAG-to-AXI4), AXI4-Stream dataflow pipelines, SAM SRAM buffers, Pattern Gen / Logic Analyzer,
-// Verilator 5.x RTL wrappers, and out-of-process usp-mmio32-v1 Unix socket IP plugins.
+// Generic Multi-Platform SystemC/TLM-2.0 + Verilator RTL + QEMU CPU Master + Live usp-bus-v2/v1
+// Plugin Runtime.
+// Supports arbitrary multi-clock-domain, multi-crossbar, multi-master (QEMU TCG/KVM, RV64 CPU,
+// DMA, JTAG-to-AXI4, Reverse-DMA Plugins), AXI4-Stream dataflow pipelines, SAM SRAM buffers,
+// Pattern Gen / Logic Analyzer, automatic pin-level Verilator 5.x RTL adapters (MMIO32,
+// AXI4-Lite, AXI4 Full 64-bit burst, OpenTitan TL-UL), and live usp-bus-v2 / usp-mmio32-v1
+// Unix-socket IP plugins with quantum time synchronization.
 #ifndef USP_COMPOSER_RUNTIME_HPP
 #define USP_COMPOSER_RUNTIME_HPP
 
@@ -15,11 +18,15 @@
 
 #include <arpa/inet.h>
 #include <endian.h>
+#include <fcntl.h>
 #include <netinet/in.h>
+#include <sys/mman.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/un.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <array>
 #include <cerrno>
 #include <cmath>
@@ -29,8 +36,12 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <string>
+#include <type_traits>
 #include <vector>
+
+#include "usp_bus_protocol.hpp"
 
 namespace usp {
 
@@ -46,6 +57,18 @@ inline uint64_t load_le64(const uint8_t *p) {
 inline int64_t sext(uint64_t value, unsigned bits) {
     const uint64_t shift = 64u - bits;
     return static_cast<int64_t>(value << shift) >> shift;
+}
+
+inline bool sock_io_exact(int fd, void *buf, size_t n, bool writing) {
+    auto *p = static_cast<char *>(buf);
+    for (size_t done = 0; done < n;) {
+        ssize_t rc = writing ? send(fd, p + done, n - done, MSG_NOSIGNAL)
+                             : recv(fd, p + done, n - done, 0);
+        if (rc < 0 && errno == EINTR) continue;
+        if (rc <= 0) return false;
+        done += static_cast<size_t>(rc);
+    }
+    return true;
 }
 
 // --- IEEE 1364 VCD Bus/IRQ Waveform Recorder ---
@@ -94,13 +117,22 @@ struct ComposedDevice {
     virtual ~ComposedDevice() = default;
     virtual uint32_t irq_level() const { return 0u; }
     virtual uint64_t rtl_cycles() const { return 0ULL; }
+    virtual uint64_t bus_handshakes() const { return 0ULL; }
+    virtual uint64_t burst64_tx() const { return 0ULL; }
+    virtual uint64_t reverse_dma_bytes() const { return 0ULL; }
+    virtual uint64_t quantum_sync_count() const { return 0ULL; }
+    virtual void sync_quantum(uint64_t /*now_ps*/) {}
     virtual const char *runtime_backend() const { return "systemc-tlm"; }
 };
 
 // --- Coherent SRAM / ROM / SAM Buffer / Pattern Gen+LA Memory Target ---
+// Supports optional zero-copy POSIX mmap(MAP_SHARED) backing for QEMU <-> SystemC DMA coherency!
 struct TlmMemory : sc_core::sc_module, ComposedDevice {
     tlm_utils::simple_target_socket<TlmMemory> target;
     std::vector<uint8_t> mem;
+    uint8_t *shared_ptr = nullptr;
+    size_t shared_size = 0;
+    int shared_fd = -1;
     bool read_only = false;
     uint32_t access_ns = 10u;
 
@@ -109,16 +141,49 @@ struct TlmMemory : sc_core::sc_module, ComposedDevice {
         target.register_b_transport(this, &TlmMemory::transport);
     }
 
+    ~TlmMemory() override {
+        if (shared_ptr && shared_ptr != MAP_FAILED) {
+            munmap(shared_ptr, shared_size);
+        }
+        if (shared_fd >= 0) {
+            close(shared_fd);
+        }
+    }
+
+    uint8_t *raw_data() { return shared_ptr ? shared_ptr : mem.data(); }
+    const uint8_t *raw_data() const { return shared_ptr ? shared_ptr : mem.data(); }
+    size_t byte_size() const { return shared_ptr ? shared_size : mem.size(); }
+
+    bool map_shared_file(const std::string &path) {
+        if (path.empty() || read_only) return false;
+        int fd = open(path.c_str(), O_RDWR);
+        if (fd < 0) return false;
+        struct stat st{};
+        if (fstat(fd, &st) != 0 || static_cast<size_t>(st.st_size) < mem.size()) {
+            close(fd);
+            return false;
+        }
+        void *p = mmap(nullptr, mem.size(), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+        if (p == MAP_FAILED) {
+            close(fd);
+            return false;
+        }
+        shared_ptr = static_cast<uint8_t *>(p);
+        shared_size = mem.size();
+        shared_fd = fd;
+        return true;
+    }
+
     void write_u32_direct(size_t offset, uint32_t val) {
-        if (offset + 4u <= mem.size()) {
-            std::memcpy(mem.data() + offset, &val, 4u);
+        if (offset + 4u <= byte_size()) {
+            std::memcpy(raw_data() + offset, &val, 4u);
         }
     }
 
     uint32_t read_u32_direct(size_t offset) const {
         uint32_t val = 0u;
-        if (offset + 4u <= mem.size()) {
-            std::memcpy(&val, mem.data() + offset, 4u);
+        if (offset + 4u <= byte_size()) {
+            std::memcpy(&val, raw_data() + offset, 4u);
         }
         return val;
     }
@@ -126,7 +191,7 @@ struct TlmMemory : sc_core::sc_module, ComposedDevice {
     void transport(tlm::tlm_generic_payload &tx, sc_core::sc_time &delay) {
         const uint64_t addr = tx.get_address();
         const unsigned len = tx.get_data_length();
-        if (addr + len > mem.size()) {
+        if (addr + len > byte_size()) {
             tx.set_response_status(tlm::TLM_ADDRESS_ERROR_RESPONSE);
             return;
         }
@@ -135,9 +200,9 @@ struct TlmMemory : sc_core::sc_module, ComposedDevice {
                 tx.set_response_status(tlm::TLM_COMMAND_ERROR_RESPONSE);
                 return;
             }
-            std::memcpy(mem.data() + addr, tx.get_data_ptr(), len);
+            std::memcpy(raw_data() + addr, tx.get_data_ptr(), len);
         } else {
-            std::memcpy(tx.get_data_ptr(), mem.data() + addr, len);
+            std::memcpy(tx.get_data_ptr(), raw_data() + addr, len);
         }
         delay += sc_core::sc_time(access_ns, sc_core::SC_NS);
         tx.set_response_status(tlm::TLM_OK_RESPONSE);
@@ -328,6 +393,7 @@ struct PlicTlm : sc_core::sc_module, ComposedDevice {
     std::array<uint32_t, 32> priority{};
     std::array<ComposedDevice *, 32> sources{};
     uint32_t enable_mask = 0, threshold = 0, claimed_mask = 0;
+    uint64_t claims = 0ULL;
 
     explicit PlicTlm(sc_core::sc_module_name name) : sc_module(name), target("target") {
         target.register_b_transport(this, &PlicTlm::transport);
@@ -379,7 +445,7 @@ struct PlicTlm : sc_core::sc_module, ComposedDevice {
             else if (off == 0x200000u) data = threshold;
             else if (off == 0x200004u) {
                 data = highest_pending_irq();
-                if (data != 0u) claimed_mask |= (1u << data);
+                if (data != 0u) { claimed_mask |= (1u << data); claims++; }
             } else { tx.set_response_status(tlm::TLM_ADDRESS_ERROR_RESPONSE); return; }
             std::memcpy(tx.get_data_ptr(), &data, 4u);
         }
@@ -567,6 +633,750 @@ struct VerilatorMmioWrapper : sc_core::sc_module, ComposedDevice {
             }
         }
         delay += sc_core::sc_time(static_cast<double>(ticks * clk_period_ns + 10u), sc_core::SC_NS);
+        tx.set_response_status(tlm::TLM_OK_RESPONSE);
+    }
+};
+
+// --- LIVE Out-of-Process `usp-bus-v2` Unix Socket Proxy Target + Reverse DMA Master ---
+// Speaks `usp-bus-v2` (48-byte header + optional payload) with full backward compatibility:
+//   - Scalar 1/2/4/8-byte MMIO + multi-beat 64-bit bursts (`USP_OP_BURST_READ`/`WRITE`)
+//   - Reverse bus-master DMA (`USP_OP_DMA_READ`/`WRITE`) driven directly into `MultiFabricInterconnect`
+//   - Quantum time synchronization (`USP_OP_TIME_SYNC`) keeping plugin SystemC time lockstep
+struct UspBusV2ProxyTlm : sc_core::sc_module, ComposedDevice {
+    tlm_utils::simple_target_socket<UspBusV2ProxyTlm> target;
+    tlm_utils::simple_initiator_socket<UspBusV2ProxyTlm> dma_master;
+    int fd = -1;
+    uint32_t seq = 0;
+    uint32_t irq = 0;
+    uint64_t peer_caps = 0;
+    uint64_t quantum_ps = 100000000ULL;
+    uint64_t socket_tx_count = 0;
+    uint64_t burst64_count = 0;
+    uint64_t burst64_bytes_total = 0;
+    uint64_t reverse_dma_reads = 0;
+    uint64_t reverse_dma_writes = 0;
+    uint64_t reverse_dma_bytes_total = 0;
+    uint64_t quantum_syncs = 0;
+    uint32_t tx_latency_ns = 15u;
+
+    UspBusV2ProxyTlm(sc_core::sc_module_name name, const std::string &socket_path,
+                     uint32_t lat_ns = 15u, uint64_t q_ns = 100000ULL)
+        : sc_module(name), target("target"), dma_master("dma_master"),
+          quantum_ps(q_ns * 1000ULL), tx_latency_ns(lat_ns) {
+        target.register_b_transport(this, &UspBusV2ProxyTlm::transport);
+        sockaddr_un addr{};
+        addr.sun_family = AF_UNIX;
+        if (socket_path.size() >= sizeof(addr.sun_path)) {
+            std::cerr << "usp-bus-v2 socket path too long: " << socket_path << "\n";
+            std::exit(2);
+        }
+        std::strcpy(addr.sun_path, socket_path.c_str());
+        for (int attempt = 0; attempt < 250; ++attempt) {
+            fd = socket(AF_UNIX, SOCK_STREAM, 0);
+            if (fd >= 0 &&
+                connect(fd, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) == 0) {
+                break;
+            }
+            if (fd >= 0) { close(fd); fd = -1; }
+            usleep(20000);
+        }
+        if (fd < 0) {
+            std::cerr << "Failed to connect live usp-bus-v2 plugin socket: "
+                      << socket_path << "\n";
+            std::exit(2);
+        }
+        timeval tv{10, 0};
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+
+        sc_core::sc_time d = sc_core::SC_ZERO_TIME;
+        UspBusV2Frame res{};
+        if (!rpc_v2(USP_OP_RESET, 0ULL, USP_CAP_ALL, 0u, 0u, nullptr, nullptr, d, res)) {
+            std::cerr << "usp-bus-v2 RESET handshake failed on " << socket_path << "\n";
+            std::exit(2);
+        }
+        peer_caps = res.data;
+    }
+
+    ~UspBusV2ProxyTlm() override {
+        if (fd >= 0) close(fd);
+    }
+
+    uint32_t irq_level() const override { return irq; }
+    uint64_t burst64_tx() const override { return burst64_count; }
+    uint64_t reverse_dma_bytes() const override { return reverse_dma_bytes_total; }
+    uint64_t quantum_sync_count() const override { return quantum_syncs; }
+    const char *runtime_backend() const override { return "usp-bus-v2-live-plugin"; }
+
+    bool handle_reverse_dma(const UspBusV2Frame &req, sc_core::sc_time &delay) {
+        const bool is_wr = (req.op == USP_OP_DMA_WRITE);
+        std::vector<uint8_t> buf(req.length > 0u ? req.length : 1u, 0u);
+        if (is_wr && req.length > 0u) {
+            if (req.length > USP_BUS_V2_MAX_BURST_BYTES ||
+                !sock_io_exact(fd, buf.data(), req.length, false)) {
+                return false;
+            }
+        }
+        UspBusV2Frame resp{};
+        resp.magic = USP_BUS_V2_MAGIC;
+        resp.seq = req.seq;
+        resp.op = static_cast<uint16_t>(req.op | USP_OP_RESPONSE);
+        resp.addr = req.addr;
+        resp.irq_mask = irq;
+
+        if (req.length == 0u || req.length > USP_BUS_V2_MAX_BURST_BYTES) {
+            resp.status = USP_STATUS_DENIED;
+            resp.length = 0u;
+            resp.time_ps = sc_core::sc_time_stamp().value();
+            return sock_io_exact(fd, &resp, sizeof(resp), true);
+        }
+
+        tlm::tlm_generic_payload dma_tx;
+        dma_tx.set_command(is_wr ? tlm::TLM_WRITE_COMMAND : tlm::TLM_READ_COMMAND);
+        dma_tx.set_address(req.addr);
+        dma_tx.set_data_ptr(buf.data());
+        dma_tx.set_data_length(req.length);
+        dma_tx.set_streaming_width(req.length);
+        dma_master->b_transport(dma_tx, delay);
+
+        if (dma_tx.is_response_ok()) {
+            resp.status = USP_STATUS_OK;
+            resp.length = is_wr ? 0u : req.length;
+            resp.flags = is_wr ? 0u : (USP_FLAG_HAS_PAYLOAD | USP_FLAG_BURST64);
+            if (is_wr) reverse_dma_writes++;
+            else reverse_dma_reads++;
+            reverse_dma_bytes_total += req.length;
+        } else {
+            resp.status = USP_STATUS_BUS_ERR;
+            resp.length = 0u;
+            resp.flags = 0u;
+        }
+        resp.time_ps = sc_core::sc_time_stamp().value() + delay.value();
+        if (!sock_io_exact(fd, &resp, sizeof(resp), true)) return false;
+        if (!is_wr && resp.status == USP_STATUS_OK && resp.length > 0u) {
+            if (!sock_io_exact(fd, buf.data(), resp.length, true)) return false;
+        }
+        return true;
+    }
+
+    bool rpc_v2(uint16_t op, uint64_t addr, uint64_t data, uint32_t length, uint32_t flags,
+                const void *tx_payload, void *rx_payload, sc_core::sc_time &delay,
+                UspBusV2Frame &out_res) {
+        UspBusV2Frame req{};
+        req.magic = USP_BUS_V2_MAGIC;
+        req.seq = ++seq;
+        req.op = op;
+        req.status = USP_STATUS_OK;
+        req.length = length;
+        req.irq_mask = 0u;
+        req.flags = flags;
+        req.addr = addr;
+        req.data = data;
+        req.time_ps = sc_core::sc_time_stamp().value() + delay.value();
+
+        if (!sock_io_exact(fd, &req, sizeof(req), true)) return false;
+        if (tx_payload && length > 0u) {
+            if (!sock_io_exact(fd, const_cast<void *>(tx_payload), length, true)) return false;
+        }
+
+        // Full-duplex nested RPC pump: service reverse DMA requests until our response arrives.
+        for (;;) {
+            UspBusV2Frame msg{};
+            if (!sock_io_exact(fd, &msg, sizeof(msg), false)) return false;
+            if (msg.magic != USP_BUS_V2_MAGIC) return false;
+            if (msg.op == USP_OP_DMA_READ || msg.op == USP_OP_DMA_WRITE) {
+                if (!handle_reverse_dma(msg, delay)) return false;
+                continue;
+            }
+            if (msg.op == static_cast<uint16_t>(op | USP_OP_RESPONSE) && msg.seq == req.seq) {
+                if ((msg.flags & USP_FLAG_HAS_PAYLOAD) && msg.length > 0u) {
+                    if (msg.length > USP_BUS_V2_MAX_BURST_BYTES) return false;
+                    if (rx_payload) {
+                        if (!sock_io_exact(fd, rx_payload, msg.length, false)) return false;
+                    } else {
+                        std::vector<uint8_t> sink(msg.length);
+                        if (!sock_io_exact(fd, sink.data(), msg.length, false)) return false;
+                    }
+                }
+                out_res = msg;
+                irq = msg.irq_mask ? 1u : 0u;
+                socket_tx_count++;
+                return msg.status == USP_STATUS_OK;
+            }
+            return false;
+        }
+    }
+
+    void sync_quantum(uint64_t now_ps) override {
+        if (fd < 0) return;
+        sc_core::sc_time d = sc_core::SC_ZERO_TIME;
+        UspBusV2Frame res{};
+        if (rpc_v2(USP_OP_TIME_SYNC, now_ps, quantum_ps, 0u, USP_FLAG_QUANTUM_BARRIER,
+                   nullptr, nullptr, d, res)) {
+            quantum_syncs++;
+        }
+    }
+
+    void transport(tlm::tlm_generic_payload &tx, sc_core::sc_time &delay) {
+        const uint64_t off = tx.get_address();
+        const uint32_t len = tx.get_data_length();
+        UspBusV2Frame res{};
+        bool ok = false;
+        if (len >= 8u && (len % 8u) == 0u && len <= USP_BUS_V2_MAX_BURST_BYTES) {
+            if (len > 8u) {
+                if (tx.is_write()) {
+                    ok = rpc_v2(USP_OP_BURST_WRITE, off, 0ULL, len,
+                                USP_FLAG_HAS_PAYLOAD | USP_FLAG_BURST64,
+                                tx.get_data_ptr(), nullptr, delay, res);
+                } else {
+                    ok = rpc_v2(USP_OP_BURST_READ, off, 0ULL, len, USP_FLAG_BURST64,
+                                nullptr, tx.get_data_ptr(), delay, res);
+                }
+                if (ok) {
+                    burst64_count++;
+                    burst64_bytes_total += len;
+                }
+            } else {
+                uint64_t val64 = 0ULL;
+                std::memcpy(&val64, tx.get_data_ptr(), 8u);
+                ok = rpc_v2(tx.is_write() ? USP_OP_WRITE : USP_OP_READ, off, val64, 8u,
+                            USP_FLAG_BURST64, nullptr, nullptr, delay, res);
+                if (ok && !tx.is_write()) std::memcpy(tx.get_data_ptr(), &res.data, 8u);
+                if (ok) {
+                    burst64_count++;
+                    burst64_bytes_total += 8u;
+                }
+            }
+        } else if (len == 1u || len == 2u || len == 4u) {
+            uint64_t data = 0ULL;
+            std::memcpy(&data, tx.get_data_ptr(), len);
+            ok = rpc_v2(tx.is_write() ? USP_OP_WRITE : USP_OP_READ, off, data, len, 0u,
+                        nullptr, nullptr, delay, res);
+            if (ok && !tx.is_write()) std::memcpy(tx.get_data_ptr(), &res.data, len);
+        } else {
+            tx.set_response_status(tlm::TLM_BURST_ERROR_RESPONSE);
+            return;
+        }
+        if (!ok) {
+            tx.set_response_status(tx.is_write() ? tlm::TLM_COMMAND_ERROR_RESPONSE
+                                                 : tlm::TLM_ADDRESS_ERROR_RESPONSE);
+            return;
+        }
+        delay += sc_core::sc_time(tx_latency_ns, sc_core::SC_NS);
+        tx.set_response_status(tlm::TLM_OK_RESPONSE);
+    }
+};
+
+// --- Automatic Pin-Level Verilator AMBA AXI4-Lite Adapter (`aw/w/b/ar/r` valid-ready) ---
+// Drives any AXI4-Lite Verilator RTL directly without manual MMIO32 shims!
+template <typename VDut, typename Traits>
+struct VerilatorAxi4LiteAdapter : sc_core::sc_module, ComposedDevice {
+    tlm_utils::simple_target_socket<VerilatorAxi4LiteAdapter<VDut, Traits>> target;
+    VDut dut;
+    uint32_t irq = 0u;
+    uint64_t cycles = 0ULL;
+    uint64_t handshakes = 0ULL;
+    uint64_t wait_cycles = 0ULL;
+    uint64_t slverr_count = 0ULL;
+    uint32_t clk_period_ns = 4u;
+    uint32_t max_wait_cycles = 2048u;
+
+    explicit VerilatorAxi4LiteAdapter(sc_core::sc_module_name name, uint32_t period_ns = 4u)
+        : sc_module(name), target("target"), clk_period_ns(period_ns) {
+        target.register_b_transport(this, &VerilatorAxi4LiteAdapter::transport);
+        Traits::clear_inputs(dut);
+        Traits::set_clk(dut, 0);
+        Traits::set_rst(dut, Traits::kResetActiveLow ? 0 : 1);
+        tick();
+        tick();
+        Traits::set_rst(dut, Traits::kResetActiveLow ? 1 : 0);
+        tick();
+    }
+
+    uint32_t irq_level() const override { return irq; }
+    uint64_t rtl_cycles() const override { return cycles; }
+    uint64_t bus_handshakes() const override { return handshakes; }
+    const char *runtime_backend() const override { return "verilator-axi4-lite"; }
+
+    void tick() {
+        Traits::set_clk(dut, 0); dut.eval();
+        Traits::set_clk(dut, 1); dut.eval();
+        Traits::set_clk(dut, 0); dut.eval();
+        cycles++;
+        irq = Traits::get_irq(dut) ? 1u : 0u;
+    }
+
+    void sync_quantum(uint64_t /*time_ps*/) override {
+        for (int i = 0; i < 64 && !irq; ++i) tick();
+    }
+
+    void transport(tlm::tlm_generic_payload &tx, sc_core::sc_time &delay) {
+        const uint64_t off = tx.get_address();
+        const unsigned len = tx.get_data_length();
+        const unsigned bus_bytes = Traits::kDataBytes;
+        if (len == 0u || len > bus_bytes || (len != 1u && len != 2u && len != 4u && len != 8u)) {
+            tx.set_response_status(tlm::TLM_BURST_ERROR_RESPONSE);
+            return;
+        }
+        const uint64_t before_cycles = cycles;
+        uint8_t resp = 0u;
+        if (tx.is_write()) {
+            const uint64_t lane_shift = (off & (bus_bytes - 1u)) * 8u;
+            uint64_t raw = 0ULL;
+            std::memcpy(&raw, tx.get_data_ptr(), len);
+            uint64_t wdata = raw << lane_shift;
+            uint32_t strb = ((1u << len) - 1u) << static_cast<unsigned>(off & (bus_bytes - 1u));
+
+            Traits::set_aw(dut, 1u, off, 0u);
+            Traits::set_w(dut, 1u, wdata, strb);
+            Traits::set_bready(dut, 0u);
+            dut.eval();
+
+            bool aw_done = false, w_done = false;
+            uint32_t budget = 0u;
+            while ((!aw_done || !w_done) && budget < max_wait_cycles) {
+                const bool aw_hs = !aw_done && Traits::get_awready(dut);
+                const bool w_hs = !w_done && Traits::get_wready(dut);
+                tick();
+                budget++;
+                if (aw_hs) { aw_done = true; Traits::set_aw(dut, 0u, 0ULL, 0u); handshakes++; }
+                if (w_hs) { w_done = true; Traits::set_w(dut, 0u, 0ULL, 0u); handshakes++; }
+                if (!aw_hs && !w_hs) wait_cycles++;
+                dut.eval();
+            }
+            if (!aw_done || !w_done) {
+                Traits::clear_inputs(dut);
+                tx.set_response_status(tlm::TLM_GENERIC_ERROR_RESPONSE);
+                return;
+            }
+            Traits::set_bready(dut, 1u);
+            dut.eval();
+            while (!Traits::get_bvalid(dut) && budget < max_wait_cycles) {
+                tick();
+                budget++;
+                wait_cycles++;
+                dut.eval();
+            }
+            if (!Traits::get_bvalid(dut)) {
+                Traits::clear_inputs(dut);
+                tx.set_response_status(tlm::TLM_GENERIC_ERROR_RESPONSE);
+                return;
+            }
+            resp = Traits::get_bresp(dut);
+            tick();
+            handshakes++;
+            Traits::set_bready(dut, 0u);
+            dut.eval();
+        } else {
+            Traits::set_ar(dut, 1u, off, 0u);
+            Traits::set_rready(dut, 0u);
+            dut.eval();
+
+            bool ar_done = false;
+            uint32_t budget = 0u;
+            while (!ar_done && budget < max_wait_cycles) {
+                const bool ar_hs = Traits::get_arready(dut);
+                tick();
+                budget++;
+                if (ar_hs) { ar_done = true; Traits::set_ar(dut, 0u, 0ULL, 0u); handshakes++; }
+                else wait_cycles++;
+                dut.eval();
+            }
+            if (!ar_done) {
+                Traits::clear_inputs(dut);
+                tx.set_response_status(tlm::TLM_GENERIC_ERROR_RESPONSE);
+                return;
+            }
+            Traits::set_rready(dut, 1u);
+            dut.eval();
+            while (!Traits::get_rvalid(dut) && budget < max_wait_cycles) {
+                tick();
+                budget++;
+                wait_cycles++;
+                dut.eval();
+            }
+            if (!Traits::get_rvalid(dut)) {
+                Traits::clear_inputs(dut);
+                tx.set_response_status(tlm::TLM_GENERIC_ERROR_RESPONSE);
+                return;
+            }
+            const uint64_t rdata = Traits::get_rdata(dut);
+            resp = Traits::get_rresp(dut);
+            tick();
+            handshakes++;
+            Traits::set_rready(dut, 0u);
+            dut.eval();
+            const uint64_t lane_shift = (off & (bus_bytes - 1u)) * 8u;
+            uint64_t shifted = rdata >> lane_shift;
+            std::memcpy(tx.get_data_ptr(), &shifted, len);
+        }
+        const uint64_t dt = cycles - before_cycles;
+        delay += sc_core::sc_time(static_cast<double>(dt * clk_period_ns + 6u), sc_core::SC_NS);
+        if (resp != 0u) {
+            slverr_count++;
+            tx.set_response_status(tx.is_write() ? tlm::TLM_COMMAND_ERROR_RESPONSE
+                                                 : tlm::TLM_ADDRESS_ERROR_RESPONSE);
+            return;
+        }
+        tx.set_response_status(tlm::TLM_OK_RESPONSE);
+    }
+};
+
+// --- Automatic Pin-Level Verilator Full AMBA AXI4 Adapter (Chipyard/firtool 32/64-bit Burst) ---
+// Translates scalar AND multi-beat 64-bit TLM bursts directly into AMBA AXI4 INCR bursts
+// (`awid/awaddr/awlen/awsize/awburst`, `wdata/wstrb/wlast`, `bid/bresp`, `arid/arlen/arsize/arburst`,
+// `rid/rdata/rresp/rlast`) with full valid-ready flow control and wait-state handling!
+template <typename VDut, typename Traits>
+struct VerilatorAxi4FullAdapter : sc_core::sc_module, ComposedDevice {
+    tlm_utils::simple_target_socket<VerilatorAxi4FullAdapter<VDut, Traits>> target;
+    VDut dut;
+    uint32_t irq = 0u;
+    uint32_t next_id = 0u;
+    uint64_t cycles = 0ULL;
+    uint64_t handshakes = 0ULL;
+    uint64_t burst_ops = 0ULL;
+    uint64_t total_beats = 0ULL;
+    uint64_t wait_cycles = 0ULL;
+    uint64_t slverr_count = 0ULL;
+    uint32_t clk_period_ns = 4u;
+    uint32_t max_wait_cycles = 4096u;
+
+    explicit VerilatorAxi4FullAdapter(sc_core::sc_module_name name, uint32_t period_ns = 4u)
+        : sc_module(name), target("target"), clk_period_ns(period_ns) {
+        target.register_b_transport(this, &VerilatorAxi4FullAdapter::transport);
+        Traits::clear_inputs(dut);
+        Traits::set_clk(dut, 0);
+        Traits::set_rst(dut, Traits::kResetActiveLow ? 0 : 1);
+        tick();
+        tick();
+        Traits::set_rst(dut, Traits::kResetActiveLow ? 1 : 0);
+        tick();
+    }
+
+    uint32_t irq_level() const override { return irq; }
+    uint64_t rtl_cycles() const override { return cycles; }
+    uint64_t bus_handshakes() const override { return handshakes; }
+    uint64_t burst64_tx() const override { return burst_ops; }
+    const char *runtime_backend() const override { return "verilator-axi4-full"; }
+
+    static uint8_t size_code(uint32_t bytes) {
+        if (bytes >= 8u) return 3u;
+        if (bytes >= 4u) return 2u;
+        if (bytes >= 2u) return 1u;
+        return 0u;
+    }
+
+    void tick() {
+        Traits::set_clk(dut, 0); dut.eval();
+        Traits::set_clk(dut, 1); dut.eval();
+        Traits::set_clk(dut, 0); dut.eval();
+        cycles++;
+        irq = Traits::get_irq(dut) ? 1u : 0u;
+    }
+
+    void sync_quantum(uint64_t /*time_ps*/) override {
+        for (int i = 0; i < 64 && !irq; ++i) tick();
+    }
+
+    void transport(tlm::tlm_generic_payload &tx, sc_core::sc_time &delay) {
+        const uint64_t off = tx.get_address();
+        const uint32_t len = tx.get_data_length();
+        const uint32_t bus_bytes = Traits::kDataBytes;
+        if (len == 0u || len > USP_BUS_V2_MAX_BURST_BYTES) {
+            tx.set_response_status(tlm::TLM_BURST_ERROR_RESPONSE);
+            return;
+        }
+        const bool is_burst = len > bus_bytes;
+        if (is_burst && ((len % bus_bytes) != 0u || (off % bus_bytes) != 0u)) {
+            tx.set_response_status(tlm::TLM_BURST_ERROR_RESPONSE);
+            return;
+        }
+        const uint32_t num_beats = is_burst ? (len / bus_bytes) : 1u;
+        const uint32_t beat_bytes = is_burst ? bus_bytes : len;
+        const uint8_t axsize = size_code(beat_bytes);
+        const uint8_t axlen = static_cast<uint8_t>(num_beats - 1u);
+        const uint32_t tx_id = (++next_id) & Traits::kIdMask;
+        const uint64_t before_cycles = cycles;
+        uint8_t resp = 0u;
+        uint32_t budget = 0u;
+
+        if (tx.is_write()) {
+            Traits::set_aw(dut, 1u, off, tx_id, axlen, axsize, 1u /* INCR */);
+            Traits::set_bready(dut, 0u);
+            dut.eval();
+            bool aw_done = false;
+            while (!aw_done && budget < max_wait_cycles) {
+                const bool hs = Traits::get_awready(dut);
+                tick();
+                budget++;
+                if (hs) { aw_done = true; Traits::set_aw(dut, 0u, 0ULL, 0u, 0u, 0u, 0u); handshakes++; }
+                else wait_cycles++;
+                dut.eval();
+            }
+            if (!aw_done) {
+                Traits::clear_inputs(dut);
+                tx.set_response_status(tlm::TLM_GENERIC_ERROR_RESPONSE);
+                return;
+            }
+
+            for (uint32_t b = 0u; b < num_beats; ++b) {
+                const uint64_t beat_addr = off + static_cast<uint64_t>(b) * beat_bytes;
+                const uint32_t lane = static_cast<uint32_t>(beat_addr & (bus_bytes - 1u));
+                uint64_t raw = 0ULL;
+                std::memcpy(&raw, tx.get_data_ptr() + b * beat_bytes, beat_bytes);
+                const uint64_t wdata = raw << (lane * 8u);
+                const uint32_t strb =
+                    ((beat_bytes == 8u) ? 0xFFu : ((1u << beat_bytes) - 1u)) << lane;
+                const uint8_t wlast = (b + 1u == num_beats) ? 1u : 0u;
+                Traits::set_w(dut, 1u, wdata, strb, wlast);
+                dut.eval();
+                bool w_done = false;
+                while (!w_done && budget < max_wait_cycles) {
+                    const bool hs = Traits::get_wready(dut);
+                    tick();
+                    budget++;
+                    if (hs) { w_done = true; handshakes++; total_beats++; }
+                    else wait_cycles++;
+                    dut.eval();
+                }
+                if (!w_done) {
+                    Traits::clear_inputs(dut);
+                    tx.set_response_status(tlm::TLM_GENERIC_ERROR_RESPONSE);
+                    return;
+                }
+            }
+            Traits::set_w(dut, 0u, 0ULL, 0u, 0u);
+            Traits::set_bready(dut, 1u);
+            dut.eval();
+            while (!Traits::get_bvalid(dut) && budget < max_wait_cycles) {
+                tick();
+                budget++;
+                wait_cycles++;
+                dut.eval();
+            }
+            if (!Traits::get_bvalid(dut)) {
+                Traits::clear_inputs(dut);
+                tx.set_response_status(tlm::TLM_GENERIC_ERROR_RESPONSE);
+                return;
+            }
+            resp = Traits::get_bresp(dut);
+            const uint32_t bid = Traits::get_bid(dut) & Traits::kIdMask;
+            tick();
+            handshakes++;
+            Traits::set_bready(dut, 0u);
+            dut.eval();
+            if (Traits::kHasId && bid != tx_id) resp = 2u;
+        } else {
+            Traits::set_ar(dut, 1u, off, tx_id, axlen, axsize, 1u /* INCR */);
+            Traits::set_rready(dut, 0u);
+            dut.eval();
+            bool ar_done = false;
+            while (!ar_done && budget < max_wait_cycles) {
+                const bool hs = Traits::get_arready(dut);
+                tick();
+                budget++;
+                if (hs) { ar_done = true; Traits::set_ar(dut, 0u, 0ULL, 0u, 0u, 0u, 0u); handshakes++; }
+                else wait_cycles++;
+                dut.eval();
+            }
+            if (!ar_done) {
+                Traits::clear_inputs(dut);
+                tx.set_response_status(tlm::TLM_GENERIC_ERROR_RESPONSE);
+                return;
+            }
+
+            Traits::set_rready(dut, 1u);
+            dut.eval();
+            for (uint32_t b = 0u; b < num_beats; ++b) {
+                while (!Traits::get_rvalid(dut) && budget < max_wait_cycles) {
+                    tick();
+                    budget++;
+                    wait_cycles++;
+                    dut.eval();
+                }
+                if (!Traits::get_rvalid(dut)) {
+                    Traits::clear_inputs(dut);
+                    tx.set_response_status(tlm::TLM_GENERIC_ERROR_RESPONSE);
+                    return;
+                }
+                const uint64_t rdata = Traits::get_rdata(dut);
+                const uint8_t rresp = Traits::get_rresp(dut);
+                const uint32_t rid = Traits::get_rid(dut) & Traits::kIdMask;
+                const bool rlast = Traits::get_rlast(dut) != 0u;
+                tick();
+                handshakes++;
+                total_beats++;
+                if (rresp != 0u) resp = rresp;
+                if (Traits::kHasId && rid != tx_id) resp = 2u;
+                if (b + 1u == num_beats && !rlast) resp = 2u;
+
+                const uint64_t beat_addr = off + static_cast<uint64_t>(b) * beat_bytes;
+                const uint32_t lane = static_cast<uint32_t>(beat_addr & (bus_bytes - 1u));
+                uint64_t shifted = rdata >> (lane * 8u);
+                std::memcpy(tx.get_data_ptr() + b * beat_bytes, &shifted, beat_bytes);
+                dut.eval();
+            }
+            Traits::set_rready(dut, 0u);
+            dut.eval();
+        }
+        if (is_burst || len == 8u) burst_ops++;
+        const uint64_t dt = cycles - before_cycles;
+        delay += sc_core::sc_time(static_cast<double>(dt * clk_period_ns + 6u), sc_core::SC_NS);
+        if (resp != 0u) {
+            slverr_count++;
+            tx.set_response_status(tx.is_write() ? tlm::TLM_COMMAND_ERROR_RESPONSE
+                                                 : tlm::TLM_ADDRESS_ERROR_RESPONSE);
+            return;
+        }
+        tx.set_response_status(tlm::TLM_OK_RESPONSE);
+    }
+};
+
+// --- Automatic Pin-Level Verilator OpenTitan TL-UL Adapter (`a_valid/a_ready/d_valid/d_ready`) ---
+// Drives OpenTitan TileLink-UL RTL directly (no manual MMIO32 wrapper!), including:
+//   - A-channel PutFullData(0) / PutPartialData(1) / Get(4) valid-ready handshaking
+//   - Deliberate 1-cycle D-channel backpressure (`d_ready=0`) stability verification
+//   - Source ID echo checking, optional SECDED integrity, and `d_error` -> TLM fault mapping
+template <typename VDut, typename Traits>
+struct VerilatorTlulAdapter : sc_core::sc_module, ComposedDevice {
+    tlm_utils::simple_target_socket<VerilatorTlulAdapter<VDut, Traits>> target;
+    VDut dut;
+    uint32_t irq = 0u;
+    uint32_t next_source = 0u;
+    uint64_t cycles = 0ULL;
+    uint64_t handshakes = 0ULL;
+    uint64_t wait_cycles = 0ULL;
+    uint64_t backpressure_checks = 0ULL;
+    uint64_t d_error_count = 0ULL;
+    uint32_t clk_period_ns = 4u;
+    uint32_t max_wait_cycles = 2048u;
+
+    explicit VerilatorTlulAdapter(sc_core::sc_module_name name, uint32_t period_ns = 4u)
+        : sc_module(name), target("target"), clk_period_ns(period_ns) {
+        target.register_b_transport(this, &VerilatorTlulAdapter::transport);
+        Traits::clear_inputs(dut);
+        Traits::set_clk(dut, 0);
+        Traits::set_rst(dut, Traits::kResetActiveLow ? 0 : 1);
+        tick();
+        tick();
+        Traits::set_rst(dut, Traits::kResetActiveLow ? 1 : 0);
+        tick();
+    }
+
+    uint32_t irq_level() const override { return irq; }
+    uint64_t rtl_cycles() const override { return cycles; }
+    uint64_t bus_handshakes() const override { return handshakes; }
+    const char *runtime_backend() const override { return "verilator-tl-ul"; }
+
+    static uint8_t size_code(uint32_t bytes) {
+        if (bytes >= 8u) return 3u;
+        if (bytes >= 4u) return 2u;
+        if (bytes >= 2u) return 1u;
+        return 0u;
+    }
+
+    void tick() {
+        Traits::set_clk(dut, 0); dut.eval();
+        Traits::set_clk(dut, 1); dut.eval();
+        Traits::set_clk(dut, 0); dut.eval();
+        cycles++;
+        irq = Traits::get_irq(dut) ? 1u : 0u;
+    }
+
+    void sync_quantum(uint64_t /*time_ps*/) override {
+        for (int i = 0; i < 64 && !irq; ++i) tick();
+    }
+
+    void transport(tlm::tlm_generic_payload &tx, sc_core::sc_time &delay) {
+        const uint64_t off = tx.get_address();
+        const uint32_t len = tx.get_data_length();
+        const uint32_t bus_bytes = Traits::kDataBytes;
+        if (len == 0u || len > bus_bytes || (len != 1u && len != 2u && len != 4u && len != 8u)) {
+            tx.set_response_status(tlm::TLM_BURST_ERROR_RESPONSE);
+            return;
+        }
+        const uint64_t before_cycles = cycles;
+        const uint32_t lane = static_cast<uint32_t>(off & (bus_bytes - 1u));
+        const uint32_t full_mask = (bus_bytes == 8u) ? 0xFFu : 0x0Fu;
+        const uint32_t mask = (((len == 8u) ? 0xFFu : ((1u << len) - 1u)) << lane) & full_mask;
+        const uint8_t opcode =
+            tx.is_write() ? ((mask == full_mask) ? 0u /* PutFullData */ : 1u /* PutPartialData */)
+                          : 4u /* Get */;
+        const uint32_t src_id = (++next_source) & Traits::kSourceMask;
+        uint64_t raw = 0ULL;
+        if (tx.is_write()) std::memcpy(&raw, tx.get_data_ptr(), len);
+        const uint64_t adata = raw << (lane * 8u);
+
+        Traits::set_a(dut, 1u, opcode, 0u, size_code(len), src_id, off, mask, adata);
+        Traits::set_dready(dut, 0u);
+        dut.eval();
+
+        bool a_done = false;
+        uint32_t budget = 0u;
+        while (!a_done && budget < max_wait_cycles) {
+            const bool hs = Traits::get_aready(dut);
+            tick();
+            budget++;
+            if (hs) {
+                a_done = true;
+                Traits::set_a(dut, 0u, 0u, 0u, 0u, 0u, 0ULL, 0u, 0ULL);
+                handshakes++;
+            } else {
+                wait_cycles++;
+            }
+            dut.eval();
+        }
+        if (!a_done) {
+            Traits::clear_inputs(dut);
+            tx.set_response_status(tlm::TLM_GENERIC_ERROR_RESPONSE);
+            return;
+        }
+
+        // Wait for D-channel response with d_ready=0 first, then verify stability under backpressure!
+        while (!Traits::get_dvalid(dut) && budget < max_wait_cycles) {
+            tick();
+            budget++;
+            wait_cycles++;
+            dut.eval();
+        }
+        if (!Traits::get_dvalid(dut)) {
+            Traits::clear_inputs(dut);
+            tx.set_response_status(tlm::TLM_GENERIC_ERROR_RESPONSE);
+            return;
+        }
+        const uint64_t d_data_0 = Traits::get_ddata(dut);
+        const uint8_t d_err_0 = Traits::get_derror(dut);
+        const uint32_t d_src_0 = Traits::get_dsource(dut) & Traits::kSourceMask;
+
+        // Deliberate 1-cycle D-channel backpressure check (OpenTitan TL-UL stability invariant)
+        tick();
+        dut.eval();
+        backpressure_checks++;
+        const bool bp_stable = Traits::get_dvalid(dut) && Traits::get_ddata(dut) == d_data_0 &&
+                               Traits::get_derror(dut) == d_err_0 &&
+                               (Traits::get_dsource(dut) & Traits::kSourceMask) == d_src_0;
+
+        Traits::set_dready(dut, 1u);
+        dut.eval();
+        tick();
+        handshakes++;
+        Traits::set_dready(dut, 0u);
+        dut.eval();
+
+        if (!tx.is_write()) {
+            uint64_t shifted = d_data_0 >> (lane * 8u);
+            std::memcpy(tx.get_data_ptr(), &shifted, len);
+        }
+
+        const uint64_t dt = cycles - before_cycles;
+        delay += sc_core::sc_time(static_cast<double>(dt * clk_period_ns + 6u), sc_core::SC_NS);
+
+        if (!bp_stable || d_err_0 != 0u || (Traits::kHasSource && d_src_0 != src_id)) {
+            d_error_count++;
+            tx.set_response_status(tx.is_write() ? tlm::TLM_COMMAND_ERROR_RESPONSE
+                                                 : tlm::TLM_ADDRESS_ERROR_RESPONSE);
+            return;
+        }
         tx.set_response_status(tlm::TLM_OK_RESPONSE);
     }
 };
@@ -1393,6 +2203,8 @@ struct MultiFabricInterconnect : sc_core::sc_module {
     std::vector<RouteEntry> routes;
     uint32_t cdc_latency_ns = 12u;
     uint64_t total_transactions = 0, mmio_transactions = 0, cdc_crossings = 0;
+    uint64_t burst64_transactions = 0, burst64_bytes = 0;
+    uint64_t dma_transactions = 0, dma_bytes = 0;
     L2CacheBase *l2 = nullptr;
     PlicTlm *plic = nullptr;
     VcdWriter *vcd = nullptr;
@@ -1406,6 +2218,7 @@ struct MultiFabricInterconnect : sc_core::sc_module {
 
     void b_transport(int master_id, tlm::tlm_generic_payload &tx, sc_core::sc_time &delay) {
         const uint64_t addr = tx.get_address();
+        const unsigned len = tx.get_data_length();
         const int m_clock = (master_id >= 0 && static_cast<size_t>(master_id) < masters.size())
                                 ? masters[static_cast<size_t>(master_id)].home_clock
                                 : 0;
@@ -1423,6 +2236,14 @@ struct MultiFabricInterconnect : sc_core::sc_module {
             if (addr >= r.base && addr < r.base + r.size) {
                 total_transactions++;
                 r.hits++;
+                if (len >= 8u && (len % 8u) == 0u) {
+                    burst64_transactions++;
+                    burst64_bytes += len;
+                }
+                if (is_dma) {
+                    dma_transactions++;
+                    dma_bytes += len;
+                }
                 uint32_t lat = 0u;
                 const char *fname = "fabric";
                 if (r.fabric_id >= 0 && static_cast<size_t>(r.fabric_id) < fabrics.size()) {
@@ -1437,7 +2258,10 @@ struct MultiFabricInterconnect : sc_core::sc_module {
                 }
                 bool l2_hit = true;
                 if (r.is_ram && l2) {
-                    l2_hit = l2->lookup(addr, is_dma, tx.is_write());
+                    const uint32_t beats = std::max(1u, (len + 7u) / 8u);
+                    for (uint32_t b = 0u; b < beats; ++b) {
+                        l2_hit = l2->lookup(addr + static_cast<uint64_t>(b) * 8ULL, is_dma, tx.is_write());
+                    }
                     lat += l2_hit ? 4u : 36u;
                 }
                 delay += sc_core::sc_time(lat, sc_core::SC_NS);
@@ -1450,14 +2274,15 @@ struct MultiFabricInterconnect : sc_core::sc_module {
                 if (r.log_mmio || is_dma || crossed_cdc) {
                     if (r.log_mmio || is_dma) mmio_transactions++;
                     const uint64_t now_ps = sc_core::sc_time_stamp().value();
-                    if (r.log_mmio && mmio_transactions <= 4000u) {
+                    if ((r.log_mmio || is_dma) && mmio_transactions <= 4000u) {
                         uint32_t sample = 0;
-                        const unsigned clen = tx.get_data_length() < 4u ? tx.get_data_length() : 4u;
+                        const unsigned clen = len < 4u ? len : 4u;
                         std::memcpy(&sample, tx.get_data_ptr(), clen);
                         trace << "{\"master\":\"" << m_name << "\",\"target\":\"" << r.name
                               << "\",\"fabric\":\"" << fname << "\",\"cdc\":"
                               << (crossed_cdc ? "true" : "false") << ",\"addr\":" << addr
-                              << ",\"offset\":" << off << ",\"op\":\"" << (tx.is_write() ? "W" : "R")
+                              << ",\"offset\":" << off << ",\"len\":" << len
+                              << ",\"op\":\"" << (tx.is_write() ? "W" : "R")
                               << "\",\"value\":" << sample << ",\"status\":\""
                               << (tx.is_response_ok() ? "OK" : "ERROR")
                               << "\",\"systemc_time_ps\":" << now_ps << "}\n";
@@ -1794,6 +2619,251 @@ struct Rv64CpuMaster : sc_core::sc_module {
     }
 };
 
+// --- LIVE QEMU (`qemu-system-riscv64` TCG / KVM) Direct CPU Master for MultiFabricInterconnect ---
+// Accepts `usp-bus-v2` frames over AF_UNIX from stock qemu-system-riscv64 (VirtIO-MMIO Console +
+// PMP trap-and-emulate + shared mmap RAM), routes EVERY MMIO / 64-bit burst transaction directly
+// through `MultiFabricInterconnect` -> Verilator RTL / live plugins, and synchronizes quantum
+// time across QEMU <-> SystemC <-> `usp-bus-v2` plugins!
+struct QemuCpuMaster : sc_core::sc_module {
+    tlm_utils::simple_initiator_socket<QemuCpuMaster> bus;
+    std::string sock_path;
+    int server_fd = -1;
+    int client_fd = -1;
+    uint64_t quantum_ns = 100000ULL;
+    uint64_t instructions = 0ULL;
+    uint64_t traps_taken = 0ULL;
+    uint64_t mmio_ops = 0ULL;
+    uint64_t burst64_ops = 0ULL;
+    uint64_t burst64_bytes = 0ULL;
+    uint64_t quantum_sync_barriers = 0ULL;
+    uint64_t qemu_time_ps = 0ULL;
+    uint64_t max_time_drift_ps = 0ULL;
+    uint64_t ram_base = 0ULL;
+    bool timed_out = false;
+    bool connected = false;
+
+    FinisherTlm *finisher = nullptr;
+    ClintTlm *clint = nullptr;
+    PlicTlm *plic = nullptr;
+    std::vector<ComposedDevice *> quantum_peers;
+
+    SC_HAS_PROCESS(QemuCpuMaster);
+
+    QemuCpuMaster(sc_core::sc_module_name name, const std::string &socket_path,
+                  uint64_t q_ns = 100000ULL)
+        : sc_module(name), bus("bus"), sock_path(socket_path), quantum_ns(q_ns) {
+        SC_THREAD(run);
+        sockaddr_un addr{};
+        addr.sun_family = AF_UNIX;
+        if (sock_path.empty() || sock_path.size() >= sizeof(addr.sun_path)) {
+            std::cerr << "QemuCpuMaster invalid AF_UNIX socket path: " << sock_path << "\n";
+            std::exit(2);
+        }
+        unlink(sock_path.c_str());
+        server_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+        if (server_fd < 0) {
+            std::cerr << "QemuCpuMaster socket() failed\n";
+            std::exit(2);
+        }
+        std::strcpy(addr.sun_path, sock_path.c_str());
+        if (bind(server_fd, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) != 0 ||
+            listen(server_fd, 1) != 0) {
+            std::cerr << "QemuCpuMaster bind/listen failed on " << sock_path << "\n";
+            close(server_fd);
+            std::exit(2);
+        }
+        timeval tv{20, 0};
+        setsockopt(server_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    }
+
+    ~QemuCpuMaster() override {
+        if (client_fd >= 0) close(client_fd);
+        if (server_fd >= 0) close(server_fd);
+        if (!sock_path.empty()) unlink(sock_path.c_str());
+    }
+
+    uint32_t pending_plic_mask() const {
+        if (!plic) return 0u;
+        uint32_t id = plic->highest_pending_irq();
+        return (id != 0u) ? (1u << id) : 0u;
+    }
+
+    void advance_to_quantum(uint64_t peer_ps, bool notify_peers) {
+        const uint64_t now_ps = sc_core::sc_time_stamp().value();
+        const uint64_t drift = (peer_ps > now_ps) ? (peer_ps - now_ps) : (now_ps - peer_ps);
+        if (drift > max_time_drift_ps) max_time_drift_ps = drift;
+        if (peer_ps > now_ps) {
+            wait(sc_core::sc_time(static_cast<double>(peer_ps - now_ps), sc_core::SC_PS));
+        }
+        qemu_time_ps = std::max(qemu_time_ps, peer_ps);
+        if (notify_peers) {
+            const uint64_t synced_ps = sc_core::sc_time_stamp().value();
+            for (auto *peer : quantum_peers) {
+                if (peer) peer->sync_quantum(synced_ps);
+            }
+        }
+    }
+
+    void run() {
+        client_fd = accept(server_fd, nullptr, nullptr);
+        if (client_fd < 0) {
+            std::cerr << "QemuCpuMaster timed out waiting for qemu-system-riscv64 connection\n";
+            timed_out = true;
+            sc_core::sc_stop();
+            return;
+        }
+        connected = true;
+        timeval tv{30, 0};
+        setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+        setsockopt(client_fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+
+        std::vector<uint8_t> buf(USP_BUS_V2_MAX_BURST_BYTES, 0u);
+        for (;;) {
+            UspBusV2Frame req{};
+            if (!sock_io_exact(client_fd, &req, sizeof(req), false)) {
+                break;
+            }
+            if (req.magic != USP_BUS_V2_MAGIC) {
+                std::cerr << "QemuCpuMaster protocol magic mismatch\n";
+                break;
+            }
+            if ((req.flags & USP_FLAG_HAS_PAYLOAD) && req.length > 0u) {
+                if (req.length > USP_BUS_V2_MAX_BURST_BYTES ||
+                    !sock_io_exact(client_fd, buf.data(), req.length, false)) {
+                    break;
+                }
+            }
+
+            UspBusV2Frame res{};
+            res.magic = USP_BUS_V2_MAGIC;
+            res.seq = req.seq;
+            res.op = static_cast<uint16_t>(req.op | USP_OP_RESPONSE);
+            res.status = USP_STATUS_OK;
+            res.addr = req.addr;
+            bool send_payload = false;
+
+            if (req.op == USP_OP_RESET) {
+                ram_base = req.addr;
+                if (ram_base != 0ULL) {
+                    uint32_t probe_word = 0u;
+                    tlm::tlm_generic_payload ptx;
+                    ptx.set_command(tlm::TLM_READ_COMMAND);
+                    ptx.set_address(ram_base);
+                    ptx.set_data_ptr(reinterpret_cast<unsigned char *>(&probe_word));
+                    ptx.set_data_length(4u);
+                    ptx.set_streaming_width(4u);
+                    sc_core::sc_time pdelay = sc_core::SC_ZERO_TIME;
+                    bus->b_transport(ptx, pdelay);
+                    if (pdelay > sc_core::SC_ZERO_TIME) wait(pdelay);
+                }
+                res.data = USP_CAP_ALL;
+                res.time_ps = quantum_ns * 1000ULL;  // Inform QEMU bridge of configured quantum
+                res.irq_mask = pending_plic_mask();
+            } else if (req.op == USP_OP_TIME_SYNC) {
+                if (req.addr > instructions) instructions = req.addr;
+                quantum_sync_barriers++;
+                advance_to_quantum(req.time_ps, true);
+                if (ram_base != 0ULL && !(finisher && finisher->halted)) {
+                    uint32_t probe_word = 0u;
+                    tlm::tlm_generic_payload ptx;
+                    ptx.set_command(tlm::TLM_READ_COMMAND);
+                    ptx.set_address(ram_base + ((quantum_sync_barriers & 1ULL) ? 4ULL : 0ULL));
+                    ptx.set_data_ptr(reinterpret_cast<unsigned char *>(&probe_word));
+                    ptx.set_data_length(4u);
+                    ptx.set_streaming_width(4u);
+                    sc_core::sc_time pdelay = sc_core::SC_ZERO_TIME;
+                    bus->b_transport(ptx, pdelay);
+                    if (pdelay > sc_core::SC_ZERO_TIME) wait(pdelay);
+                }
+                res.data = sc_core::sc_time_stamp().value();
+                res.time_ps = sc_core::sc_time_stamp().value();
+                res.irq_mask = pending_plic_mask();
+                if (finisher && finisher->halted) {
+                    res.status = USP_STATUS_OK;
+                    sock_io_exact(client_fd, &res, sizeof(res), true);
+                    break;
+                }
+            } else if (req.op == USP_OP_READ || req.op == USP_OP_WRITE) {
+                const bool is_wr = (req.op == USP_OP_WRITE);
+                const uint32_t len = req.length;
+                if (len != 1u && len != 2u && len != 4u && len != 8u) {
+                    res.status = USP_STATUS_CMD_ERR;
+                } else {
+                    uint64_t val = is_wr ? req.data : 0ULL;
+                    tlm::tlm_generic_payload tx;
+                    tx.set_command(is_wr ? tlm::TLM_WRITE_COMMAND : tlm::TLM_READ_COMMAND);
+                    tx.set_address(req.addr);
+                    tx.set_data_ptr(reinterpret_cast<unsigned char *>(&val));
+                    tx.set_data_length(len);
+                    tx.set_streaming_width(len);
+                    sc_core::sc_time delay = sc_core::SC_ZERO_TIME;
+                    bus->b_transport(tx, delay);
+                    if (delay > sc_core::SC_ZERO_TIME) wait(delay);
+                    mmio_ops++;
+                    if (tx.is_response_ok()) {
+                        res.status = USP_STATUS_OK;
+                        res.data = is_wr ? 0ULL : val;
+                    } else {
+                        res.status = USP_STATUS_BUS_ERR;
+                    }
+                }
+                if (req.time_ps > qemu_time_ps) qemu_time_ps = req.time_ps;
+                res.time_ps = sc_core::sc_time_stamp().value();
+                res.irq_mask = pending_plic_mask();
+                if (finisher && finisher->halted) {
+                    res.status = USP_STATUS_HALTED;
+                    res.data = static_cast<uint64_t>(finisher->exit_code);
+                }
+            } else if (req.op == USP_OP_BURST_READ || req.op == USP_OP_BURST_WRITE) {
+                const bool is_wr = (req.op == USP_OP_BURST_WRITE);
+                const uint32_t len = req.length;
+                if (len == 0u || (len % 8u) != 0u || len > USP_BUS_V2_MAX_BURST_BYTES) {
+                    res.status = USP_STATUS_CMD_ERR;
+                } else {
+                    tlm::tlm_generic_payload tx;
+                    tx.set_command(is_wr ? tlm::TLM_WRITE_COMMAND : tlm::TLM_READ_COMMAND);
+                    tx.set_address(req.addr);
+                    tx.set_data_ptr(buf.data());
+                    tx.set_data_length(len);
+                    tx.set_streaming_width(len);
+                    sc_core::sc_time delay = sc_core::SC_ZERO_TIME;
+                    bus->b_transport(tx, delay);
+                    if (delay > sc_core::SC_ZERO_TIME) wait(delay);
+                    if (tx.is_response_ok()) {
+                        burst64_ops++;
+                        burst64_bytes += len;
+                        res.status = USP_STATUS_OK;
+                        if (!is_wr) {
+                            res.length = len;
+                            res.flags = USP_FLAG_HAS_PAYLOAD | USP_FLAG_BURST64;
+                            send_payload = true;
+                        }
+                    } else {
+                        res.status = USP_STATUS_BUS_ERR;
+                    }
+                }
+                if (req.time_ps > qemu_time_ps) qemu_time_ps = req.time_ps;
+                res.time_ps = sc_core::sc_time_stamp().value();
+                res.irq_mask = pending_plic_mask();
+            } else {
+                res.status = USP_STATUS_CMD_ERR;
+                res.time_ps = sc_core::sc_time_stamp().value();
+            }
+
+            if (!sock_io_exact(client_fd, &res, sizeof(res), true)) break;
+            if (send_payload && res.length > 0u) {
+                if (!sock_io_exact(client_fd, buf.data(), res.length, true)) break;
+            }
+            if (finisher && finisher->halted && res.status == USP_STATUS_HALTED) {
+                // Allow QEMU one final USP_OP_TIME_SYNC carrying exact final minstret.
+                continue;
+            }
+        }
+        traps_taken = plic ? plic->claims : 0ULL;
+        sc_core::sc_stop();
+    }
+};
+
 inline bool load_elf64(const std::string &path, TlmMemory &dram, uint64_t dram_base,
                        uint64_t &entry_out) {
     std::ifstream in(path, std::ios::binary);
@@ -1813,11 +2883,11 @@ inline bool load_elf64(const std::string &path, TlmMemory &dram, uint64_t dram_b
         const uint64_t p_paddr = load_le64(data.data() + off + 24);
         const uint64_t p_filesz = load_le64(data.data() + off + 32);
         const uint64_t p_memsz = load_le64(data.data() + off + 40);
-        if (p_paddr < dram_base || (p_paddr - dram_base) + p_memsz > dram.mem.size() ||
+        if (p_paddr < dram_base || (p_paddr - dram_base) + p_memsz > dram.byte_size() ||
             p_offset + p_filesz > data.size()) return false;
         const uint64_t dst = p_paddr - dram_base;
-        std::memcpy(dram.mem.data() + dst, data.data() + p_offset, p_filesz);
-        if (p_memsz > p_filesz) std::memset(dram.mem.data() + dst + p_filesz, 0, p_memsz - p_filesz);
+        std::memcpy(dram.raw_data() + dst, data.data() + p_offset, p_filesz);
+        if (p_memsz > p_filesz) std::memset(dram.raw_data() + dst + p_filesz, 0, p_memsz - p_filesz);
     }
     return true;
 }

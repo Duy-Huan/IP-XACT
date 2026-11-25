@@ -1,0 +1,248 @@
+{
+  "contract": "multiplatform-soc-1",
+  "coverage": {
+    "bins": {
+      "all_fabrics_active": true,
+      "all_firmware_markers_passed": true,
+      "cdc_clock_domain_crossings_verified": true,
+      "l2_cache_hits_misses_snoops": true,
+      "live_plugin_dma_burst_v2_0_ipc_ok": true,
+      "live_plugin_polyphase_v1_0_ipc_ok": true,
+      "multi_master_bus_arbitration": true,
+      "negative_guest_failure_enforced": true,
+      "plugin_v2_dma_burst_v2_0_burst64_ok": true,
+      "plugin_v2_dma_burst_v2_0_quantum_sync_ok": true,
+      "plugin_v2_dma_burst_v2_0_reverse_dma_ok": true,
+      "qemu_cpu_master_active": true,
+      "quantum_time_sync_verified": true,
+      "rtl_axi4_lite_crc32_0_active": true,
+      "rtl_chipyard_gcd_0_active": true,
+      "rtl_l2_cache_512k_active": true,
+      "rtl_opentitan_gpio_0_active": true,
+      "rtl_pin_axi4_lite_crc32_0_axi4_lite_handshakes": true,
+      "rtl_pin_chipyard_gcd_0_axi4_handshakes": true,
+      "rtl_pin_opentitan_gpio_0_tl_ul_handshakes": true,
+      "vcd_waveform_captured": true
+    },
+    "bins_hit": 21,
+    "bins_total": 21,
+    "contract": "usp-composed-coverage-1",
+    "coverage_percent": 100.0,
+    "status": "PASSED"
+  },
+  "cpu_master_engine": "qemu",
+  "created_utc": "2026-11-25T04:42:03.792951+00:00",
+  "design": "UspNextGen",
+  "execution_mode": "qemu-tcg-cpu-master-systemc-verilator-and-usp-bus-v2",
+  "exports": {
+    "binding_lock_json": "948623b973c56b02a1ee9e77b5b048083341c2b76b8014f94a666e18209f94ee",
+    "chipyard_scala": "afe6257489991c6baaf9301a93fffe75e90cab486898c2c424e9a2d4ba7132a1",
+    "gem5_system_py": "be6333be922a2df8d1e3a83b5d78710f0a5c6a26f77e25fbfa43ed071fbca690",
+    "generated_soc_top_cpp": "7eb6ef3d02b8d14fce0a6aeb6a2e44e1b3ed25816e6b1e7d4fde56c03d07fd0c",
+    "ipxact_design_xml": "f9987c9363f47ab881cfe387b8ab34be3d54496f556075dcf20dab4681bb451b",
+    "link_ld": "8eaad5286f2336d90370896c77ba0d1084d9dca1c791fd48792f64f82a3d25e5",
+    "link_qemu_ld": "33bea875f58b61e262bfdbd47b136e65c5c24837b13ac993657a53d518aa2dcc",
+    "qemu_dtb_compiled": true,
+    "qemu_dts": "5771738f9609294e049a24abfd2aca160e6faf54a3ed035878fff7aea329f6ff",
+    "soc_map_h": "c6f463c16444ee0c639d20af5d7a2d5502b27c18f7cef6b5d55b7033917318c5"
+  },
+  "live_plugins": {
+    "dma_burst_v2_0": {
+      "status": "PASSED",
+      "trace_sha256": "e207de2a91c3a15e04dcfa152f64dba8fd64bda3ad0324fafcce7661ca8cebae",
+      "tx_count": 285
+    },
+    "polyphase_v1_0": {
+      "status": "PASSED",
+      "trace_sha256": "26d7af288dbebb1ce2f5730cd6af79dc4b49cdd84221a96217cc5f5b3bfe8cbc",
+      "tx_count": 6
+    }
+  },
+  "negative_run": {
+    "expected_failure_detected": true,
+    "returncode": 1,
+    "status": "FAILED"
+  },
+  "platform_version": "0.3.0a5",
+  "positive_run": {
+    "checks": {
+      "NEXTGEN_AXI4_FULL_GCD_BURST_OK": true,
+      "NEXTGEN_AXI4_LITE_CRC32_OK": true,
+      "NEXTGEN_L2_SNOOP_OK": true,
+      "NEXTGEN_OPENTITAN_TLUL_GPIO_OK": true,
+      "NEXTGEN_QEMU_WORKLOAD_OK": true,
+      "NEXTGEN_USP_BUS_V2_DMA_BURST_SYNC_OK": true,
+      "NEXTGEN_USP_MMIO32_V1_COMPAT_OK": true,
+      "USP_NEXTGEN_PASS": true,
+      "coverage_100_percent": true,
+      "exit_zero": true,
+      "negative_failure_detected": true
+    },
+    "console_output": "USP NextGen Boot: QEMU CPU Master + usp-bus-v2 + AXI4/AXI4-Lite/TL-UL RTL\nWorkload acc=23304 sync_ps=26802617000\nNEXTGEN_QEMU_WORKLOAD_OK\nChipyard AXI4 Full GCD(1071,462)=21 8x64b INCR burst verified\nNEXTGEN_AXI4_FULL_GCD_BURST_OK\nAXI4-Lite CRC32('123456789')=0xCBF43926\nNEXTGEN_AXI4_LITE_CRC32_OK\nOpenTitan TL-UL GPIO DATA_IN=0x00A50055 irq_cnt=1\nNEXTGEN_OPENTITAN_TLUL_GPIO_OK\nusp-bus-v2 Reverse DMA bytes=256 quantum_syncs=271\nNEXTGEN_USP_BUS_V2_DMA_BURST_SYNC_OK\nusp-mmio32-v1 Polyphase tap_ck=1024 out=1\nNEXTGEN_USP_MMIO32_V1_COMPAT_OK\nL2$ RTL hits=300 misses=4 dma_snoops=32\nNEXTGEN_L2_SNOOP_OK\nUSP_NEXTGEN_PASS\n",
+    "returncode": 0,
+    "summary": {
+      "burst64_bytes": 960,
+      "burst64_transactions": 16,
+      "bus_handshakes": {
+        "axi4_lite_crc32_0": 22,
+        "boot_rom": 0,
+        "chipyard_gcd_0": 35,
+        "dma_burst_v2_0": 0,
+        "l2_cache_512k": 0,
+        "main_sram_8m": 0,
+        "opentitan_gpio_0": 14,
+        "polyphase_v1_0": 0,
+        "sim_finisher": 0,
+        "sys_clint": 0,
+        "sys_plic": 0,
+        "uart_console_0": 0
+      },
+      "cdc_crossings": 1257,
+      "cpu_master": "qemu",
+      "design": "UspNextGen",
+      "device_backends": {
+        "axi4_lite_crc32_0": "verilator-axi4-lite",
+        "boot_rom": "systemc-tlm",
+        "chipyard_gcd_0": "verilator-axi4-full",
+        "dma_burst_v2_0": "usp-bus-v2-live-plugin",
+        "l2_cache_512k": "verilator-rtl",
+        "main_sram_8m": "systemc-tlm",
+        "opentitan_gpio_0": "verilator-tl-ul",
+        "polyphase_v1_0": "usp-mmio32-v1-live-plugin",
+        "sim_finisher": "systemc-tlm",
+        "sys_clint": "systemc-tlm",
+        "sys_plic": "systemc-tlm",
+        "uart_console_0": "systemc-tlm"
+      },
+      "device_burst64_tx": {
+        "axi4_lite_crc32_0": 0,
+        "boot_rom": 0,
+        "chipyard_gcd_0": 6,
+        "dma_burst_v2_0": 6,
+        "l2_cache_512k": 0,
+        "main_sram_8m": 0,
+        "opentitan_gpio_0": 0,
+        "polyphase_v1_0": 0,
+        "sim_finisher": 0,
+        "sys_clint": 0,
+        "sys_plic": 0,
+        "uart_console_0": 0
+      },
+      "device_hits": {
+        "axi4_lite_crc32_0": 8,
+        "boot_rom": 0,
+        "chipyard_gcd_0": 8,
+        "dma_burst_v2_0": 11,
+        "l2_cache_512k": 3,
+        "main_sram_8m": 276,
+        "opentitan_gpio_0": 7,
+        "polyphase_v1_0": 5,
+        "sim_finisher": 1,
+        "sys_clint": 0,
+        "sys_plic": 14,
+        "uart_console_0": 1237
+      },
+      "device_quantum_syncs": {
+        "axi4_lite_crc32_0": 0,
+        "boot_rom": 0,
+        "chipyard_gcd_0": 0,
+        "dma_burst_v2_0": 272,
+        "l2_cache_512k": 0,
+        "main_sram_8m": 0,
+        "opentitan_gpio_0": 0,
+        "polyphase_v1_0": 0,
+        "sim_finisher": 0,
+        "sys_clint": 0,
+        "sys_plic": 0,
+        "uart_console_0": 0
+      },
+      "device_reverse_dma_bytes": {
+        "axi4_lite_crc32_0": 0,
+        "boot_rom": 0,
+        "chipyard_gcd_0": 0,
+        "dma_burst_v2_0": 256,
+        "l2_cache_512k": 0,
+        "main_sram_8m": 0,
+        "opentitan_gpio_0": 0,
+        "polyphase_v1_0": 0,
+        "sim_finisher": 0,
+        "sys_clint": 0,
+        "sys_plic": 0,
+        "uart_console_0": 0
+      },
+      "exit_code": 0,
+      "fabric_hits": {
+        "axi4_full_xbar": 19,
+        "tilelink_xbar": 294,
+        "tlul_periph_xbar": 1257
+      },
+      "halted": true,
+      "instructions_executed": 3493318,
+      "l2_dma_snoops": 32,
+      "l2_hits": 300,
+      "l2_misses": 4,
+      "master_hits": {
+        "dma_burst_v2_0_dma": 2,
+        "qemu_rv64_cpu_0": 1568
+      },
+      "max_time_drift_ps": 461752000,
+      "mmio_transactions": 1296,
+      "mode": "hybrid-rtl-plugin",
+      "qemu_time_ps": 27933801000,
+      "quantum_ns": 100000,
+      "quantum_sync_barriers": 272,
+      "reverse_dma_bytes": 256,
+      "rtl_cycles": {
+        "axi4_lite_crc32_0": 17435,
+        "boot_rom": 0,
+        "chipyard_gcd_0": 17402,
+        "dma_burst_v2_0": 0,
+        "l2_cache_512k": 340,
+        "main_sram_8m": 0,
+        "opentitan_gpio_0": 17439,
+        "polyphase_v1_0": 0,
+        "sim_finisher": 0,
+        "sys_clint": 0,
+        "sys_plic": 0,
+        "uart_console_0": 0
+      },
+      "status": "PASSED",
+      "systemc_time_ps": 27933801000,
+      "timed_out": false,
+      "total_transactions": 1570,
+      "traps_taken": 4,
+      "uart_tx_bytes": 618
+    },
+    "wall_time_mips": 7.898,
+    "wall_time_ms": 442.3
+  },
+  "provenance": {
+    "console_sha256": "f05ffa307a18ec0c3ceefdf22713abb21e41d16eac2c4eea8b04b0d7f956e79a",
+    "emulator_binary_sha256": "02b87bc27d5f12cbf33fa9b4ae6d39113051eeae7682c29b1d9c4835567fa4f8",
+    "generated_cpp_sha256": "7eb6ef3d02b8d14fce0a6aeb6a2e44e1b3ed25816e6b1e7d4fde56c03d07fd0c",
+    "negative_elf_sha256": "9e360a5db1be6e69b744937191b640a067f5a72af34caf59c38c505f7abbddb1",
+    "positive_elf_sha256": "afc22435623c259f9b399452e2c0642c87c7928c37b84989211f15692e400e12",
+    "spec_sha256": "ceaad84d1d3d0e10b074ab0cf4371fb14f23b8922e08c294d3e80ca55df85258",
+    "vcd_sha256": "96cbbfb6cf807aabc730f03837cf13067f6ff6371b309a9cb69886a9a28da418"
+  },
+  "qemu_accel": "tcg",
+  "quantum_ns": 100000,
+  "status": "PASSED",
+  "toolchain": {
+    "cxx": {
+      "path": "/usr/bin/x86_64-linux-gnu-g++-14",
+      "version": "c++ (Debian 14.2.0-19) 14.2.0"
+    },
+    "qemu_cpu_master": {
+      "accel": "tcg",
+      "path": "/usr/bin/qemu-system-riscv64",
+      "version": "QEMU emulator version 10.0.13 (Debian 1:10.0.13+ds-0+deb13u1)"
+    },
+    "riscv_gcc": {
+      "path": "/usr/bin/riscv64-unknown-elf-gcc",
+      "version": "riscv64-unknown-elf-gcc (14.2.0+19) 14.2.0"
+    },
+    "systemc_version": "3.0.0",
+    "verilator_version": "Verilator 5.032 2025-01-01 rev (Debian 5.032-1+b2)"
+  }
+}

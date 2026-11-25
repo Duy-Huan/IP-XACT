@@ -703,6 +703,9 @@ def run(
                         raise ContractError("native RTL instance startup failed: " + d["name"])
                     time.sleep(0.01)
                 env[f"USP_NATIVE_SOCKET_{slot}"] = str(sock)
+                env[f"USP_NATIVE_PROTOCOL_{slot}"] = (
+                    descriptor.get("protocol", "usp-mmio32-v1") if descriptor else "usp-mmio32-v1"
+                )
                 sockets[d["name"]] = str(sock)
             ram = selected(spec, "ram")
             cmd = [

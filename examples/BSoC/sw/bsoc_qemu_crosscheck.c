@@ -18,12 +18,30 @@ static void uart_puts(const char *s) {
     }
 }
 
+static void uart_put_u32(uint32_t v) {
+    char buf[12];
+    int n = 0;
+    if (v == 0U) {
+        uart_puts("0");
+        return;
+    }
+    while (v > 0U) {
+        buf[n++] = (char)('0' + (v % 10U));
+        v /= 10U;
+    }
+    while (n > 0) {
+        char c[2] = {buf[--n], '\0'};
+        uart_puts(c);
+    }
+}
+
 uint64_t trap_dispatch(uint64_t mcause, uint64_t mepc, uint64_t mtval) {
     (void)mcause; (void)mtval;
     return mepc;
 }
 
 int main(void) {
+    uart_puts("[QEMU-RV64] Booted live on qemu-system-riscv64 -M virt\n");
     uart_puts("BSOC_QEMU_CROSSCHECK_BOOT_OK\n");
 
     /* Cross-verify exact fixed-point 12-tap polyphase filter unity gain & 4-lane power kernel */
@@ -38,7 +56,11 @@ int main(void) {
         R32(FINISHER_BASE) = 0x13333U;
         for (;;) __asm__ volatile("wfi");
     }
-    uart_puts("BSOC_QEMU_TELECOM_DSP_MATH_OK\n");
+    uart_puts("[QEMU-RV64] Verified poly_12t_dc=");
+    uart_put_u32((uint32_t)poly_dc);
+    uart_puts(", fft_bin16_power=");
+    uart_put_u32((uint32_t)vec_pwr);
+    uart_puts(" (matches BSoC Verilator+Plugin)\nBSOC_QEMU_TELECOM_DSP_MATH_OK\n");
     uart_puts("BSOC_QEMU_CROSSCHECK_PASS\n");
     R32(FINISHER_BASE) = 0x5555U;
     for (;;) {

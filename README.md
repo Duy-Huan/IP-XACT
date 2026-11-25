@@ -162,9 +162,10 @@ usp ip scaffold xor_accel --out results/xor_accel
 usp registry publish results/xor_accel/package.yaml --registry results/reg --version 1.0.0
 usp registry verify --registry results/reg
 
-# 5. Generic Multi-Platform SoC Composer (BSoC: Chipyard + gem5 + QEMU + 5x RTL + Live Socket Plugin)
-usp compose audit examples/BSoC/bsoc_composed.yaml
-usp compose run examples/BSoC/bsoc_composed.yaml --out results/bsoc-run
+# 5. Generic Multi-Platform SoC Composer (QEMU Direct CPU Master + usp-bus-v2 + Pin-Level AXI4/TL-UL RTL)
+usp compose audit examples/UspNextGen/usp_nextgen_soc.yaml
+usp compose run examples/UspNextGen/usp_nextgen_soc.yaml --out results/usp-nextgen-run
+usp compose run examples/BSoC/bsoc_composed.yaml --cpu-master qemu --out results/bsoc-qemu-run
 usp compose calibrate examples/BSoC/bsoc_composed.yaml --out results/bsoc-cal
 
 # 6. Model Context Protocol (MCP) 23-Tool Server for AI Coding Agents
@@ -180,9 +181,9 @@ bash scripts/podman.sh mcp
 All documentation is organized under the **Diataxis** taxonomy in [`docs/README.md`](docs/README.md):
 
 - **Onboarding & Environment:** [`docs/setup-and-environment.md`](docs/setup-and-environment.md) · [`docs/podman.md`](docs/podman.md) · [`docs/build-reproducibility.md`](docs/build-reproducibility.md)
-- **Architecture & Internals:** [`docs/architecture.md`](docs/architecture.md) · [`src/README.md`](src/README.md) · [`docs/canonical-native-ir.md`](docs/canonical-native-ir.md) · [`docs/unified-systemc-soc.md`](docs/unified-systemc-soc.md) · [`examples/ASoC`](examples/ASoC/README.md) (Official AI/LPU Multi-Cluster SoC) · [`examples/BSoC`](examples/BSoC/README.md) (Official Telecom Baseband Multi-Platform SoC)
+- **Architecture & Internals:** [`docs/architecture.md`](docs/architecture.md) · [`src/README.md`](src/README.md) · [`docs/canonical-native-ir.md`](docs/canonical-native-ir.md) · [`docs/unified-systemc-soc.md`](docs/unified-systemc-soc.md) · [`examples/UspNextGen`](examples/UspNextGen/README.md) (USP v2 QEMU Master + `usp-bus-v2` + AXI4/TL-UL RTL Showcase) · [`examples/ASoC`](examples/ASoC/README.md) (Official AI/LPU Multi-Cluster SoC) · [`examples/BSoC`](examples/BSoC/README.md) (Official Telecom Baseband Multi-Platform SoC)
 - **AI & Automation Interfaces:** [`docs/mcp-server.md`](docs/mcp-server.md) · [`scripts/README.md`](scripts/README.md) · [`containers/README.md`](containers/README.md)
-- **Verification & Governance:** [`docs/verification-status.md`](docs/verification-status.md) · [`docs/industrial-readiness.md`](docs/industrial-readiness.md) · [`docs/roadmap.md`](docs/roadmap.md) · [`upgrade/bsoc-multiplatform-audit.md`](upgrade/bsoc-multiplatform-audit.md) · [`upgrade/enterprise-emulator-roadmap.md`](upgrade/enterprise-emulator-roadmap.md) · [`CHANGELOG.md`](CHANGELOG.md)
+- **Verification & Governance:** [`docs/verification-status.md`](docs/verification-status.md) · [`docs/industrial-readiness.md`](docs/industrial-readiness.md) · [`docs/roadmap.md`](docs/roadmap.md) · [`upgrade/usp-v2-core-upgrades.md`](upgrade/usp-v2-core-upgrades.md) · [`upgrade/bsoc-multiplatform-audit.md`](upgrade/bsoc-multiplatform-audit.md) · [`upgrade/enterprise-emulator-roadmap.md`](upgrade/enterprise-emulator-roadmap.md) · [`CHANGELOG.md`](CHANGELOG.md)
 
 ---
 

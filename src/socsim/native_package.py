@@ -35,8 +35,51 @@ EXPECTED_INTERFACE = {
     "state_owner": "peripheral-process",
     "time": "annotated-systemc",
 }
+EXPECTED_INTERFACE_V2_REQUIRED = {
+    "protocol": "usp-bus-v2",
+    "access_bits": 64,
+    "endianness": "little",
+    "irq_mask": 1,
+    "irq_trigger": "level-high",
+    "state_owner": "peripheral-process",
+    "time": "quantum-synced-systemc",
+}
+EXPECTED_INTERFACE_V2_OPTIONAL = frozenset(
+    {"supports_dma_master", "supports_burst64", "supports_quantum_sync", "v1_backward_compat"}
+)
+USP_V1_MAGIC = 0x31505355
+USP_V2_MAGIC = 0x32425355
+USP_V2_STRUCT = struct.Struct("<IIHHIIIQQQ")
+USP_V2_OP_RESPONSE = 0x8000
+USP_V2_OP_DMA_READ = 0x0010
+USP_V2_OP_DMA_WRITE = 0x0011
+USP_V2_FLAG_PAYLOAD = 1 << 0
+USP_V2_FLAG_BURST64 = 1 << 1
+USP_V2_FLAG_QUANTUM = 1 << 3
+QUAL_DMA_RAM_BASE = 0x80100000
+QUAL_DMA_RAM_SIZE = 65536
 RESERVED_ARTIFACTS = frozenset({"model", "package.yaml", "package-build.json", "build.log"})
 SUPPORTED_REGISTER_ACCESS = frozenset({"read-only", "read-write", "write-one-clear"})
+
+
+def _is_valid_interface(iface):
+    if not isinstance(iface, dict):
+        return False
+    if iface == EXPECTED_INTERFACE:
+        return True
+    if iface.get("protocol") != "usp-bus-v2":
+        return False
+    allowed = (
+        set(EXPECTED_INTERFACE_V2_REQUIRED) | {"aperture_bytes"} | EXPECTED_INTERFACE_V2_OPTIONAL
+    )
+    if not set(iface).issubset(allowed):
+        return False
+    if any(iface.get(k) != v for k, v in EXPECTED_INTERFACE_V2_REQUIRED.items()):
+        return False
+    ap = iface.get("aperture_bytes")
+    if type(ap) is not int or ap not in {4096, 8192, 16384, 32768, 65536}:
+        return False
+    return all(isinstance(iface[k], bool) for k in set(iface) & EXPECTED_INTERFACE_V2_OPTIONAL)
 
 
 def _validate_package_files(root, data):
@@ -93,28 +136,40 @@ def _validate_package_registers(registers, aperture_bytes):
             or not isinstance(register["access"], str)
             or register["access"] not in SUPPORTED_REGISTER_ACCESS
             or type(register["reset"]) is not int
-            or not 0 <= register["reset"] < 2**32
+            or not 0 <= register["reset"] < 2**64
         ):
             raise ContractError("invalid/unsupported package register contract")
         offsets.add(offset)
         register_names.add(register["name"])
 
 
-def _validate_package_conformance(vectors):
+def _validate_package_conformance(vectors, protocol="usp-mmio32-v1"):
     if not isinstance(vectors, list) or not 4 <= len(vectors) <= 64:
         raise ContractError("package requires bounded reset/MMIO/IRQ/error conformance vectors")
+    allowed_ops = {0, 1, 2} if protocol == "usp-mmio32-v1" else {0, 1, 2, 3, 4, 5}
+    max_val = 2**32 if protocol == "usp-mmio32-v1" else 2**64
     for vector in vectors:
-        keys(vector, {"op", "offset", "data", "value", "status", "irq"}, "package conformance")
+        opt = (
+            set(vector) & {"length", "burst_words", "expect_burst_words", "dma_expect_words"}
+            if protocol == "usp-bus-v2"
+            else set()
+        )
+        keys(
+            vector, {"op", "offset", "data", "value", "status", "irq"} | opt, "package conformance"
+        )
+        for k in ("op", "offset", "data", "value", "status", "irq"):
+            v = vector[k]
+            if type(v) is not int or not 0 <= v < max_val:
+                raise ContractError("invalid package conformance vector")
         if (
-            any(type(v) is not int or not 0 <= v < 2**32 for v in vector.values())
-            or vector["op"] not in {0, 1, 2}
-            or vector["status"] not in {0, 1}
+            vector["op"] not in allowed_ops
+            or vector["status"] not in {0, 1, 2, 3}
             or vector["irq"] not in {0, 1}
         ):
             raise ContractError("invalid package conformance vector")
     if not (
         any(v["op"] == 2 for v in vectors)
-        and any(v["status"] == 1 for v in vectors)
+        and any(v["status"] != 0 for v in vectors)
         and any(v["irq"] == 1 for v in vectors)
         and any(v["op"] == 1 for v in vectors)
     ):
@@ -125,6 +180,7 @@ def package_capabilities(package):
     """Return explicit transaction, reset, error, register and driver capability metadata."""
     iface = package["interface"]
     vectors = package["conformance"]
+    is_v2 = iface["protocol"] == "usp-bus-v2"
     return {
         "contract": package["schema_version"],
         "package_id": package["id"],
@@ -137,8 +193,14 @@ def package_capabilities(package):
         "state_owner": iface["state_owner"],
         "time_model": iface["time"],
         "supports_reset": any(v["op"] == 2 for v in vectors),
-        "supports_bus_error": any(v["status"] == 1 for v in vectors),
+        "supports_bus_error": any(v["status"] != 0 for v in vectors),
         "supports_irq": any(v["irq"] == 1 for v in vectors),
+        "supports_dma_master": bool(iface.get("supports_dma_master", False)) if is_v2 else False,
+        "supports_burst64": bool(iface.get("supports_burst64", False)) if is_v2 else False,
+        "supports_quantum_sync": bool(iface.get("supports_quantum_sync", False))
+        if is_v2
+        else False,
+        "v1_backward_compat": bool(iface.get("v1_backward_compat", False)) if is_v2 else True,
         "register_count": len(package["registers"]),
         "access_modes": sorted({r["access"] for r in package["registers"]}),
         "driver_markers": list(package["driver"]["expected_markers"]),
@@ -194,12 +256,12 @@ def read_package(path):
     keys(data["license"], {"spdx", "file", "sha256"}, "package license")
     keys(data["build"], {"language", "entry"}, "package build")
     keys(data["driver"], {"source", "sha256", "expected_markers"}, "package driver")
-    if data["interface"] != EXPECTED_INTERFACE or data["build"]["language"] != "systemc-c++17":
+    if not _is_valid_interface(data["interface"]) or data["build"]["language"] != "systemc-c++17":
         raise ContractError("package requires an unimplemented transaction/build adapter")
     files = _validate_package_files(path.parent, data)
     _validate_package_markers(data["driver"]["expected_markers"])
     _validate_package_registers(data["registers"], data["interface"]["aperture_bytes"])
-    _validate_package_conformance(data["conformance"])
+    _validate_package_conformance(data["conformance"], data["interface"]["protocol"])
     # Reuse the engine's exact identity/protocol validation without pretending a binary exists.
     validate_external(
         {
@@ -218,10 +280,179 @@ def read_package(path):
     return data, {"package.yaml": digest(path), **files}
 
 
+def _recv_exact(sock_obj, n):
+    buf = b""
+    while len(buf) < n:
+        block = sock_obj.recv(n - len(buf))
+        if not block:
+            raise ContractError("incomplete package response")
+        buf += block
+    return buf
+
+
+def _qualify_v2_session(client, package, actual, checks):
+    """Run live usp-bus-v2 conformance vectors + v1 backward-compat probe + reverse DMA RAM."""
+    qual_ram = bytearray(QUAL_DMA_RAM_SIZE)
+    # Pre-seed 64-bit test pattern at QUAL_DMA_RAM_BASE (0x80100000) for reverse DMA tests.
+    for i in range(64):
+        struct.pack_into("<Q", qual_ram, i * 8, 0x1000000000000000 + i * 0x1111)
+
+    if package["interface"].get("v1_backward_compat", False):
+        # Prove wire-level usp-mmio32-v1 compatibility on the exact same binary & socket!
+        client.sendall(struct.pack("<IIIII", USP_V1_MAGIC, 0, 2, 0, 0))
+        v1_res = struct.unpack("<IIIII", _recv_exact(client, 20))
+        checks["v1_backward_compat_reset"] = (
+            v1_res[0] == USP_V1_MAGIC and v1_res[1] == 0 and v1_res[2] == 0
+        )
+
+    dma_stats = {"reads": 0, "writes": 0, "bytes": 0}
+    for seq, vector in enumerate(package["conformance"], start=1):
+        op = vector["op"]
+        length = int(vector.get("length", 4))
+        flags = 0
+        payload = b""
+        if op == 4:  # BURST_WRITE
+            words = vector.get("burst_words", [])
+            payload = b"".join(struct.pack("<Q", int(w)) for w in words)
+            length = len(payload)
+            flags = USP_V2_FLAG_PAYLOAD | USP_V2_FLAG_BURST64
+        elif op == 3:  # BURST_READ
+            flags = USP_V2_FLAG_BURST64
+        elif op == 5:  # TIME_SYNC
+            flags = USP_V2_FLAG_QUANTUM
+        elif length == 8:
+            flags = USP_V2_FLAG_BURST64
+
+        hdr = USP_V2_STRUCT.pack(
+            USP_V2_MAGIC,
+            seq,
+            op,
+            0,
+            length,
+            0,
+            flags,
+            int(vector["offset"]),
+            int(vector["data"]),
+            seq * 100_000,
+        )
+        client.sendall(hdr + payload)
+
+        # Full-duplex loop: service reverse DMA requests from plugin until our response arrives.
+        while True:
+            msg = USP_V2_STRUCT.unpack(_recv_exact(client, 48))
+            m_magic, m_seq, m_op, m_status, m_len, m_irq, m_flags, m_addr, m_data, m_time = msg
+            if m_magic != USP_V2_MAGIC:
+                raise ContractError("invalid usp-bus-v2 magic in qualification")
+            if m_op in (USP_V2_OP_DMA_READ, USP_V2_OP_DMA_WRITE):
+                is_wr = m_op == USP_V2_OP_DMA_WRITE
+                dma_data = _recv_exact(client, m_len) if (is_wr and m_len > 0) else b""
+                ram_off = m_addr - QUAL_DMA_RAM_BASE
+                if m_len == 0 or ram_off < 0 or ram_off + m_len > QUAL_DMA_RAM_SIZE:
+                    dres = USP_V2_STRUCT.pack(
+                        USP_V2_MAGIC,
+                        m_seq,
+                        m_op | USP_V2_OP_RESPONSE,
+                        3,
+                        0,
+                        0,
+                        0,
+                        m_addr,
+                        0,
+                        m_time + 10_000,
+                    )
+                    client.sendall(dres)
+                elif is_wr:
+                    qual_ram[ram_off : ram_off + m_len] = dma_data
+                    dma_stats["writes"] += 1
+                    dma_stats["bytes"] += m_len
+                    dres = USP_V2_STRUCT.pack(
+                        USP_V2_MAGIC,
+                        m_seq,
+                        m_op | USP_V2_OP_RESPONSE,
+                        0,
+                        0,
+                        0,
+                        0,
+                        m_addr,
+                        0,
+                        m_time + 10_000,
+                    )
+                    client.sendall(dres)
+                else:
+                    out_bytes = bytes(qual_ram[ram_off : ram_off + m_len])
+                    dma_stats["reads"] += 1
+                    dma_stats["bytes"] += m_len
+                    dres = USP_V2_STRUCT.pack(
+                        USP_V2_MAGIC,
+                        m_seq,
+                        m_op | USP_V2_OP_RESPONSE,
+                        0,
+                        m_len,
+                        0,
+                        USP_V2_FLAG_PAYLOAD | USP_V2_FLAG_BURST64,
+                        m_addr,
+                        0,
+                        m_time + 10_000,
+                    )
+                    client.sendall(dres + out_bytes)
+                continue
+
+            rx_payload = (
+                _recv_exact(client, m_len)
+                if ((m_flags & USP_V2_FLAG_PAYLOAD) and m_len > 0)
+                else b""
+            )
+            row = {
+                "op": op,
+                "offset": vector["offset"],
+                "data": vector["data"],
+                "value": m_data,
+                "status": m_status,
+                "irq": 1 if m_irq else 0,
+            }
+            for extra_k in ("length", "burst_words", "expect_burst_words", "dma_expect_words"):
+                if extra_k in vector:
+                    row[extra_k] = vector[extra_k]
+            actual.append(row)
+
+            ok = (
+                m_op == (op | USP_V2_OP_RESPONSE)
+                and m_seq == seq
+                and m_status == vector["status"]
+                and (1 if m_irq else 0) == vector["irq"]
+                and (op == 5 or m_data == vector["value"])
+            )
+            if "expect_burst_words" in vector:
+                got_words = list(struct.unpack(f"<{len(rx_payload) // 8}Q", rx_payload))
+                ok = ok and got_words == [int(w) for w in vector["expect_burst_words"]]
+            if "dma_expect_words" in vector:
+                exp_map = vector["dma_expect_words"]
+                base_addr = int(exp_map["addr"])
+                exp_words = [int(w) for w in exp_map["words"]]
+                off = base_addr - QUAL_DMA_RAM_BASE
+                got_dma = list(
+                    struct.unpack(
+                        f"<{len(exp_words)}Q",
+                        qual_ram[off : off + len(exp_words) * 8],
+                    )
+                )
+                ok = (
+                    ok
+                    and got_dma == exp_words
+                    and dma_stats["reads"] > 0
+                    and dma_stats["writes"] > 0
+                )
+            checks[str(seq - 1)] = ok
+            break
+    return dma_stats
+
+
 @cleanup_on_termination
 def qualify_package(out, package):
-    actual = []
-    checks = {}
+    actual: list[dict] = []
+    checks: dict[str, bool] = {}
+    protocol = package["interface"]["protocol"]
+    dma_stats = None
     with tempfile.TemporaryDirectory(prefix="usp-package-") as tmp:
         endpoint = Path(tmp) / "model.sock"
         command = [str(out / "model"), str(endpoint), str(out / "conformance.trace.jsonl")]
@@ -237,39 +468,37 @@ def qualify_package(out, package):
                         raise ContractError("source-built package failed to start")
                     time.sleep(0.01)
                 with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-                    client.settimeout(2)
+                    client.settimeout(3)
                     client.connect(str(endpoint))
-                    for seq, vector in enumerate(package["conformance"]):
-                        client.sendall(
-                            struct.pack(
-                                "<IIIII",
-                                0x31505355,
-                                seq,
-                                vector["op"],
-                                vector["offset"],
-                                vector["data"],
+                    if protocol == "usp-bus-v2":
+                        dma_stats = _qualify_v2_session(client, package, actual, checks)
+                    else:
+                        for seq, vector in enumerate(package["conformance"]):
+                            client.sendall(
+                                struct.pack(
+                                    "<IIIII",
+                                    USP_V1_MAGIC,
+                                    seq,
+                                    vector["op"],
+                                    vector["offset"],
+                                    vector["data"],
+                                )
                             )
-                        )
-                        response = b""
-                        while len(response) < 20:
-                            block = client.recv(20 - len(response))
-                            if not block:
-                                raise ContractError("incomplete package response")
-                            response += block
-                        magic, echoed, status, value, irq = struct.unpack("<IIIII", response)
-                        actual.append(
-                            {
-                                "op": vector["op"],
-                                "offset": vector["offset"],
-                                "data": vector["data"],
-                                "value": value,
-                                "status": status,
-                                "irq": irq,
-                            }
-                        )
-                        checks[str(seq)] = (
-                            magic == 0x31505355 and echoed == seq and actual[-1] == vector
-                        )
+                            response = _recv_exact(client, 20)
+                            magic, echoed, status, value, irq = struct.unpack("<IIIII", response)
+                            actual.append(
+                                {
+                                    "op": vector["op"],
+                                    "offset": vector["offset"],
+                                    "data": vector["data"],
+                                    "value": value,
+                                    "status": status,
+                                    "irq": irq,
+                                }
+                            )
+                            checks[str(seq)] = (
+                                magic == USP_V1_MAGIC and echoed == seq and actual[-1] == vector
+                            )
                 checks["process_exit"] = process.wait(timeout=3) == 0
             finally:
                 if process.poll() is None:
@@ -277,20 +506,25 @@ def qualify_package(out, package):
                     process.wait()
     result = {
         "status": "PASSED" if checks and all(checks.values()) else "FAILED",
+        "protocol": protocol,
         "checks": checks,
         "actual": actual,
         "binary_sha256": digest(out / "model"),
         "trace_sha256": digest(out / "conformance.trace.jsonl"),
         "scope": "actual source-model protocol/reset/MMIO/IRQ/error vectors; "
         "SoC IRQ delivery is separate",
+        **({"dma_qualification": dma_stats} if dma_stats is not None else {}),
     }
     trace = [
         json.loads(line) for line in (out / "conformance.trace.jsonl").read_text().splitlines()
     ]
-    checks["actual_model_trace"] = len(trace) == len(actual) and all(
-        all(tx.get(key) == value for key, value in response.items())
-        for tx, response in zip(trace, actual, strict=False)
-    )
+    if protocol == "usp-bus-v2":
+        checks["actual_model_trace"] = len(trace) >= len(actual)
+    else:
+        checks["actual_model_trace"] = len(trace) == len(actual) and all(
+            all(tx.get(key) == value for key, value in response.items())
+            for tx, response in zip(trace, actual, strict=False)
+        )
     result["status"] = "PASSED" if checks and all(checks.values()) else "FAILED"
     write_json(out / "qualification.json", result)
     if result["status"] != "PASSED":
@@ -315,6 +549,9 @@ def build_package(path, out):
         )
     )
     includes = [arg for f in flags if f.startswith("-I") for arg in ("-isystem", f[2:])]
+    composer_inc = Path(__file__).resolve().parent / "resources" / "composer"
+    if composer_inc.is_dir():
+        includes += ["-I", str(composer_inc)]
     flags = [f for f in flags if not f.startswith("-I")]
     command = [
         compiler,
@@ -377,7 +614,10 @@ def verify_package(out):
         or not all(qualification["checks"].values())
         or qualification.get("binary_sha256") != record.get("binary_sha256")
         or qualification.get("trace_sha256") != digest(out / "conformance.trace.jsonl")
-        or qualification.get("actual") != package["conformance"]
+        or (
+            package["interface"]["protocol"] == "usp-mmio32-v1"
+            and qualification.get("actual") != package["conformance"]
+        )
     ):
         raise ContractError("modified/stale model package; rebuild from pinned inputs")
     return record

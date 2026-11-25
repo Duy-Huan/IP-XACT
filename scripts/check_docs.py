@@ -11,6 +11,7 @@ required = [
     "containers/README.md",
     "upgrade/enterprise-emulator-roadmap.md",
     "upgrade/bsoc-multiplatform-audit.md",
+    "upgrade/usp-v2-core-upgrades.md",
     "docs/unified-systemc-soc.md",
     "docs/mcp-server.md",
     "docs/multiplatform-soc-qa.md",

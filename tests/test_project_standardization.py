@@ -134,6 +134,9 @@ def test_container_compose_and_makefile_contracts() -> None:
         "containers/README.md",
         "examples/ASoC/README.md",
         "docs/examples/ASoC.md",
+        "examples/UspNextGen/README.md",
+        "docs/examples/UspNextGen.md",
+        "upgrade/usp-v2-core-upgrades.md",
     ],
 )
 def test_industrial_docs_have_metadata_and_revision_history(doc_rel: str) -> None:

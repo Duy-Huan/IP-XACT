@@ -39,13 +39,14 @@
 | [`native_domains.py`](socsim/native_domains.py) & [`native_cpu_binding.py`](socsim/native_cpu_binding.py) | Clock/reset domain derivation, per-initiator address views, explicit CPU binding |
 | [`native_flow.py`](socsim/native_flow.py) & [`native_bsp_gen.py`](socsim/native_bsp_gen.py) | End-to-end `native-flow-1` orchestrator and deterministic `soc.h`/`soc.ld` BSP generator |
 | [`soc_native.py`](socsim/soc_native.py), [`soc_native_codegen.py`](socsim/soc_native_codegen.py), [`soc_native_gem5.py`](socsim/soc_native_gem5.py), [`soc_native_linux.py`](socsim/soc_native_linux.py) | Arbitrary-instance native SoC generator for concurrent QEMU + gem5 execution |
-| [`native_package.py`](socsim/native_package.py) & [`native_external.py`](socsim/native_external.py) | `native-model-package-1` SHA-256 verification and `usp-mmio32-v1` Unix-socket RPC builder |
+| [`native_package.py`](socsim/native_package.py) & [`native_external.py`](socsim/native_external.py) | `native-model-package-1` SHA-256 verification and `usp-bus-v2` / `usp-mmio32-v1` Unix-socket RPC builder & reverse-DMA qualifier |
 
-### 3. Single Unified Multi-Platform SystemC/TLM-2.0 + Verilator RTL Emulator (`usp unified-soc`)
+### 3. Single Unified Multi-Platform SystemC/TLM-2.0 + Verilator RTL Emulator (`usp unified-soc`, `usp compose`)
 | Module | Responsibility |
 |---|---|
 | [`unified_systemc_soc.py`](socsim/unified_systemc_soc.py) | Compiles & executes the single unified `sc_main` binary: Dual-Hart SMP `RV64IMA_Zicsr`, IR-generated `unified_soc_routes.h` 2×2 NoC, 6× Verilator 5.032 clean-room SV RTL IPs (`MAC NPU`, `SHA-256`, `AES-128`, `SPI`, `I2C`, `L2 Cache`), DMA master, IOPMP guard, GDB RSP, IEEE 1364 VCD dump, 24-bin coverage, and RTL-vs-TLM cycle calibration |
-| [`multiplatform_composer.py`](socsim/multiplatform_composer.py) | Generic data-driven `multiplatform-soc-1` composer (`usp compose`): multi-clock CDC, multi-crossbar/multi-master fabrics, AXI4-Stream DAG, live `usp-mmio32-v1` Unix-socket plugins, Verilator RTL, and synchronized IP-XACT / QEMU / gem5 / Chipyard exports |
+| [`multiplatform_composer.py`](socsim/multiplatform_composer.py) | Generic data-driven `multiplatform-soc-1` composer (`usp compose`): stock QEMU (`qemu-system-riscv64` TCG/KVM) direct CPU master, multi-clock CDC, multi-crossbar/multi-master fabrics, AXI4-Stream DAG, live `usp-bus-v2` (reverse DMA, 64-bit burst, quantum sync) & `usp-mmio32-v1` Unix-socket plugins, Verilator RTL, and synchronized IP-XACT / QEMU / gem5 / Chipyard exports |
+| [`rtl_pin_adapter.py`](socsim/rtl_pin_adapter.py) | Automatic SystemVerilog port parser & C++17 `PinTraits` code generator for pin-level Chipyard AXI4 Full, AMBA AXI4-Lite, OpenTitan TL-UL, and legacy MMIO32 Verilator RTL adapters (zero manual MMIO32 wrapping) |
 
 ### 4. Enterprise Collaboration, DSE Cluster, CHIA Loop & Visualization
 | Module | Responsibility |

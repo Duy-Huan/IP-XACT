@@ -56,10 +56,16 @@ for port, d in zip(system.uart_platforms, uarts):
     port.uart.pio = system.bus.mem_side_ports
 devices = [d for d in s['devices'] if d['model'] in ('chipyard.gcd', 'opentitan.gpio', 'finisher') or d['model'] in s['external_models']]
 kinds = {'chipyard.gcd': 0, 'opentitan.gpio': 1, 'finisher': 2}
-kinds.update({name: 0 for name in s.get('external_models', {})})
+ext_models = s.get('external_models', {})
+kinds.update({name: 0 for name in ext_models})
+def _proto(d):
+    return ext_models.get(d['model'], {}).get('protocol', 'usp-mmio32-v1')
 system.native_ips = [NativeSocDevice(base=d['base'], span=d['size'], kind=kinds.get(d['model'], 0),
                                     irq=d.get('irq', 0), platform=p,
-                                    socket_path=c['sockets'].get(d['name'], '')) for d in devices]
+                                    socket_path=c['sockets'].get(d['name'], ''),
+                                    protocol=_proto(d),
+                                    dma_enabled=(_proto(d) == 'usp-bus-v2'),
+                                    quantum_ns=(100000 if _proto(d) == 'usp-bus-v2' else 0)) for d in devices]
 for d in system.native_ips:
     d.pio = system.bus.mem_side_ports
 for cpu in system.cpu:

@@ -1,9 +1,10 @@
 """Generic Multi-Platform SoC Composer & Cross-Binding Engine (`multiplatform-soc-1`).
 
 Data-driven, zero-SoC-name-branch composition platform capable of binding heterogeneous IPs
-across Chipyard, gem5, QEMU, Verilator 5.x RTL, Mixed-Signal TLM, and live out-of-process
-`native-model-package-1` (`usp-mmio32-v1`) Unix-socket plugins inside one unified multi-clock,
-multi-crossbar, multi-master, AXI4-Stream SoC virtual prototype.
+across Chipyard, gem5, QEMU (TCG/KVM direct CPU master), Verilator 5.x RTL (automatic
+pin-level AXI4 / AXI4-Lite / OpenTitan TL-UL / MMIO32 adapters), Mixed-Signal TLM, and live
+out-of-process `native-model-package-1` (`usp-bus-v2` & backward-compatible `usp-mmio32-v1`)
+Unix-socket plugins with reverse bus-master DMA, 64-bit bursts, and quantum time sync.
 """
 
 from __future__ import annotations
@@ -12,6 +13,8 @@ import argparse
 import ast
 import datetime
 import json
+import os
+import platform
 import re
 import shlex
 import shutil
@@ -27,6 +30,11 @@ from .execution import execute_build
 from .ipxact import digest
 from .native_package import build_package, read_package
 from .project import keys, read_yaml
+from .rtl_pin_adapter import (
+    SUPPORTED_RTL_PROTOCOLS,
+    emit_cpp_pin_traits,
+    introspect_sv_rtl_interface,
+)
 from .runner import tool_version, write_json
 from .unified_systemc_soc import has_unified_toolchain, resolve_unified_src_dir
 from .v04_contracts import evaluate_calibration_report
@@ -46,6 +54,8 @@ ALLOWED_PROVIDERS = frozenset(
     }
 )
 ALLOWED_BINDINGS = frozenset({"verilator-rtl", "usp-plugin", "systemc-tlm", "mixed-signal-tlm"})
+ALLOWED_CPU_MASTERS = frozenset({"auto", "systemc-rv64", "qemu"})
+ALLOWED_QEMU_ACCELS = frozenset({"auto", "tcg", "kvm"})
 ALLOWED_KINDS = frozenset(
     {
         "ram",
@@ -67,6 +77,11 @@ ALLOWED_KINDS = frozenset(
         "fir_decim8",
         "polyphase_12t",
         "fft_128pt",
+        "axi4_rtl",
+        "axi4_lite_rtl",
+        "tlul_rtl",
+        "dma_burst_v2",
+        "generic_plugin",
     }
 )
 NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,47}$")
@@ -101,6 +116,13 @@ def _resolve_runtime_hpp() -> Path:
         if cand.is_file():
             return cand
     raise ContractError("E_COMPOSE_RUNTIME missing composer_runtime.hpp")
+
+
+def _resolve_composer_resource(filename: str) -> Path:
+    p = _resolve_runtime_hpp().parent / filename
+    if not p.is_file():
+        raise ContractError(f"E_COMPOSE_RUNTIME missing composer resource: {filename}")
+    return p
 
 
 def _check_name(val: Any, label: str) -> str:
@@ -213,6 +235,9 @@ def load_composed_spec(path: Path) -> dict[str, Any]:
                 "qemu_model",
                 "chipyard_config",
                 "model_disclosure",
+                "master_engine",
+                "qemu_accel",
+                "quantum_ns",
             }
         ),
         "composed cpu",
@@ -224,6 +249,14 @@ def load_composed_spec(path: Path) -> dict[str, Any]:
         raise ContractError("E_COMPOSE_CPU harts must be in 1..4")
     if cpu["fabric"] not in fabric_map or cpu["clock_domain"] not in clock_map:
         raise ContractError("E_COMPOSE_CPU references undeclared fabric or clock_domain")
+    if "master_engine" in cpu and str(cpu["master_engine"]) not in {"systemc-rv64", "qemu"}:
+        raise ContractError(f"E_COMPOSE_CPU unsupported master_engine: {cpu['master_engine']}")
+    if "qemu_accel" in cpu and str(cpu["qemu_accel"]) not in ALLOWED_QEMU_ACCELS:
+        raise ContractError(f"E_COMPOSE_CPU unsupported qemu_accel: {cpu['qemu_accel']}")
+    if "quantum_ns" in cpu:
+        qns = int(cpu["quantum_ns"])
+        if not 1_000 <= qns <= 10_000_000:
+            raise ContractError(f"E_COMPOSE_CPU quantum_ns must be in 1000..10000000: {qns}")
 
     # 5. Devices (arbitrary count up to 64, arbitrary aligned sizes)
     devices = data["devices"]
@@ -244,7 +277,10 @@ def load_composed_spec(path: Path) -> dict[str, Any]:
                     "rtl_module",
                     "rtl_source",
                     "rtl_busy_reg",
+                    "rtl_protocol",
+                    "rtl_port_map",
                     "package_yaml",
+                    "plugin_protocol",
                     "vlnv",
                     "log_mmio",
                     "disclosure",
@@ -280,13 +316,32 @@ def load_composed_spec(path: Path) -> dict[str, Any]:
             rtl_p = _resolve_rel(path, str(dev["rtl_source"]))
             if not rtl_p.is_file():
                 raise ContractError(f"E_COMPOSE_RTL missing SystemVerilog source: {rtl_p}")
+            req_proto = str(dev.get("rtl_protocol", "auto"))
+            if req_proto not in SUPPORTED_RTL_PROTOCOLS:
+                raise ContractError(
+                    f"E_COMPOSE_RTL_PROTO {dname} unsupported rtl_protocol: {req_proto}"
+                )
+            if dev["kind"] != "l2_cache":
+                overrides = dev.get("rtl_port_map")
+                if overrides is not None and not isinstance(overrides, dict):
+                    raise ContractError(f"E_COMPOSE_RTL {dname} rtl_port_map must be a mapping")
+                introspect_sv_rtl_interface(
+                    rtl_p,
+                    str(dev["rtl_module"]),
+                    requested_protocol=req_proto,
+                    port_overrides=overrides,
+                )
         if dev["binding"] == "usp-plugin":
             if "package_yaml" not in dev:
                 raise ContractError(f"E_COMPOSE_PLUGIN {dname} requires package_yaml")
             pkg_p = _resolve_rel(path, str(dev["package_yaml"]))
             if not pkg_p.is_file():
                 raise ContractError(f"E_COMPOSE_PLUGIN missing package manifest: {pkg_p}")
-            read_package(pkg_p)
+            pkg, _ = read_package(pkg_p)
+            if "plugin_protocol" in dev and dev["plugin_protocol"] != pkg["interface"]["protocol"]:
+                raise ContractError(
+                    f"E_COMPOSE_PLUGIN {dname} plugin_protocol mismatch with package.yaml"
+                )
         dev_map[dname] = dev
 
     windows.sort()
@@ -425,6 +480,85 @@ def _render_linker_script(spec: dict[str, Any]) -> str:
     )
 
 
+def _render_qemu_linker_script(spec: dict[str, Any]) -> str:
+    """Emit linker script placing guest in SoC RAM and QEMU M-mode bridge in PMP-isolated RAM."""
+    cpu = spec["cpu"]
+    ram = next(d for d in spec["devices"] if d["kind"] == "ram")
+    ram_base = int(ram["base"])
+    ram_size = int(ram["size"])
+    bridge_base = ram_base + ram_size
+    bridge_size = 0x00100000  # 1 MiB isolated M-mode PMP/VirtIO bridge region
+    return (
+        "OUTPUT_ARCH(riscv)\n"
+        "ENTRY(_usp_qemu_entry)\n"
+        "MEMORY {\n"
+        f"  RAM        (rwx) : ORIGIN = 0x{ram_base:08X}, LENGTH = 0x{ram_size:08X}\n"
+        f"  BRIDGE_RAM (rwx) : ORIGIN = 0x{bridge_base:08X}, LENGTH = 0x{bridge_size:08X}\n"
+        "}\n"
+        "SECTIONS {\n"
+        f"  . = 0x{int(cpu['entry']):08X};\n"
+        "  .text : {\n"
+        "    *(.text.init)\n"
+        "    *(EXCLUDE_FILE(*qemu_usp_bridge*.o) .text*)\n"
+        "  } > RAM\n"
+        "  .rodata : ALIGN(8) {\n"
+        "    *(EXCLUDE_FILE(*qemu_usp_bridge*.o) .rodata*)\n"
+        "    *(EXCLUDE_FILE(*qemu_usp_bridge*.o) .srodata*)\n"
+        "  } > RAM\n"
+        "  .data : ALIGN(8) {\n"
+        "    *(EXCLUDE_FILE(*qemu_usp_bridge*.o) .data*)\n"
+        "    *(EXCLUDE_FILE(*qemu_usp_bridge*.o) .sdata*)\n"
+        "  } > RAM\n"
+        "  .bss : ALIGN(8) {\n"
+        "    _bss_start = .;\n"
+        "    *(EXCLUDE_FILE(*qemu_usp_bridge*.o) .bss*)\n"
+        "    *(EXCLUDE_FILE(*qemu_usp_bridge*.o) .sbss*)\n"
+        "    *(EXCLUDE_FILE(*qemu_usp_bridge*.o) COMMON)\n"
+        "    . = ALIGN(8);\n"
+        "    _bss_end = .;\n"
+        "  } > RAM\n"
+        "  .usp_bridge.text : ALIGN(16) {\n"
+        "    *(.usp_bridge.init)\n"
+        "    *(.usp_bridge.text)\n"
+        "    *qemu_usp_bridge*.o(.text* .rodata* .srodata*)\n"
+        "  } > BRIDGE_RAM\n"
+        "  .usp_bridge.data : ALIGN(16) {\n"
+        "    *qemu_usp_bridge*.o(.data* .sdata*)\n"
+        "  } > BRIDGE_RAM\n"
+        "  .usp_bridge.bss : ALIGN(16) {\n"
+        "    _usp_bridge_bss_start = .;\n"
+        "    *qemu_usp_bridge*.o(.bss* .sbss* COMMON)\n"
+        "    . = ALIGN(16);\n"
+        "    _usp_bridge_bss_end = .;\n"
+        "  } > BRIDGE_RAM\n"
+        f"  PROVIDE(_usp_bridge_stack_top = 0x{bridge_base + bridge_size - 0x1000:08X});\n"
+        f"  PROVIDE(_stack_top = 0x{int(cpu['stack_top']):08X});\n"
+        f"  PROVIDE(_hart1_stack_top = 0x{int(cpu['stack_top']) - 0x10000:08X});\n"
+        f"  PROVIDE(_hart2_stack_top = 0x{int(cpu['stack_top']) - 0x20000:08X});\n"
+        f"  PROVIDE(_hart3_stack_top = 0x{int(cpu['stack_top']) - 0x30000:08X});\n"
+        "}\n"
+    )
+
+
+def _device_rtl_meta(dev: dict[str, Any], spec_path: Path) -> dict[str, Any] | None:
+    if dev["binding"] != "verilator-rtl" or dev["kind"] == "l2_cache":
+        return None
+    rtl_p = _resolve_rel(spec_path, str(dev["rtl_source"]))
+    return introspect_sv_rtl_interface(
+        rtl_p,
+        str(dev["rtl_module"]),
+        requested_protocol=str(dev.get("rtl_protocol", "auto")),
+        port_overrides=dev.get("rtl_port_map"),
+    )
+
+
+def _device_plugin_info(
+    dev: dict[str, Any], spec_path: Path
+) -> tuple[dict[str, Any], dict[str, str]]:
+    pkg_p = _resolve_rel(spec_path, str(dev["package_yaml"]))
+    return read_package(pkg_p)
+
+
 def _render_binding_lock(spec: dict[str, Any], spec_path: Path) -> dict[str, Any]:
     entries = []
     for dev in spec["devices"]:
@@ -448,6 +582,12 @@ def _render_binding_lock(spec: dict[str, Any], spec_path: Path) -> dict[str, Any
             rtl_p = _resolve_rel(spec_path, str(dev["rtl_source"]))
             entry["rtl_module"] = dev["rtl_module"]
             entry["rtl_sha256"] = digest(rtl_p)
+            rmeta = _device_rtl_meta(dev, spec_path)
+            if rmeta is not None:
+                entry["rtl_protocol"] = rmeta["protocol"]
+                entry["rtl_data_bits"] = rmeta["data_bits"]
+                entry["rtl_reset_active_low"] = rmeta["reset_active_low"]
+                entry["rtl_ports"] = rmeta["ports"]
         elif bind == "usp-plugin":
             pkg_p = _resolve_rel(spec_path, str(dev["package_yaml"]))
             pkg, hashes = read_package(pkg_p)
@@ -607,11 +747,12 @@ def _render_qemu_dts(spec: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _render_gem5_system_py(spec: dict[str, Any]) -> str:
-    """Emit a gem5 architectural system script binding gem5 CPU/L2/SRAM + usp-mmio32-v1 IPs."""
+def _render_gem5_system_py(spec: dict[str, Any], spec_path: Path | None = None) -> str:
+    """Emit a gem5 architectural system script binding CPU/L2/SRAM + usp-bus-v2/v1 IPs."""
     cpu = spec["cpu"]
     ram = next(d for d in spec["devices"] if d["kind"] == "ram")
     gem5_cpu = str(cpu.get("gem5_model", "RiscvTimingSimpleCPU")).removeprefix("gem5.")
+    quantum_ns = int(cpu.get("quantum_ns", 100_000))
     core_clk = next(
         (int(c["freq_hz"]) for c in spec["clock_domains"] if c["name"] == cpu["clock_domain"]),
         800_000_000,
@@ -625,7 +766,7 @@ def _render_gem5_system_py(spec: dict[str, Any]) -> str:
     lines = [
         f'"""Auto-generated gem5 multi-platform system graph for {spec["name"]}.',
         "Binds gem5 CPU / 512KB L2$ / On-Chip SRAM with out-of-process SystemC/Verilator",
-        'peripherals via the `NativeSocDevice` (`usp-mmio32-v1`) socket adapter."""',
+        'peripherals via `NativeSocDevice` (`usp-bus-v2` + `usp-mmio32-v1` quantum sync)."""',
         "",
         "import argparse",
         "import json",
@@ -649,14 +790,26 @@ def _render_gem5_system_py(spec: dict[str, Any]) -> str:
         "",
         f'DESIGN_NAME = "{spec["name"]}"',
         f"CORE_CLOCK_MHZ = {core_clk // 1_000_000}",
+        f"QUANTUM_SYNC_NS = {quantum_ns}",
         f"MAIN_RAM_BASE = 0x{int(ram['base']):08X}",
         f"MAIN_RAM_SIZE = 0x{int(ram['size']):08X}",
         "PLUGIN_MMIO_DEVICES = [",
     ]
     for d in plugin_devs:
+        proto = "usp-mmio32-v1"
+        dma_en = False
+        if d["binding"] == "usp-plugin" and spec_path is not None:
+            pkg, _ = _device_plugin_info(d, spec_path)
+            proto = str(pkg["interface"]["protocol"])
+            dma_en = bool(pkg["interface"].get("supports_dma_master", False))
+        elif d["binding"] == "verilator-rtl" and spec_path is not None:
+            rmeta = _device_rtl_meta(d, spec_path)
+            if rmeta and rmeta["protocol"] in {"axi4", "axi4-lite", "tl-ul"}:
+                proto = "usp-bus-v2"
         lines.append(
             f'    {{"name": "{d["name"]}", "kind": "{d["kind"]}", '
-            f'"provider": "{d["provider"]}", "base": 0x{int(d["base"]):08X}, '
+            f'"provider": "{d["provider"]}", "protocol": "{proto}", '
+            f'"dma_enabled": {dma_en}, "base": 0x{int(d["base"]):08X}, '
             f'"size": 0x{int(d["size"]):08X}, "irq": {int(d.get("irq", 0))}}},'
         )
     lines.extend(
@@ -697,6 +850,12 @@ def _render_gem5_system_py(spec: dict[str, Any]) -> str:
             "                NativeSocDevice(",
             '                    platform=system.platform, base=dev["base"], span=dev["size"],',
             '                    kind=0, irq=dev["irq"], socket_path=sock,',
+            '                    protocol=dev["protocol"],',
+            (
+                "                    quantum_ns=QUANTUM_SYNC_NS "
+                'if dev["protocol"] == "usp-bus-v2" else 0,'
+            ),
+            '                    dma_enabled=bool(dev["dma_enabled"]),',
             "                )",
             "            )",
             "    system.usp_plugins = ext_devs",
@@ -759,13 +918,15 @@ def _render_chipyard_scala(spec: dict[str, Any]) -> str:
 def _render_generated_cpp(
     spec: dict[str, Any],
     *,
+    spec_path: Path | None = None,
     use_verilator: bool,
     use_live_plugins: bool,
 ) -> str:
-    """Emit a complete, data-driven SystemC/TLM-2.0 + Verilator + Live Plugin C++ top-level."""
+    """Emit a data-driven SystemC/TLM-2.0 + QEMU Master + Verilator AXI4/TL-UL + v2 Plugin top."""
     clock_idx = {str(c["name"]): i for i, c in enumerate(spec["clock_domains"])}
     fabric_idx = {str(f["name"]): i for i, f in enumerate(spec["fabrics"])}
     cdc_lat = max((int(b["cdc_latency_ns"]) for b in spec["cdc_bridges"]), default=12)
+    default_quantum_ns = int(spec["cpu"].get("quantum_ns", 100_000))
 
     lines = [
         "// Auto-generated multi-platform SystemC/TLM-2.0 top-level; DO NOT EDIT BY HAND.",
@@ -774,6 +935,20 @@ def _render_generated_cpp(
     ]
     rtl_devices = [d for d in spec["devices"] if d["binding"] == "verilator-rtl"]
     has_l2_rtl = use_verilator and any(d["kind"] == "l2_cache" for d in rtl_devices)
+    rtl_meta_by_dev: dict[str, dict[str, Any]] = {}
+    if spec_path is not None:
+        for d in rtl_devices:
+            rmeta = _device_rtl_meta(d, spec_path)
+            if rmeta is not None:
+                rtl_meta_by_dev[str(d["name"])] = rmeta
+
+    plugin_proto_by_dev: dict[str, str] = {}
+    if spec_path is not None:
+        for d in spec["devices"]:
+            if d["binding"] == "usp-plugin":
+                pkg, _ = _device_plugin_info(d, spec_path)
+                plugin_proto_by_dev[str(d["name"])] = str(pkg["interface"]["protocol"])
+
     if use_verilator and rtl_devices:
         lines.append('#include "verilated.h"')
         for d in rtl_devices:
@@ -781,15 +956,25 @@ def _render_generated_cpp(
         if has_l2_rtl:
             lines.append("#define USP_HAS_VL2_CACHE_RTL 1")
 
+    lines.extend(['#include "composer_runtime.hpp"', '#include "soc_map.h"', ""])
+
+    # Auto-emit C++ PinTraits for every AXI4 / AXI4-Lite / OpenTitan TL-UL RTL block!
+    if use_verilator:
+        for d in rtl_devices:
+            dname = str(d["name"])
+            rmeta = rtl_meta_by_dev.get(dname)
+            if rmeta and rmeta["protocol"] in {"axi4", "axi4-lite", "tl-ul"}:
+                lines.extend(emit_cpp_pin_traits(f"Traits_{dname}", rmeta))
+                lines.append("")
+
     lines.extend(
         [
-            '#include "composer_runtime.hpp"',
-            '#include "soc_map.h"',
-            "",
             "int sc_main(int argc, char **argv) {",
             "    if (argc < 5) {",
             '        std::cerr << "Usage: composed-soc-emu <elf> <console> <trace> <summary> '
-            '[max_steps] [--vcd-out PATH] [--plugin name=sock ...]\\n";',
+            "[max_steps] [--vcd-out PATH] [--plugin name=sock ...] "
+            "[--cpu-master systemc-rv64|qemu] [--qemu-sock PATH] [--shared-ram PATH] "
+            '[--quantum-ns N]\\n";',
             "        return 2;",
             "    }",
         ]
@@ -803,11 +988,20 @@ def _render_generated_cpp(
             "    const std::string trace_path = argv[3];",
             "    const std::string summary_path = argv[4];",
             "    uint64_t max_steps = 800000ULL;",
+            '    std::string cpu_master = "systemc-rv64";',
+            "    std::string qemu_sock_path;",
+            "    std::string shared_ram_path;",
+            f"    uint64_t quantum_ns = {default_quantum_ns}ULL;",
             "    std::string vcd_path;",
             "    std::vector<std::pair<std::string, std::string>> plugin_socks;",
             "    for (int i = 5; i < argc; ++i) {",
             "        std::string arg = argv[i];",
             '        if (arg == "--vcd-out" && i + 1 < argc) vcd_path = argv[++i];',
+            '        else if (arg == "--cpu-master" && i + 1 < argc) cpu_master = argv[++i];',
+            '        else if (arg == "--qemu-sock" && i + 1 < argc) qemu_sock_path = argv[++i];',
+            '        else if (arg == "--shared-ram" && i + 1 < argc) shared_ram_path = argv[++i];',
+            '        else if (arg == "--quantum-ns" && i + 1 < argc) '
+            "quantum_ns = std::strtoull(argv[++i], nullptr, 10);",
             '        else if (arg == "--plugin" && i + 1 < argc) {',
             "            std::string kv = argv[++i];",
             "            size_t eq = kv.find('=');",
@@ -821,6 +1015,7 @@ def _render_generated_cpp(
             '        return "";',
             "    };",
             "    (void)get_sock;",
+            "    (void)quantum_ns;",
             "",
             "    sc_core::sc_set_time_resolution(1, sc_core::SC_PS);",
             "    usp::VcdWriter vcd;",
@@ -839,11 +1034,22 @@ def _render_generated_cpp(
     cpu = spec["cpu"]
     cpu_fid = fabric_idx[str(cpu["fabric"])]
     cpu_cid = clock_idx[str(cpu["clock_domain"])]
-    lines.append(f'    usp::Rv64CpuMaster cpu0("{cpu["name"]}", 0u);')
-    lines.append(
-        f'    xbar.masters.push_back({{"{cpu["name"]}", {cpu_fid}, {cpu_cid}, false, 0ULL}});'
+    lines.extend(
+        [
+            "    std::unique_ptr<usp::Rv64CpuMaster> cpu_rv64;",
+            "    std::unique_ptr<usp::QemuCpuMaster> cpu_qemu;",
+            '    const bool use_qemu_master = (cpu_master == "qemu");',
+            f'    xbar.masters.push_back({{"{cpu["name"]}", {cpu_fid}, {cpu_cid}, false, 0ULL}});',
+            "    if (use_qemu_master) {",
+            f'        cpu_qemu = std::make_unique<usp::QemuCpuMaster>("{cpu["name"]}_qemu", '
+            "qemu_sock_path, quantum_ns);",
+            "        cpu_qemu->bus.bind(xbar.in);",
+            "    } else {",
+            f'        cpu_rv64 = std::make_unique<usp::Rv64CpuMaster>("{cpu["name"]}", 0u);',
+            "        cpu_rv64->bus.bind(xbar.in);",
+            "    }",
+        ]
     )
-    lines.append("    cpu0.bus.bind(xbar.in);")
 
     # Instantiate every declared device purely from IR!
     ram_var = ""
@@ -855,6 +1061,7 @@ def _render_generated_cpp(
     adc_var = ""
     dma_vars: list[str] = []
     jtag_vars: list[str] = []
+    v2_plugin_vars: list[tuple[dict[str, Any], str]] = []
     dev_vars: list[tuple[dict[str, Any], str]] = []
 
     for idx, dev in enumerate(spec["devices"]):
@@ -906,13 +1113,41 @@ def _render_generated_cpp(
             adc_var = var
             lines.append(f'    usp::TisarAdcStreamTlm {var}("{dname}");')
         elif binding == "usp-plugin" and use_live_plugins:
-            lines.append(f'    usp::UspMmio32ProxyTlm {var}("{dname}", get_sock("{dname}"), 15u);')
+            pproto = plugin_proto_by_dev.get(dname, "usp-mmio32-v1")
+            if pproto == "usp-bus-v2":
+                v2_plugin_vars.append((dev, var))
+                lines.append(
+                    f'    usp::UspBusV2ProxyTlm {var}("{dname}", '
+                    f'get_sock("{dname}"), 15u, quantum_ns);'
+                )
+            else:
+                lines.append(
+                    f'    usp::UspMmio32ProxyTlm {var}("{dname}", get_sock("{dname}"), 15u);'
+                )
         elif binding == "verilator-rtl" and use_verilator:
-            busy_reg = int(dev.get("rtl_busy_reg", -1))
-            lines.append(
-                f"    usp::VerilatorMmioWrapper<V{dev['rtl_module']}> {var}"
-                f'("{dname}", 4u, {busy_reg}, 2048u);'
-            )
+            rmeta = rtl_meta_by_dev.get(dname)
+            rproto = rmeta["protocol"] if rmeta else "mmio32"
+            if rproto == "axi4":
+                lines.append(
+                    f"    usp::VerilatorAxi4FullAdapter<V{dev['rtl_module']}, Traits_{dname}> "
+                    f'{var}("{dname}", 4u);'
+                )
+            elif rproto == "axi4-lite":
+                lines.append(
+                    f"    usp::VerilatorAxi4LiteAdapter<V{dev['rtl_module']}, Traits_{dname}> "
+                    f'{var}("{dname}", 4u);'
+                )
+            elif rproto == "tl-ul":
+                lines.append(
+                    f"    usp::VerilatorTlulAdapter<V{dev['rtl_module']}, Traits_{dname}> "
+                    f'{var}("{dname}", 4u);'
+                )
+            else:
+                busy_reg = int(dev.get("rtl_busy_reg", -1))
+                lines.append(
+                    f"    usp::VerilatorMmioWrapper<V{dev['rtl_module']}> {var}"
+                    f'("{dname}", 4u, {busy_reg}, 2048u);'
+                )
         elif kind == "hwacha_vec4":
             lines.append(f'    usp::HwachaVec4Tlm {var}("{dname}");')
         elif kind == "tuner_32ph":
@@ -942,7 +1177,7 @@ def _render_generated_cpp(
             f"0x{int(dev['size']):08X}ULL, {fid}, {cid}, {idx}, {is_ram}, {log_mmio}, 0ULL}});"
         )
 
-    # Bind additional bus masters (DMA, JTAG-to-AXI4, TISAR AXI4-Stream Engine)
+    # Bind additional bus masters (DMA, JTAG-to-AXI4, TISAR AXI4-Stream, usp-bus-v2 Reverse DMA!)
     for dev, var in dev_vars:
         fid = fabric_idx[str(dev["fabric"])]
         cid = clock_idx[str(dev["clock_domain"])]
@@ -962,6 +1197,13 @@ def _render_generated_cpp(
                 f"{fid}, {cid}, false, 0ULL}});"
             )
             lines.append(f"    {var}.stream_bus.bind(xbar.in);")
+    for dev, var in v2_plugin_vars:
+        fid = fabric_idx[str(dev["fabric"])]
+        cid = clock_idx[str(dev["clock_domain"])]
+        lines.append(
+            f'    xbar.masters.push_back({{"{dev["name"]}_dma", {fid}, {cid}, true, 0ULL}});'
+        )
+        lines.append(f"    {var}.dma_master.bind(xbar.in);")
 
     # Wire AXI4-Stream pipeline endpoints on TISAR ADC Stream Engine from IR
     if adc_var:
@@ -1001,45 +1243,108 @@ def _render_generated_cpp(
     lines.extend(
         [
             f"    xbar.plic = &{plic_var};",
-            f"    cpu0.finisher = &{finisher_var};",
-            f"    cpu0.clint = &{clint_var};",
-            f"    cpu0.plic = &{plic_var};",
-            "    cpu0.max_steps = max_steps;",
-            "    uint64_t entry = SOC_CPU_ENTRY;",
-            f"    if (!usp::load_elf64(elf_path, {ram_var}, SOC_MAIN_RAM_BASE, entry)) {{",
-            '        std::cerr << "Failed to load RV64 ELF: " << elf_path << "\\n";',
-            "        return 2;",
+            "    if (use_qemu_master) {",
+            (
+                f"        if (!shared_ram_path.empty() && "
+                f"!{ram_var}.map_shared_file(shared_ram_path)) {{"
+            ),
+            (
+                '            std::cerr << "Failed to mmap shared QEMU RAM: " '
+                '<< shared_ram_path << "\\n";'
+            ),
+            "            return 2;",
+            "        }",
+            f"        cpu_qemu->finisher = &{finisher_var};",
+            f"        cpu_qemu->clint = &{clint_var};",
+            f"        cpu_qemu->plic = &{plic_var};",
+        ]
+    )
+    for _, var in v2_plugin_vars:
+        lines.append(f"        cpu_qemu->quantum_peers.push_back(&{var});")
+    for dev, var in dev_vars:
+        if use_verilator and dev["binding"] == "verilator-rtl" and dev["kind"] != "l2_cache":
+            rmeta = rtl_meta_by_dev.get(str(dev["name"]))
+            if rmeta is not None and rmeta["protocol"] in {"axi4", "axi4-lite", "tl-ul"}:
+                lines.append(f"        cpu_qemu->quantum_peers.push_back(&{var});")
+    lines.extend(
+        [
+            "    } else {",
+            f"        cpu_rv64->finisher = &{finisher_var};",
+            f"        cpu_rv64->clint = &{clint_var};",
+            f"        cpu_rv64->plic = &{plic_var};",
+            "        cpu_rv64->max_steps = max_steps;",
+            "        uint64_t entry = SOC_CPU_ENTRY;",
+            f"        if (!usp::load_elf64(elf_path, {ram_var}, SOC_MAIN_RAM_BASE, entry)) {{",
+            '            std::cerr << "Failed to load RV64 ELF: " << elf_path << "\\n";',
+            "            return 2;",
+            "        }",
+            "        cpu_rv64->pc = entry;",
             "    }",
-            "    cpu0.pc = entry;",
             "    sc_core::sc_start();",
             "",
             (
+                "    const bool timed_out = "
+                "use_qemu_master ? cpu_qemu->timed_out : cpu_rv64->timed_out;"
+            ),
+            (
+                "    const uint64_t insns_exec = "
+                "use_qemu_master ? cpu_qemu->instructions : cpu_rv64->instructions;"
+            ),
+            (
+                "    const uint64_t traps_exec = "
+                "use_qemu_master ? cpu_qemu->traps_taken : cpu_rv64->traps_taken;"
+            ),
+            (
+                "    const uint64_t q_barriers = "
+                "use_qemu_master ? cpu_qemu->quantum_sync_barriers : 0ULL;"
+            ),
+            "    const uint64_t q_time_ps = use_qemu_master ? cpu_qemu->qemu_time_ps : 0ULL;",
+            "    const uint64_t q_drift_ps = use_qemu_master ? cpu_qemu->max_time_drift_ps : 0ULL;",
+            "    uint64_t total_rev_dma_bytes = 0ULL;",
+        ]
+    )
+    for _, var in v2_plugin_vars:
+        lines.append(f"    total_rev_dma_bytes += {var}.reverse_dma_bytes();")
+    lines.extend(
+        [
+            (
                 f"    const bool passed = {finisher_var}.halted && "
-                f"{finisher_var}.exit_code == 0 && !cpu0.timed_out;"
+                f"{finisher_var}.exit_code == 0 && !timed_out;"
             ),
             "    std::ofstream summary(summary_path);",
             '    summary << "{\\n"',
             '            << "  \\"status\\": \\"" << (passed ? "PASSED" : "FAILED") << "\\",\\n"',
             f'            << "  \\"design\\": \\"{spec["name"]}\\",\\n"',
             f'            << "  \\"mode\\": \\"{mode_lbl}\\",\\n"',
+            '            << "  \\"cpu_master\\": \\"" << cpu_master << "\\",\\n"',
             (
                 '            << "  \\"halted\\": " << '
                 f'({finisher_var}.halted ? "true" : "false") << ",\\n"'
             ),
-            '            << "  \\"timed_out\\": " << (cpu0.timed_out ? "true" : "false") << ",\\n"',
+            '            << "  \\"timed_out\\": " << (timed_out ? "true" : "false") << ",\\n"',
             (
                 '            << "  \\"exit_code\\": " << '
-                f'(cpu0.timed_out ? 124 : {finisher_var}.exit_code) << ",\\n"'
+                f'(timed_out ? 124 : {finisher_var}.exit_code) << ",\\n"'
             ),
-            '            << "  \\"instructions_executed\\": " << cpu0.instructions << ",\\n"',
-            '            << "  \\"traps_taken\\": " << cpu0.traps_taken << ",\\n"',
+            '            << "  \\"instructions_executed\\": " << insns_exec << ",\\n"',
+            '            << "  \\"traps_taken\\": " << traps_exec << ",\\n"',
             (
                 '            << "  \\"systemc_time_ps\\": " << '
                 'sc_core::sc_time_stamp().value() << ",\\n"'
             ),
+            '            << "  \\"quantum_ns\\": " << quantum_ns << ",\\n"',
+            '            << "  \\"quantum_sync_barriers\\": " << q_barriers << ",\\n"',
+            '            << "  \\"qemu_time_ps\\": " << q_time_ps << ",\\n"',
+            '            << "  \\"max_time_drift_ps\\": " << q_drift_ps << ",\\n"',
             '            << "  \\"total_transactions\\": " << xbar.total_transactions << ",\\n"',
             '            << "  \\"mmio_transactions\\": " << xbar.mmio_transactions << ",\\n"',
             '            << "  \\"cdc_crossings\\": " << xbar.cdc_crossings << ",\\n"',
+            (
+                '            << "  \\"burst64_transactions\\": " << '
+                'xbar.burst64_transactions << ",\\n"'
+            ),
+            '            << "  \\"burst64_bytes\\": " << xbar.burst64_bytes << ",\\n"',
+            '            << "  \\"reverse_dma_bytes\\": " << total_rev_dma_bytes << ",\\n"',
             f'            << "  \\"uart_tx_bytes\\": " << {uart_var}.tx_bytes << ",\\n"',
         ]
     )
@@ -1073,7 +1378,7 @@ def _render_generated_cpp(
                 ),
             ]
         )
-    # Emit fabric hits, master hits, device hits, RTL cycles, and runtime backends
+    # Emit fabric hits, master hits, device hits, RTL cycles, pin handshakes, burst64/DMA, backends
     lines.append('            << "  \\"fabric_hits\\": {\\n";')
     lines.append("    for (size_t i = 0; i < xbar.fabrics.size(); ++i) {")
     lines.append(
@@ -1101,6 +1406,32 @@ def _render_generated_cpp(
         lines.append(
             f'    summary << "    \\"{dev["name"]}\\": " << {var}.rtl_cycles() << "{comma}\\n";'
         )
+    lines.append('    summary << "  },\\n  \\"bus_handshakes\\": {\\n";')
+    for i, (dev, var) in enumerate(dev_vars):
+        comma = "," if i + 1 < len(dev_vars) else ""
+        lines.append(
+            f'    summary << "    \\"{dev["name"]}\\": " << {var}.bus_handshakes() << "{comma}\\n";'
+        )
+    lines.append('    summary << "  },\\n  \\"device_burst64_tx\\": {\\n";')
+    for i, (dev, var) in enumerate(dev_vars):
+        comma = "," if i + 1 < len(dev_vars) else ""
+        lines.append(
+            f'    summary << "    \\"{dev["name"]}\\": " << {var}.burst64_tx() << "{comma}\\n";'
+        )
+    lines.append('    summary << "  },\\n  \\"device_reverse_dma_bytes\\": {\\n";')
+    for i, (dev, var) in enumerate(dev_vars):
+        comma = "," if i + 1 < len(dev_vars) else ""
+        lines.append(
+            f'    summary << "    \\"{dev["name"]}\\": " << '
+            f'{var}.reverse_dma_bytes() << "{comma}\\n";'
+        )
+    lines.append('    summary << "  },\\n  \\"device_quantum_syncs\\": {\\n";')
+    for i, (dev, var) in enumerate(dev_vars):
+        comma = "," if i + 1 < len(dev_vars) else ""
+        lines.append(
+            f'    summary << "    \\"{dev["name"]}\\": " << '
+            f'{var}.quantum_sync_count() << "{comma}\\n";'
+        )
     lines.append('    summary << "  },\\n  \\"device_backends\\": {\\n";')
     for i, (dev, var) in enumerate(dev_vars):
         comma = "," if i + 1 < len(dev_vars) else ""
@@ -1112,7 +1443,7 @@ def _render_generated_cpp(
         [
             '    summary << "  }\\n}\\n";',
             "    summary.flush();",
-            f"    return passed ? 0 : (cpu0.timed_out ? 124 : {finisher_var}.exit_code);",
+            f"    return passed ? 0 : (timed_out ? 124 : {finisher_var}.exit_code);",
             "}",
         ]
     )
@@ -1128,8 +1459,9 @@ def plan_composed_soc(spec_path: Path, out_dir: Path) -> dict[str, Any]:
 
     (out_dir / "soc_map.h").write_text(_render_soc_map_h(spec))
     (out_dir / "link.ld").write_text(_render_linker_script(spec))
+    (out_dir / "link_qemu.ld").write_text(_render_qemu_linker_script(spec))
     (out_dir / "generated_soc_top.cpp").write_text(
-        _render_generated_cpp(spec, use_verilator=True, use_live_plugins=True)
+        _render_generated_cpp(spec, spec_path=spec_path, use_verilator=True, use_live_plugins=True)
     )
 
     ipxact_dir = out_dir / "ipxact"
@@ -1154,7 +1486,7 @@ def plan_composed_soc(spec_path: Path, out_dir: Path) -> dict[str, Any]:
     gem5_dir = out_dir / "gem5"
     gem5_dir.mkdir(exist_ok=True)
     gem5_py = gem5_dir / f"{spec['name'].lower()}_gem5_system.py"
-    gem5_py.write_text(_render_gem5_system_py(spec))
+    gem5_py.write_text(_render_gem5_system_py(spec, spec_path=spec_path))
 
     cy_dir = out_dir / "chipyard"
     cy_dir.mkdir(exist_ok=True)
@@ -1179,6 +1511,7 @@ def plan_composed_soc(spec_path: Path, out_dir: Path) -> dict[str, Any]:
         "exports": {
             "soc_map_h": digest(out_dir / "soc_map.h"),
             "link_ld": digest(out_dir / "link.ld"),
+            "link_qemu_ld": digest(out_dir / "link_qemu.ld"),
             "generated_soc_top_cpp": digest(out_dir / "generated_soc_top.cpp"),
             "binding_lock_json": digest(out_dir / "binding-lock.json"),
             "ipxact_design_xml": digest(ipxact_dir / "design.xml"),
@@ -1250,6 +1583,7 @@ def _compile_rv64_sw(
     log_path: Path,
     isa: str = "rv64ima_zicsr",
 ) -> str:
+    composer_inc = _resolve_runtime_hpp().parent
     cmd = [
         gcc,
         f"-march={isa}",
@@ -1264,8 +1598,87 @@ def _compile_rv64_sw(
         "-Werror",
         "-Wl,--build-id=none",
         f"-I{inc_dir}",
+        f"-I{composer_inc}",
         "-T",
         str(inc_dir / "link.ld"),
+        str(crt0_path),
+        str(c_src),
+        "-o",
+        str(out_elf),
+    ]
+    execute_build(cmd, inc_dir, log_path, 60)
+    return digest(out_elf)
+
+
+def _resolve_qemu_accel(requested: str) -> str:
+    if requested not in ALLOWED_QEMU_ACCELS:
+        raise ContractError(f"E_COMPOSE_QEMU_ACCEL unsupported accel: {requested}")
+    arch = platform.machine().lower()
+    kvm_ready = arch == "riscv64" and os.access("/dev/kvm", os.R_OK | os.W_OK)
+    if requested == "kvm":
+        if not kvm_ready:
+            raise ContractError(
+                f"E_COMPOSE_QEMU_KVM KVM acceleration requested (--qemu-accel kvm) "
+                f"but host architecture is '{arch}' and /dev/kvm is not usable for riscv64 KVM"
+            )
+        return "kvm"
+    if requested == "auto":
+        return "kvm" if kvm_ready else "tcg"
+    return "tcg"
+
+
+def _compile_rv64_qemu_sw(
+    gcc: str,
+    crt0_path: Path,
+    c_src: Path,
+    inc_dir: Path,
+    out_elf: Path,
+    log_path: Path,
+    isa: str = "rv64ima_zicsr",
+) -> str:
+    """Compile guest RV64 firmware linked with M-mode QEMU PMP + VirtIO `usp-bus-v2` bridge."""
+    composer_inc = _resolve_runtime_hpp().parent
+    bridge_s = _resolve_composer_resource("qemu_usp_bridge.S")
+    bridge_c = _resolve_composer_resource("qemu_usp_bridge.c")
+    bridge_s_obj = inc_dir / "qemu_usp_bridge_asm.o"
+    bridge_c_obj = inc_dir / "qemu_usp_bridge_c.o"
+    base_flags = [
+        gcc,
+        f"-march={isa}",
+        "-mabi=lp64",
+        "-mcmodel=medany",
+        "-O2",
+        "-ffreestanding",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-DUSP_QEMU_CPU_MASTER=1",
+        f"-I{inc_dir}",
+        f"-I{composer_inc}",
+    ]
+    if not bridge_s_obj.is_file():
+        execute_build(
+            [*base_flags, "-c", str(bridge_s), "-o", str(bridge_s_obj)],
+            inc_dir,
+            inc_dir / "bridge-asm-build.log",
+            60,
+        )
+    if not bridge_c_obj.is_file():
+        execute_build(
+            [*base_flags, "-c", str(bridge_c), "-o", str(bridge_c_obj)],
+            inc_dir,
+            inc_dir / "bridge-c-build.log",
+            60,
+        )
+    cmd = [
+        *base_flags,
+        "-nostdlib",
+        "-nostartfiles",
+        "-Wl,--build-id=none",
+        "-T",
+        str(inc_dir / "link_qemu.ld"),
+        str(bridge_s_obj),
+        str(bridge_c_obj),
         str(crt0_path),
         str(c_src),
         "-o",
@@ -1351,6 +1764,7 @@ def _run_qemu_crosscheck(
 
 def _compute_composed_coverage(
     spec: dict[str, Any],
+    spec_path: Path,
     summary: dict[str, Any],
     console_text: str,
     vcd_path: Path,
@@ -1359,13 +1773,23 @@ def _compute_composed_coverage(
     qemu_res: dict[str, Any] | None,
     use_verilator: bool,
     use_live_plugins: bool,
+    cpu_master_used: str = "systemc-rv64",
 ) -> dict[str, Any]:
     fab_hits = summary.get("fabric_hits", {})
     master_hits = summary.get("master_hits", {})
     dev_hits = summary.get("device_hits", {})
     rtl_cyc = summary.get("rtl_cycles", {})
+    bus_hs = summary.get("bus_handshakes", {})
+    dev_burst64 = summary.get("device_burst64_tx", {})
+    dev_rev_dma = summary.get("device_reverse_dma_bytes", {})
+    dev_qsync = summary.get("device_quantum_syncs", {})
     streams = summary.get("axi4_stream_stages", [])
     markers = list(spec["firmware"]["expected_markers"])
+
+    has_l2 = any(d["kind"] == "l2_cache" for d in spec["devices"])
+    has_dma_accel = any(d["kind"] == "dma_accel" for d in spec["devices"])
+    has_jtag = any(d["kind"] == "jtag_to_axi4" for d in spec["devices"])
+    has_sam = any(d["kind"] in {"sam_buffer", "pattern_gen_la"} for d in spec["devices"])
 
     bins: dict[str, bool] = {
         "all_firmware_markers_passed": all(m in console_text for m in markers),
@@ -1378,27 +1802,44 @@ def _compute_composed_coverage(
         "vcd_waveform_captured": vcd_path.is_file()
         and "$enddefinitions" in vcd_path.read_text(errors="replace"),
         "negative_guest_failure_enforced": neg_ok,
-        "l2_cache_hits_misses_snoops": (
+    }
+    if has_l2:
+        bins["l2_cache_hits_misses_snoops"] = (
             summary.get("l2_hits", 0) > 0
             and summary.get("l2_misses", 0) > 0
             and summary.get("l2_dma_snoops", 0) > 0
-        ),
-        "dma_cross_bridge_transfer": summary.get("dma_bytes_transferred", 0) >= 64,
-        "jtag_to_axi4_independent_master": summary.get("jtag_axi4_tx", 0) >= 2,
-        "axi4_stream_5_stages_active": (
-            len(streams) == 5 and all(int(x) > 0 for x in streams) if spec.get("streams") else True
-        ),
-        "all_sam_buffers_populated": all(
+        )
+    if has_dma_accel:
+        bins["dma_cross_bridge_transfer"] = summary.get("dma_bytes_transferred", 0) >= 64
+    if has_jtag:
+        bins["jtag_to_axi4_independent_master"] = summary.get("jtag_axi4_tx", 0) >= 2
+    if spec.get("streams"):
+        bins["axi4_stream_5_stages_active"] = len(streams) == 5 and all(int(x) > 0 for x in streams)
+    if has_sam:
+        bins["all_sam_buffers_populated"] = all(
             dev_hits.get(d["name"], 0) > 0
             for d in spec["devices"]
             if d["kind"] in {"sam_buffer", "pattern_gen_la"}
-        ),
-    }
+        )
+
+    if cpu_master_used == "qemu":
+        bins["qemu_cpu_master_active"] = (
+            summary.get("cpu_master") == "qemu" and summary.get("instructions_executed", 0) > 0
+        )
+        bins["quantum_time_sync_verified"] = summary.get("quantum_sync_barriers", 0) > 0
+
     for dev in spec["devices"]:
         if dev["binding"] == "verilator-rtl":
             bins[f"rtl_{dev['name']}_active"] = dev_hits.get(dev["name"], 0) > 0 and (
                 not use_verilator or rtl_cyc.get(dev["name"], 0) > 0
             )
+            if use_verilator:
+                rmeta = _device_rtl_meta(dev, spec_path)
+                if rmeta is not None and rmeta["protocol"] in {"axi4", "axi4-lite", "tl-ul"}:
+                    ptag = rmeta["protocol"].replace("-", "_")
+                    bins[f"rtl_pin_{dev['name']}_{ptag}_handshakes"] = (
+                        bus_hs.get(dev["name"], 0) > 0
+                    )
         elif dev["binding"] == "usp-plugin":
             tr = plugin_traces.get(dev["name"], {})
             bins[f"live_plugin_{dev['name']}_ipc_ok"] = (
@@ -1406,6 +1847,19 @@ def _compute_composed_coverage(
                 if use_live_plugins
                 else dev_hits.get(dev["name"], 0) > 0
             )
+            if use_live_plugins:
+                pkg, _ = _device_plugin_info(dev, spec_path)
+                if pkg["interface"]["protocol"] == "usp-bus-v2":
+                    bins[f"plugin_v2_{dev['name']}_reverse_dma_ok"] = (
+                        dev_rev_dma.get(dev["name"], 0) > 0
+                    )
+                    bins[f"plugin_v2_{dev['name']}_burst64_ok"] = (
+                        dev_burst64.get(dev["name"], 0) > 0
+                    )
+                    if cpu_master_used == "qemu":
+                        bins[f"plugin_v2_{dev['name']}_quantum_sync_ok"] = (
+                            dev_qsync.get(dev["name"], 0) > 0
+                        )
     if qemu_res is not None and qemu_res.get("status") != "SKIPPED":
         bins["qemu_cross_engine_rv64_passed"] = qemu_res.get("status") == "PASSED"
 
@@ -1431,29 +1885,46 @@ def _render_composed_report_md(report: dict[str, Any]) -> str:
         f"- **Contract:** `{report['contract']}`",
         f"- **Status:** **{report['status']}**",
         f"- **Execution Mode:** `{report['execution_mode']}`",
+        f"- **CPU Master Engine:** `{report.get('cpu_master_engine', 'systemc-rv64')}`"
+        + (f" (`accel={report['qemu_accel']}`)" if report.get("qemu_accel") else ""),
         f"- **Functional Coverage:** **{cov.get('coverage_percent', 0)}%** "
         f"(`{cov.get('bins_hit', 0)}/{cov.get('bins_total', 0)}` bins)",
         f"- **Timestamp (UTC):** `{report['created_utc']}`",
         "",
-        "## System-Level Multi-Clock & Interconnect Metrics",
+        "## System-Level Multi-Clock, Quantum Sync & Interconnect Metrics",
         "",
-        f"- Instructions executed: `{summ.get('instructions_executed')}` | "
+        f"- Instructions retired/executed: `{summ.get('instructions_executed')}` | "
         f"Traps/IRQs: `{summ.get('traps_taken')}`",
-        f"- SystemC simulated time (ps): `{summ.get('systemc_time_ps')}`",
+        f"- Wall-clock run time (ms): `{pos.get('wall_time_ms')}` | "
+        f"Wall-time emulation throughput (MIPS, host wall clock): `{pos.get('wall_time_mips')}`",
+        f"- SystemC simulated time (ps): `{summ.get('systemc_time_ps')}` | "
+        f"Quantum (`ns`): `{summ.get('quantum_ns')}` | "
+        f"Quantum sync barriers: `{summ.get('quantum_sync_barriers', 0)}` | "
+        f"Max time drift (ps): `{summ.get('max_time_drift_ps', 0)}`",
         f"- Total bus transactions: `{summ.get('total_transactions')}` | "
-        f"Async CDC crossings (`core_clk <-> dsp_clk`): `{summ.get('cdc_crossings')}`",
-        f"- DMA transferred bytes: `{summ.get('dma_bytes_transferred')}` | "
-        f"JTAG-to-AXI4 host transactions: `{summ.get('jtag_axi4_tx')}`",
-        f"- L2 Cache: `hits={summ.get('l2_hits')}`, `misses={summ.get('l2_misses')}`, "
-        f"`dma_snoops={summ.get('l2_dma_snoops')}`",
-        f"- AXI4-Stream Pipeline Packets: total=`{summ.get('axi4_stream_packets_total')}` "
-        f"stages=`{summ.get('axi4_stream_stages')}`",
-        "",
-        "### Fabric Traffic",
-        "",
-        "| Fabric / Crossbar | Transactions |",
-        "|---|---:|",
+        f"Async CDC crossings: `{summ.get('cdc_crossings')}`",
+        f"- 64-bit Burst transactions: `{summ.get('burst64_transactions', 0)}` "
+        f"(`{summ.get('burst64_bytes', 0)}` bytes) | "
+        f"Plugin Reverse Bus-Master DMA bytes: `{summ.get('reverse_dma_bytes', 0)}`",
+        f"- SoC DMA transferred bytes: `{summ.get('dma_bytes_transferred', 0)}` | "
+        f"JTAG-to-AXI4 host transactions: `{summ.get('jtag_axi4_tx', 0)}`",
+        f"- L2 Cache: `hits={summ.get('l2_hits', 0)}`, `misses={summ.get('l2_misses', 0)}`, "
+        f"`dma_snoops={summ.get('l2_dma_snoops', 0)}`",
     ]
+    if "axi4_stream_packets_total" in summ:
+        lines.append(
+            f"- AXI4-Stream Pipeline Packets: total=`{summ.get('axi4_stream_packets_total')}` "
+            f"stages=`{summ.get('axi4_stream_stages')}`"
+        )
+    lines.extend(
+        [
+            "",
+            "### Fabric Traffic",
+            "",
+            "| Fabric / Crossbar | Transactions |",
+            "|---|---:|",
+        ]
+    )
     for fn, cnt in summ.get("fabric_hits", {}).items():
         lines.append(f"| `{fn}` | `{cnt}` |")
     lines.extend(["", "### Bus Master Traffic", "", "| Master | Transactions |", "|---|---:|"])
@@ -1462,17 +1933,22 @@ def _render_composed_report_md(report: dict[str, Any]) -> str:
     lines.extend(
         [
             "",
-            "### Heterogeneous Device Bindings, Traffic & Verilator RTL Cycles",
+            "### Heterogeneous Device Bindings, Pin-Level Handshakes & Verilator RTL Cycles",
             "",
-            "| Device Instance | Runtime Backend | Bus Hits | Verilator RTL Cycles |",
-            "|---|---|---:|---:|",
+            (
+                "| Device Instance | Runtime Backend | Bus Hits | "
+                "Pin Handshakes | Verilator RTL Cycles |"
+            ),
+            "|---|---|---:|---:|---:|",
         ]
     )
     backends = summ.get("device_backends", {})
     rtl_cyc = summ.get("rtl_cycles", {})
+    bus_hs = summ.get("bus_handshakes", {})
     for dn, cnt in summ.get("device_hits", {}).items():
         lines.append(
-            f"| `{dn}` | `{backends.get(dn, 'systemc-tlm')}` | `{cnt}` | `{rtl_cyc.get(dn, 0)}` |"
+            f"| `{dn}` | `{backends.get(dn, 'systemc-tlm')}` | `{cnt}` | "
+            f"`{bus_hs.get(dn, 0)}` | `{rtl_cyc.get(dn, 0)}` |"
         )
     lines.append("")
     return "\n".join(lines)
@@ -1483,13 +1959,20 @@ def run_composed_soc(
     out_dir: Path,
     *,
     mode: str = "auto",
+    cpu_master: str = "auto",
+    qemu_accel: str = "auto",
+    quantum_ns: int | None = None,
     verify_qemu_crosscheck: bool = True,
     max_steps: int = 800_000,
-    timeout: float = 45.0,
+    timeout: float = 60.0,
 ) -> dict[str, Any]:
-    """Build and run a `multiplatform-soc-1` SoC with Verilator RTL & live plugins."""
+    """Build and run a `multiplatform-soc-1` SoC with QEMU/SystemC CPU, Verilator RTL & plugins."""
     if mode not in {"auto", "hybrid", "tlm"}:
         raise ContractError(f"E_COMPOSE_MODE unsupported mode: {mode}")
+    if cpu_master not in ALLOWED_CPU_MASTERS:
+        raise ContractError(f"E_COMPOSE_CPU_MASTER unsupported cpu_master: {cpu_master}")
+    if qemu_accel not in ALLOWED_QEMU_ACCELS:
+        raise ContractError(f"E_COMPOSE_QEMU_ACCEL unsupported qemu_accel: {qemu_accel}")
     spec_path = spec_path.resolve()
     out_dir = out_dir.resolve()
     if out_dir.exists():
@@ -1497,8 +1980,28 @@ def run_composed_soc(
 
     ir = plan_composed_soc(spec_path, out_dir)
     spec = load_composed_spec(spec_path)
+    resolved_cpu_master = (
+        str(spec["cpu"].get("master_engine", "systemc-rv64"))
+        if cpu_master == "auto"
+        else cpu_master
+    )
+    resolved_quantum_ns = (
+        int(quantum_ns) if quantum_ns is not None else int(spec["cpu"].get("quantum_ns", 100_000))
+    )
+    if resolved_quantum_ns <= 0:
+        raise ContractError(f"E_COMPOSE_QUANTUM quantum_ns must be > 0, got {resolved_quantum_ns}")
+
+    resolved_accel: str | None = None
+    qemu_bin: str | None = None
+    qemu_ver: str | None = None
+    if resolved_cpu_master == "qemu":
+        resolved_accel = _resolve_qemu_accel(qemu_accel)
+
     want_hybrid = mode in {"auto", "hybrid"}
     ready, missing = has_unified_toolchain(require_verilator=(mode == "hybrid"))
+    if resolved_cpu_master == "qemu" and shutil.which("qemu-system-riscv64") is None:
+        ready = False
+        missing = [*missing, "qemu-system-riscv64"]
     if not ready:
         blocked: dict[str, Any] = {
             "contract": CONTRACT,
@@ -1514,12 +2017,20 @@ def run_composed_soc(
         write_json(out_dir / "report.json", blocked)
         return blocked
 
+    if resolved_cpu_master == "qemu":
+        qemu_bin, qemu_ver = tool_version("qemu-system-riscv64")
+
     use_verilator = want_hybrid and shutil.which("verilator") is not None
     use_live_plugins = want_hybrid
 
     cpp_path = out_dir / "generated_soc_top.cpp"
     cpp_path.write_text(
-        _render_generated_cpp(spec, use_verilator=use_verilator, use_live_plugins=use_live_plugins)
+        _render_generated_cpp(
+            spec,
+            spec_path=spec_path,
+            use_verilator=use_verilator,
+            use_live_plugins=use_live_plugins,
+        )
     )
 
     cxx, cxx_ver = tool_version("c++")
@@ -1577,7 +2088,8 @@ def run_composed_soc(
     fw = spec["firmware"]
     pos_elf = out_dir / "positive_sw.elf"
     neg_elf = out_dir / "negative_sw.elf"
-    pos_sha = _compile_rv64_sw(
+    compile_fn = _compile_rv64_qemu_sw if resolved_cpu_master == "qemu" else _compile_rv64_sw
+    pos_sha = compile_fn(
         gcc,
         crt0_path,
         _resolve_rel(spec_path, str(fw["positive_src"])),
@@ -1585,7 +2097,7 @@ def run_composed_soc(
         pos_elf,
         out_dir / "sw-pos-build.log",
     )
-    neg_sha = _compile_rv64_sw(
+    neg_sha = compile_fn(
         gcc,
         crt0_path,
         _resolve_rel(spec_path, str(fw["negative_src"])),
@@ -1594,11 +2106,18 @@ def run_composed_soc(
         out_dir / "sw-neg-build.log",
     )
 
+    ram_dev = next(d for d in spec["devices"] if d["kind"] == "ram")
+    ram_size_bytes = int(ram_dev["size"])
+    # Round up (guest RAM + 2 MiB bridge headroom) to 2 MiB boundary, min 16 MiB for QEMU virt
+    mb2 = 2 * 1024 * 1024
+    shared_ram_bytes = max(((ram_size_bytes + mb2 + mb2 - 1) // mb2) * mb2, 16 * 1024 * 1024)
+
     def _exec_with_plugins(
         elf: Path, tag: str, vcd: Path | None
-    ) -> tuple[subprocess.CompletedProcess[str], dict[str, dict[str, Any]]]:
+    ) -> tuple[subprocess.CompletedProcess[str], dict[str, dict[str, Any]], float]:
         procs: list[tuple[str, subprocess.Popen[str], Path, Path]] = []
         plugin_args: list[str] = []
+        t0 = time.monotonic()
         with tempfile.TemporaryDirectory(prefix="usp-p-") as sock_tmp:
             sock_dir = Path(sock_tmp)
             try:
@@ -1625,19 +2144,127 @@ def run_composed_soc(
                             )
                         time.sleep(0.02)
 
-                cmd = [
-                    str(emu_bin),
-                    str(elf),
-                    str(out_dir / f"{tag}-console.log"),
-                    str(out_dir / f"{tag}-trace.jsonl"),
-                    str(out_dir / f"{tag}-summary.json"),
-                    str(max_steps),
-                    *(["--vcd-out", str(vcd)] if vcd is not None else []),
-                    *plugin_args,
-                ]
-                res = subprocess.run(
-                    cmd, capture_output=True, text=True, timeout=timeout, check=False
-                )
+                if resolved_cpu_master == "qemu":
+                    assert qemu_bin is not None and resolved_accel is not None
+                    qemu_sock = sock_dir / "q.sock"
+                    shared_ram = sock_dir / f"{tag}_ram.bin"
+                    with shared_ram.open("wb") as rf:
+                        rf.truncate(shared_ram_bytes)
+                    emu_cmd = [
+                        str(emu_bin),
+                        str(elf),
+                        str(out_dir / f"{tag}-console.log"),
+                        str(out_dir / f"{tag}-trace.jsonl"),
+                        str(out_dir / f"{tag}-summary.json"),
+                        str(max_steps),
+                        "--cpu-master",
+                        "qemu",
+                        "--qemu-sock",
+                        str(qemu_sock),
+                        "--shared-ram",
+                        str(shared_ram),
+                        "--quantum-ns",
+                        str(resolved_quantum_ns),
+                        *(["--vcd-out", str(vcd)] if vcd is not None else []),
+                        *plugin_args,
+                    ]
+                    emu_proc = subprocess.Popen(
+                        emu_cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                    )
+                    qemu_proc: subprocess.Popen[str] | None = None
+                    try:
+                        sock_deadline = time.monotonic() + 10.0
+                        while not qemu_sock.exists():
+                            if emu_proc.poll() is not None or time.monotonic() > sock_deadline:
+                                e_out, e_err = emu_proc.communicate(timeout=2)
+                                raise ContractError(
+                                    f"E_COMPOSE_QEMU_SOCK composed-soc-emu failed to bind "
+                                    f"{qemu_sock}: {e_err or e_out}"
+                                )
+                            time.sleep(0.02)
+
+                        ram_mb = shared_ram_bytes // (1024 * 1024)
+                        qemu_cmd = [
+                            qemu_bin,
+                            "-machine",
+                            "virt,memory-backend=uspram",
+                            "-accel",
+                            resolved_accel,
+                            *(["-icount", "shift=3,sleep=off"] if resolved_accel == "tcg" else []),
+                            "-cpu",
+                            "rv64",
+                            "-m",
+                            f"{ram_mb}M",
+                            "-object",
+                            (
+                                f"memory-backend-file,id=uspram,size={ram_mb}M,"
+                                f"mem-path={shared_ram},share=on"
+                            ),
+                            "-chardev",
+                            f"socket,id=uspbus,path={qemu_sock},server=off",
+                            "-global",
+                            "virtio-mmio.force-legacy=false",
+                            "-device",
+                            "virtio-serial-device,max_ports=1",
+                            "-device",
+                            "virtconsole,chardev=uspbus",
+                            "-bios",
+                            "none",
+                            "-nographic",
+                            "-serial",
+                            "none",
+                            "-monitor",
+                            "none",
+                            "-device",
+                            f"loader,file={elf},cpu-num=0",
+                        ]
+                        t0 = time.monotonic()
+                        qemu_proc = subprocess.Popen(
+                            qemu_cmd,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            text=True,
+                        )
+                        try:
+                            emu_out, emu_err = emu_proc.communicate(timeout=timeout)
+                        except subprocess.TimeoutExpired:
+                            emu_proc.kill()
+                            emu_out, emu_err = emu_proc.communicate()
+                        try:
+                            q_out, q_err = qemu_proc.communicate(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            qemu_proc.kill()
+                            q_out, q_err = qemu_proc.communicate()
+                        if q_err.strip() or q_out.strip():
+                            (out_dir / f"{tag}-qemu.log").write_text(q_out + q_err)
+                        res = subprocess.CompletedProcess(
+                            emu_cmd, emu_proc.returncode, emu_out, emu_err
+                        )
+                    finally:
+                        if qemu_proc is not None and qemu_proc.poll() is None:
+                            qemu_proc.kill()
+                            qemu_proc.wait()
+                        if emu_proc.poll() is None:
+                            emu_proc.kill()
+                            emu_proc.wait()
+                else:
+                    cmd = [
+                        str(emu_bin),
+                        str(elf),
+                        str(out_dir / f"{tag}-console.log"),
+                        str(out_dir / f"{tag}-trace.jsonl"),
+                        str(out_dir / f"{tag}-summary.json"),
+                        str(max_steps),
+                        *(["--vcd-out", str(vcd)] if vcd is not None else []),
+                        *plugin_args,
+                    ]
+                    t0 = time.monotonic()
+                    res = subprocess.run(
+                        cmd, capture_output=True, text=True, timeout=timeout, check=False
+                    )
             finally:
                 for _, p, _, _ in procs:
                     try:
@@ -1646,6 +2273,7 @@ def run_composed_soc(
                         p.kill()
                         p.wait()
 
+        wall_ms = round((time.monotonic() - t0) * 1000.0, 2)
         traces: dict[str, dict[str, Any]] = {}
         for pname, _, _, trace_p in procs:
             txs = (
@@ -1660,11 +2288,11 @@ def run_composed_soc(
                 "tx_count": len(txs),
                 "trace_sha256": digest(trace_p) if trace_p.is_file() else None,
             }
-        return res, traces
+        return res, traces, wall_ms
 
     pos_vcd = out_dir / "composed-soc.vcd"
-    pos_proc, plugin_traces = _exec_with_plugins(pos_elf, "pos", pos_vcd)
-    neg_proc, _ = _exec_with_plugins(neg_elf, "neg", None)
+    pos_proc, plugin_traces, pos_wall_ms = _exec_with_plugins(pos_elf, "pos", pos_vcd)
+    neg_proc, _, _ = _exec_with_plugins(neg_elf, "neg", None)
 
     console_path = out_dir / "pos-console.log"
     summary_path = out_dir / "pos-summary.json"
@@ -1674,6 +2302,9 @@ def run_composed_soc(
     neg_summary = json.loads(neg_summary_path.read_text()) if neg_summary_path.is_file() else {}
     neg_ok = neg_proc.returncode != 0 and neg_summary.get("status") == "FAILED"
 
+    insns_exec = int(summary.get("instructions_executed", 0))
+    wall_mips = round(insns_exec / (pos_wall_ms * 1000.0), 3) if pos_wall_ms > 0.0 else 0.0
+
     qemu_res = (
         _run_qemu_crosscheck(spec, spec_path, out_dir, gcc, crt0_path)
         if verify_qemu_crosscheck
@@ -1682,6 +2313,7 @@ def run_composed_soc(
 
     coverage = _compute_composed_coverage(
         spec,
+        spec_path,
         summary,
         console_text,
         pos_vcd,
@@ -1690,6 +2322,7 @@ def run_composed_soc(
         qemu_res,
         use_verilator,
         use_live_plugins,
+        cpu_master_used=resolved_cpu_master,
     )
     write_json(out_dir / "coverage.json", coverage)
 
@@ -1701,11 +2334,30 @@ def run_composed_soc(
         "negative_failure_detected": neg_ok,
     }
     overall = "PASSED" if all(checks.values()) else "FAILED"
-    mode_tag = (
-        "hybrid-systemc-verilator-and-live-usp-mmio32-plugins"
-        if (use_verilator or use_live_plugins)
-        else "pure-systemc-tlm-behavioral"
-    )
+    if resolved_cpu_master == "qemu":
+        mode_tag = (
+            f"qemu-{resolved_accel}-cpu-master-systemc-verilator-and-usp-bus-v2"
+            if (use_verilator or use_live_plugins)
+            else f"qemu-{resolved_accel}-cpu-master-systemc-tlm"
+        )
+    else:
+        mode_tag = (
+            "hybrid-systemc-verilator-and-live-usp-mmio32-plugins"
+            if (use_verilator or use_live_plugins)
+            else "pure-systemc-tlm-behavioral"
+        )
+    toolchain_info: dict[str, Any] = {
+        "cxx": {"path": cxx, "version": cxx_ver},
+        "systemc_version": sc_ver,
+        "verilator_version": verilator_ver,
+        "riscv_gcc": {"path": gcc, "version": gcc_ver},
+    }
+    if qemu_bin is not None:
+        toolchain_info["qemu_cpu_master"] = {
+            "path": qemu_bin,
+            "version": qemu_ver,
+            "accel": resolved_accel,
+        }
     report: dict[str, Any] = {
         "contract": CONTRACT,
         "platform_version": __version__,
@@ -1713,12 +2365,10 @@ def run_composed_soc(
         "created_utc": datetime.datetime.now(datetime.UTC).isoformat(),
         "status": overall,
         "execution_mode": mode_tag,
-        "toolchain": {
-            "cxx": {"path": cxx, "version": cxx_ver},
-            "systemc_version": sc_ver,
-            "verilator_version": verilator_ver,
-            "riscv_gcc": {"path": gcc, "version": gcc_ver},
-        },
+        "cpu_master_engine": resolved_cpu_master,
+        **({"qemu_accel": resolved_accel} if resolved_accel is not None else {}),
+        "quantum_ns": resolved_quantum_ns,
+        "toolchain": toolchain_info,
         "provenance": {
             "spec_sha256": ir["spec_sha256"],
             "generated_cpp_sha256": digest(cpp_path),
@@ -1732,6 +2382,8 @@ def run_composed_soc(
         "live_plugins": plugin_traces,
         "positive_run": {
             "returncode": pos_proc.returncode,
+            "wall_time_ms": pos_wall_ms,
+            "wall_time_mips": wall_mips,
             "console_output": console_text,
             "summary": summary,
             "checks": checks,
@@ -1750,7 +2402,7 @@ def run_composed_soc(
 
 
 def calibrate_composed_soc(spec_path: Path, out_dir: Path) -> dict[str, Any]:
-    """Compare Hybrid (Verilator RTL + Live usp-mmio32-v1 Plugin) vs Pure SystemC-TLM."""
+    """Compare Hybrid (Verilator RTL + Live Plugin) vs Pure SystemC-TLM."""
     out_dir = out_dir.resolve()
     if out_dir.exists():
         raise ContractError("E_COMPOSE_OUT choose a fresh calibration output directory")
@@ -1767,10 +2419,18 @@ def calibrate_composed_soc(spec_path: Path, out_dir: Path) -> dict[str, Any]:
 
     spec = load_composed_spec(spec_path)
     hyb = run_composed_soc(
-        spec_path, out_dir / "hybrid-rtl-plugin", mode="hybrid", verify_qemu_crosscheck=False
+        spec_path,
+        out_dir / "hybrid-rtl-plugin",
+        mode="hybrid",
+        cpu_master="systemc-rv64",
+        verify_qemu_crosscheck=False,
     )
     tlm = run_composed_soc(
-        spec_path, out_dir / "pure-tlm", mode="tlm", verify_qemu_crosscheck=False
+        spec_path,
+        out_dir / "pure-tlm",
+        mode="tlm",
+        cpu_master="systemc-rv64",
+        verify_qemu_crosscheck=False,
     )
     hs = hyb["positive_run"]["summary"]
     ts = tlm["positive_run"]["summary"]
@@ -1813,9 +2473,20 @@ def audit_composed_soc(spec_path: Path) -> dict[str, Any]:
     """Return a structured multi-platform composition & binding capability audit."""
     spec = load_composed_spec(spec_path)
     lock = _render_binding_lock(spec, spec_path)
+    rtl_protocols: dict[str, str] = {}
+    plugin_protocols: dict[str, str] = {}
+    for dev in spec["devices"]:
+        if dev["binding"] == "verilator-rtl":
+            rmeta = _device_rtl_meta(dev, spec_path)
+            rtl_protocols[str(dev["name"])] = rmeta["protocol"] if rmeta else "mmio32"
+        elif dev["binding"] == "usp-plugin":
+            pkg, _ = _device_plugin_info(dev, spec_path)
+            plugin_protocols[str(dev["name"])] = str(pkg["interface"]["protocol"])
     return {
         "contract": "usp-composed-audit-1",
         "design": spec["name"],
+        "cpu_master_engine": str(spec["cpu"].get("master_engine", "systemc-rv64")),
+        "quantum_ns": int(spec["cpu"].get("quantum_ns", 100_000)),
         "clock_domains": len(spec["clock_domains"]),
         "fabrics": len(spec["fabrics"]),
         "cdc_bridges": len(spec["cdc_bridges"]),
@@ -1825,7 +2496,9 @@ def audit_composed_soc(spec_path: Path) -> dict[str, Any]:
         "verilator_rtl_blocks": [
             d["name"] for d in spec["devices"] if d["binding"] == "verilator-rtl"
         ],
+        "rtl_protocols": rtl_protocols,
         "live_usp_plugins": [d["name"] for d in spec["devices"] if d["binding"] == "usp-plugin"],
+        "plugin_protocols": plugin_protocols,
         "mixed_signal_blocks": [
             d["name"] for d in spec["devices"] if d["binding"] == "mixed-signal-tlm"
         ],
@@ -1837,17 +2510,19 @@ def audit_composed_soc(spec_path: Path) -> dict[str, Any]:
         ],
         "honest_boundaries": [
             (
-                "Verilator RTL blocks execute clean-room synthesizable SystemVerilog "
-                "cycle-by-cycle; upstream Chisel Rocket/Hwacha Scala elaboration requires "
-                "sbt/FIRRTL."
+                "QEMU CPU master mode executes guest RV64 instructions natively via stock "
+                "qemu-system-riscv64 (TCG on x86_64/arm64 hosts, KVM only on riscv64 hosts with "
+                "/dev/kvm) over zero-copy mmap RAM and VirtIO-MMIO usp-bus-v2 quantum sync."
             ),
             (
-                "TISAR ADC is modeled as a mixed-signal behavioral TLM + real 18 KiB "
-                "calibration LUT SRAM (not SPICE/analog transistor signoff)."
+                "Verilator RTL blocks auto-adapt pin-level AXI4, AXI4-Lite, OpenTitan TL-UL, "
+                "and MMIO32 SystemVerilog modules cycle-by-cycle; upstream Chisel/Scala "
+                "elaboration to SystemVerilog requires sbt/firtool."
             ),
             (
-                "gem5 system script binds NativeSocDevice over usp-mmio32-v1; live gem5 "
-                "execution requires building gem5.opt via scripts/setup_gem5.sh."
+                "gem5 system script binds NativeSocDevice over usp-bus-v2 (backward-compatible "
+                "with usp-mmio32-v1), supporting reverse DMA, 64-bit bursts, and quantum time "
+                "sync; live gem5 execution requires building gem5.opt via scripts/setup_gem5.sh."
             ),
         ],
     }
@@ -1863,7 +2538,7 @@ def main(argv: list[str] | None = None) -> int:
         ),
         (
             "run",
-            "build & run composed SoC with Verilator RTL, live socket plugins & QEMU crosscheck",
+            "build & run composed SoC with QEMU/SystemC CPU, Verilator RTL & live socket plugins",
         ),
         ("calibrate", "calibrate Hybrid (Verilator RTL + Live Plugin) vs Pure SystemC-TLM"),
         ("audit", "audit providers, clock domains, crossbars, streams, plugins & scope boundaries"),
@@ -1874,6 +2549,17 @@ def main(argv: list[str] | None = None) -> int:
             sub.add_argument("--out", type=Path, required=True)
         if name == "run":
             sub.add_argument("--mode", choices=("auto", "hybrid", "tlm"), default="auto")
+            sub.add_argument(
+                "--cpu-master",
+                choices=("auto", "systemc-rv64", "qemu"),
+                default="auto",
+            )
+            sub.add_argument(
+                "--qemu-accel",
+                choices=("auto", "tcg", "kvm"),
+                default="auto",
+            )
+            sub.add_argument("--quantum-ns", type=int, default=None)
             sub.add_argument("--no-qemu-crosscheck", action="store_true")
 
     args = parser.parse_args(argv)
@@ -1903,6 +2589,9 @@ def main(argv: list[str] | None = None) -> int:
             args.spec,
             args.out,
             mode=args.mode,
+            cpu_master=args.cpu_master,
+            qemu_accel=args.qemu_accel,
+            quantum_ns=args.quantum_ns,
             verify_qemu_crosscheck=not args.no_qemu_crosscheck,
         )
         print(
@@ -1911,6 +2600,7 @@ def main(argv: list[str] | None = None) -> int:
                     "status": rep["status"],
                     "design": rep["design"],
                     "execution_mode": rep.get("execution_mode"),
+                    "cpu_master_engine": rep.get("cpu_master_engine"),
                     "coverage_percent": rep.get("coverage", {}).get("coverage_percent"),
                     "report": str(args.out / "report.json"),
                 },
